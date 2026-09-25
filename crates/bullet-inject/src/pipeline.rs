@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use bullet_core::state::{InjectionStatus, StateSender, set_injection_status};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::dll_validator::validate_dll_hash;
 use crate::error::InjectError;
@@ -10,7 +10,7 @@ use crate::overlay::{OverlayConfig, OverlayManager};
 use crate::overlay_process::OverlayProcess;
 use crate::suspend::SuspendGuard;
 
-pub const DEFAULT_MKOVERLAY_TIMEOUT: Duration = Duration::from_secs(300);
+pub const DEFAULT_BUILD_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub const HOOK_CONFIRMED_STATUS: &str = "Waiting for exit";
 
@@ -52,7 +52,7 @@ pub struct PipelineConfig {
 
     pub hook_timeout: Duration,
 
-    pub mkoverlay_timeout: Duration,
+    pub build_timeout: Duration,
 
     pub max_suspension: Duration,
 }
@@ -211,19 +211,19 @@ impl InjectionPipeline {
         let budget = self.config.max_suspension.min(MAX_SUSPENSION_LIMIT);
         let remaining = |now: &std::time::Instant| budget.saturating_sub(now.elapsed());
 
-        let mk_timeout = self.config.mkoverlay_timeout.min(remaining(&suspended_at));
-        self.build_overlay(mods, mk_timeout).await?;
+        let build_timeout = self.config.build_timeout.min(remaining(&suspended_at));
+        self.build_overlay(mods, build_timeout).await?;
 
         let mut overlay = self.spawn_patcher().await?;
 
         if let Some(guard) = suspend_guard.take() {
             if let Err(e) = guard.resume() {
-                error!(error = %e, "Failed to resume game after mkoverlay");
+                error!(error = %e, "Failed to resume game after building the overlay");
                 return Err(e);
             }
             info!(
                 suspended_ms = suspended_at.elapsed().as_millis(),
-                "Game suspension window closed; process resumed so runoverlay can hook it"
+                "Game suspension window closed; process resumed so the patcher can hook it"
             );
         }
 
@@ -249,10 +249,7 @@ impl InjectionPipeline {
             return Err(e);
         }
 
-        let build = match self
-            .build_overlay(mods, self.config.mkoverlay_timeout)
-            .await
-        {
+        let build = match self.build_overlay(mods, self.config.build_timeout).await {
             Ok(build) => build,
             Err(e) => {
                 error!(error = %e, "Arming aborted: the overlay could not be built");
@@ -285,7 +282,7 @@ impl InjectionPipeline {
                 info!(
                     wad_files = build.wad_files,
                     overlay_bytes = build.bytes,
-                    mkoverlay_ms = build.elapsed.as_millis(),
+                    build_ms = build.elapsed.as_millis(),
                     "Patcher armed and watching for the game"
                 );
                 Ok((overlay, build))
@@ -295,7 +292,7 @@ impl InjectionPipeline {
                 error!(
                     error = %e,
                     exit_code = ?exit,
-                    "runoverlay never reported that it is watching for the game; the skin will not load"
+                    "The patcher never reported that it is watching for the game; the skin will not load"
                 );
                 self.publish(InjectionStatus::Failed {
                     error: format!("patcher failed to arm: {e}"),
@@ -311,15 +308,6 @@ impl InjectionPipeline {
         timeout: Duration,
     ) -> Result<OverlayBuild, InjectError> {
         OverlayManager::prepare_overlay_dir(&self.config.overlay_config.overlay_dir)?;
-
-        let config_file = &self.config.overlay_config.config_file;
-        if !config_file.exists() {
-            if let Some(parent) = config_file.parent() {
-                std::fs::create_dir_all(parent).map_err(InjectError::Io)?;
-            }
-            std::fs::write(config_file, "{}").map_err(InjectError::Io)?;
-            debug!(config_file = %config_file.display(), "Created the placeholder runoverlay config");
-        }
 
         let effective_game_dir =
             bullet_platform::paths::normalize_game_dir(&self.config.overlay_config.game_dir)
@@ -402,7 +390,7 @@ impl InjectionPipeline {
             Err(_) => {
                 cancel.store(true, std::sync::atomic::Ordering::Relaxed);
                 return Err(InjectError::SubprocessTimeout {
-                    command: "native mkoverlay".into(),
+                    command: "overlay build".into(),
                     timeout_secs: timeout.as_secs(),
                 });
             }
@@ -411,7 +399,7 @@ impl InjectionPipeline {
         let (wad_files, bytes) = measure_overlay(&self.config.overlay_config.overlay_dir);
         if wad_files == 0 {
             return Err(InjectError::Overlay(
-                "native mkoverlay produced an empty overlay".into(),
+                "the overlay build produced an empty overlay".into(),
             ));
         }
         info!(
@@ -459,7 +447,7 @@ impl InjectionPipeline {
                 info!(
                     status_line = %line.text,
                     elapsed_ms = waited.elapsed().as_millis(),
-                    "Hook confirmed by runoverlay before resuming the game"
+                    "Hook confirmed by the patcher before resuming the game"
                 );
                 InjectionStatus::Confirmed
             }
@@ -467,10 +455,10 @@ impl InjectionPipeline {
                 if let Some(code) = overlay.exited_within(Duration::from_millis(500)).await {
                     warn!(
                         exit_code = code,
-                        "runoverlay exited before confirming the hook; the overlay is not active"
+                        "The patcher exited before confirming the hook; the overlay is not active"
                     );
                     return InjectionStatus::Failed {
-                        error: format!("runoverlay exited with code {code} before hooking"),
+                        error: format!("the patcher exited with code {code} before hooking"),
                     };
                 }
 

@@ -20,12 +20,9 @@ $RECYCLE.BIN/
 /dist/
 /installer/Output/
 
-# Third-party binaries: shipped by the installer or supplied by the user, never versioned
-**/ltk_patcher_host.exe
-**/ltk_patcher_dll.dll
-**/cslol-dll.dll
-**/core.dll
-**/mod-tools.exe
+# Binaries are built or supplied by the user, never versioned
+*.exe
+*.dll
 
 # Game data and mods (large, copyrighted, or generated per patch)
 hashes.game.txt

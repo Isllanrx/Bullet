@@ -8,14 +8,11 @@ use thiserror::Error;
 use tracing::{debug, info, warn};
 use zip::ZipArchive;
 
-pub const DEFAULT_REPO_URL: &str = "https://github.com/Alban1911/LeagueSkins";
-
-pub const DEFAULT_API_BASE: &str = "https://api.github.com/repos/Alban1911/LeagueSkins";
-
-pub const DEFAULT_ZIP_URL: &str =
-    "https://github.com/Alban1911/LeagueSkins/archive/refs/heads/main.zip";
-
-const APP_USER_AGENT: &str = "Bullet/0.1.0 (League of Legends skin manager)";
+const APP_USER_AGENT: &str = concat!(
+    "Bullet/",
+    env!("CARGO_PKG_VERSION"),
+    " (League of Legends skin manager)"
+);
 
 pub const VERSION_FILE_NAME: &str = ".skin_version";
 
@@ -58,22 +55,29 @@ pub struct SkinSyncConfig {
     pub timeout: Duration,
 }
 
-impl Default for SkinSyncConfig {
-    fn default() -> Self {
-        Self {
-            api_base: DEFAULT_API_BASE.to_string(),
-            zip_url: DEFAULT_ZIP_URL.to_string(),
-            timeout: Duration::from_secs(30),
+impl SkinSyncConfig {
+    /// Sync is off unless `BULLET_SKIN_SYNC` names a GitHub repository as `owner/repo`. There is no
+    /// built-in source: Bullet never downloads skins from a repository the user did not choose.
+    #[must_use]
+    pub fn from_env_value(value: Option<&str>) -> Option<Self> {
+        let (owner, repo) = value?.trim().split_once('/')?;
+        let valid = |part: &str| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        };
+        if !valid(owner) || !valid(repo) {
+            return None;
         }
+        Some(Self {
+            api_base: format!("https://api.github.com/repos/{owner}/{repo}"),
+            zip_url: format!("https://github.com/{owner}/{repo}/archive/refs/heads/main.zip"),
+            timeout: Duration::from_secs(30),
+        })
     }
-}
-
-#[must_use]
-pub fn sync_enabled(value: Option<&str>) -> bool {
-    value.is_some_and(|v| {
-        let v = v.trim();
-        v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("on")
-    })
 }
 
 pub fn dir_has_skins(dir: &Path) -> bool {
@@ -290,14 +294,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_sync_is_off_unless_explicitly_enabled() {
-        assert!(!sync_enabled(None));
-        assert!(!sync_enabled(Some("")));
-        assert!(!sync_enabled(Some("0")));
-        assert!(!sync_enabled(Some("yes please")));
-        assert!(sync_enabled(Some("1")));
-        assert!(sync_enabled(Some(" TRUE ")));
-        assert!(sync_enabled(Some("on")));
+    fn test_sync_is_off_unless_a_repository_is_named() {
+        for off in [
+            None,
+            Some(""),
+            Some("1"),
+            Some("true"),
+            Some("owner"),
+            Some("/repo"),
+        ] {
+            assert!(SkinSyncConfig::from_env_value(off).is_none(), "{off:?}");
+        }
+        for bad in [
+            "../repo",
+            "owner/..",
+            "own er/repo",
+            "owner/re/po",
+            "owner/repo?x=1",
+        ] {
+            assert!(SkinSyncConfig::from_env_value(Some(bad)).is_none(), "{bad}");
+        }
+        let config = SkinSyncConfig::from_env_value(Some(" someone/skin-library ")).expect("valid");
+        assert_eq!(
+            config.api_base,
+            "https://api.github.com/repos/someone/skin-library"
+        );
+        assert_eq!(
+            config.zip_url,
+            "https://github.com/someone/skin-library/archive/refs/heads/main.zip"
+        );
     }
     use std::io::Write;
     use std::path::PathBuf;
@@ -346,7 +371,7 @@ mod tests {
             let mut zip = zip::ZipWriter::new(file);
             let options = SimpleFileOptions::default();
 
-            zip.start_file("LeagueSkins-main/skins/238/238001/238001.fantome", options)
+            zip.start_file("skin-library-main/skins/238/238001/238001.fantome", options)
                 .unwrap();
             zip.write_all(b"mock_skin_content").unwrap();
 

@@ -25,7 +25,9 @@ use wry::{Rect, WebViewBuilder};
 
 const OVERLAY_HTML: &str = include_str!("overlay_ui.html");
 
-use crate::client_window::{ClientWindowState, WindowRect, client_window_state, overlay_placement};
+use crate::client_window::{
+    ClientWindowState, WindowRect, client_window_state, overlay_placement, overlay_placement_on,
+};
 use crate::error::PlatformError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
@@ -215,13 +217,18 @@ impl Drop for OverlayWindow {
 }
 
 #[must_use]
-pub fn decide_placement(state: ClientWindowState, wanted: bool) -> Option<WindowRect> {
+pub fn decide_placement(
+    state: ClientWindowState,
+    wanted: bool,
+    monitor: Option<WindowRect>,
+) -> Option<WindowRect> {
     if !wanted {
         return None;
     }
     match state {
-        ClientWindowState::Visible(rect) => Some(overlay_placement(
+        ClientWindowState::Visible(rect) => Some(overlay_placement_on(
             rect,
+            monitor,
             OVERLAY_WIDTH,
             OVERLAY_HEIGHT,
             OVERLAY_PADDING,

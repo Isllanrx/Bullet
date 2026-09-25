@@ -190,7 +190,7 @@ impl ProcessFinder {
 
     /// Attempt to suspend a process or thread belonging to `pid`.
     ///
-    /// Prioritizes process-level suspension via `NtSuspendProcess` (the mechanism used by psutil in Rose).
+    /// Prioritizes process-level suspension via `NtSuspendProcess`.
     /// On modern Windows with Vanguard / anti-cheat, individual threads are often protected from
     /// `OpenThread(THREAD_SUSPEND_RESUME)` callbacks, while elevated process-level suspension succeeds.
     ///
@@ -207,7 +207,7 @@ impl ProcessFinder {
             // Requires `SeDebugPrivilege` on our token to succeed against a Vanguard-protected
             // process — enabled once for the process lifetime in `main.rs` (see `elevation.rs`).
             // Newly spawned processes may take a few milliseconds to complete primary token initialization,
-            // so we retry up to 10 times with 25ms delay (250ms total) matching the Rose baseline.
+            // so we retry up to 10 times with a 25ms delay (250ms total).
             let mut last_open_err = None;
             let mut last_nt_status: Option<i32> = None;
             let mut attempts = 0u32;
@@ -346,7 +346,7 @@ impl ProcessFinder {
     }
 
     /// Undo one `NtSuspendProcess` on `pid` from a fresh handle: the recovery path, when the handle
-    /// that suspended it died with an earlier Bullet process (ADR-003).
+    /// that suspended it died with an earlier Bullet process.
     ///
     /// `NtResumeProcess` lowers every thread's suspend count by one and leaves threads at zero
     pub fn resume_process_by_pid(pid: u32) -> Result<(), PlatformError> {

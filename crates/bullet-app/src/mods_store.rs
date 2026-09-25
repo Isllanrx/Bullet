@@ -419,7 +419,7 @@ fn stage_one(entry: &ModEntry, mods_dir: &Path) -> Result<String, String> {
                 // ignore-ok: removing our own rejected extraction; the refusal itself is returned.
                 let _ = std::fs::remove_dir_all(&partial);
                 return Err(
-                    "archive is not a mod mkoverlay accepts (META/info.json plus WAD/ or RAW/)"
+                    "archive is not a mod the overlay builder accepts (META/info.json plus WAD/ or RAW/)"
                         .into(),
                 );
             }

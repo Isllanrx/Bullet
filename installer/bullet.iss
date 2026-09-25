@@ -43,12 +43,11 @@ VersionInfoDescription={#MyAppName} Setup - {#MyAppDescription}
 VersionInfoCopyright={#MyAppCopyright}
 ; Programs and Features entry.
 UninstallDisplayName={#MyAppName}
-; Program Files, not %LOCALAPPDATA%\Programs. ADR-007 forbids anything that runs elevated from
-; living in a folder a normal user can write to, and #131 puts the injection tools under
-; {app}\tools. With PrivilegesRequired=lowest, {autopf} used to send the whole install to
-; LocalAppData — writable by the user, which is exactly what the ADR rules out.
+; Program Files, not %LOCALAPPDATA%\Programs: nothing that touches the game may live in a folder a
+; normal user can write to, and the injection tools live under {app}\tools. With
+; PrivilegesRequired=lowest, {autopf} would send the whole install to the user-writable LocalAppData.
 DefaultDirName={commonpf}\{#MyAppName}
-; Backlog #136: Do not inherit old install path from LocalAppData\Programs on upgrade
+; Never inherit an old per-user install path on upgrade.
 UsePreviousAppDir=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -84,35 +83,21 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescription: "{cm:AutoStartProgramGroupDescription}"; Flags: unchecked
 
 [InstallDelete]
-; Leftovers from installs made before ADR-014. These plugins speak a bridge protocol this build does
-; not implement, and they sit inside Pengu Loader's folder, where they would still be loaded if the
-; user keeps Pengu active. An upgrade has to remove them, not merely stop shipping them.
-;
 ; ISCC warns that per-user paths in an admin install may not resolve to the desktop user's profile.
-; True, and accepted: this is best effort for the common single-user case. The reliable cleanup is
-; the app's, on first run, where the real profile is resolved by API (backlog #134).
-Type: filesandordirs; Name: "{localappdata}\Rose\Pengu Loader\plugins\bullet-bridge-client"
-Type: filesandordirs; Name: "{localappdata}\Rose\Pengu Loader\plugins\bullet-selectors"
-Type: filesandordirs; Name: "{localappdata}\Rose\Pengu Loader\plugins\bullet-skin-monitor"
-Type: filesandordirs; Name: "{localappdata}\Rose\Pengu Loader\plugins\bullet-chroma-wheel"
-Type: filesandordirs; Name: "{localappdata}\Bullet\plugins"
-; Clean up old user-level install directory from pre-ADR-007 versions (Backlog #136)
+; True, and accepted: this is best effort for the common single-user case.
+;
+; A per-user install location must never hold a program the user can overwrite; move it out.
 Type: filesandordirs; Name: "{localappdata}\Programs\Bullet"
-; Strays that installers with a `dist\tools\*` wildcard shipped (#166): an unrelated 52 MB binary and
-; backup copies. [Files] lists tools one by one now, so an upgrade must also take these out.
-Type: files; Name: "{app}\tools\cloudflared.exe"
+; Backup copies in the tools folder are never loaded and only confuse the hash check.
 Type: files; Name: "{app}\tools\*.orig"
 Type: files; Name: "{app}\tools\*.bak"
-; Legacy injection binaries no longer shipped (removed: broke on 16.19). An upgrade takes them out.
-Type: files; Name: "{app}\tools\cslol-dll.dll"
-Type: files; Name: "{app}\tools\mod-tools.exe"
 ; Overlays built by an earlier Bullet: rebuilt on demand (the cache is keyed by builder revision),
 ; so dropping them on upgrade frees gigabytes and costs one build.
 Type: filesandordirs; Name: "{localappdata}\Bullet\overlay"
 
 [Dirs]
-; Bullet's own tools folder (#131): where the injector (LTK host + DLL) and the fallback tools belong, under Program
-; Files as ADR-007 requires — never read from another product's install.
+; Bullet's own tools folder: where the user places the injector (LTK host + DLL), under Program Files so
+; only an administrator can change it. Bullet never loads tools from another product's install.
 Name: "{app}\tools"
 Name: "{localappdata}\Bullet\state"
 ; The skin library is created empty and filled at runtime — official skins are generated from the
@@ -129,28 +114,26 @@ Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 ; binaries outside an official LTK Manager release, so the user copies ltk_patcher_host.exe and
 ; ltk_patcher_dll.dll from one into {app}\tools (created below). Bullet validates both by SHA-256 at runtime
 ; and tells the user the exact path when they are missing.
-; Default party mode configuration (ADR-020). onlyifdoesntexist preserves user customizations on upgrade.
+; Default party mode configuration. onlyifdoesntexist preserves user customizations on upgrade.
 Source: "..\dist\party.json"; DestDir: "{localappdata}\Bullet\state"; Flags: onlyifdoesntexist
-; No skin library is shipped. Official skins are generated from the installed game per patch
-; (Fase J), so bundling 160 MB of static .fantome only bloated the installer and duplicated the
-; library under both Program Files and the profile. The library folder is created empty above and
-; filled at runtime; custom mods live in {localappdata}\Bullet\custom_mods.
-; Plugins deliberadamente fora do instalador: a ADR-014 tirou os plugins do cliente do caminho
-; crítico. Instalá-los colocaria JS que fala um protocolo que este build não implementa, dentro de
-; um loader que não é ativado.
+; No skin library is shipped. Official skins are generated from the installed game per patch, so
+; bundling static skin packages would only bloat the installer and go stale on the next patch. The
+; library folder is created empty above and filled at runtime; custom mods live in
+; {localappdata}\Bullet\custom_mods. Nothing is installed into the League client: the skin is picked
+; in Bullet's own window.
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\bullet.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\bullet.ico"; Tasks: desktopicon
 
 [Registry]
-; Remove any legacy RUNASADMIN flag on Bullet so that it runs at standard user integrity (ADR-026).
+; Remove any RUNASADMIN flag on Bullet so that it runs at standard user integrity.
 ; Both hives: an older installer wrote HKLM, and the "Run this program as an administrator" checkbox
 ; of the file's Properties writes HKCU. Uninstall removes them too, leaving the registry as it was.
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: none; ValueName: "{app}\{#MyAppExeName}"; Flags: deletevalue uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"; ValueType: none; ValueName: "{app}\{#MyAppExeName}"; Flags: deletevalue uninsdeletevalue
-; Start with Windows (optional task). HKCU because Bullet runs unelevated as the desktop user
-; (ADR-026); an admin install elevated by the same user writes that user's hive. The quoted path is
+; Start with Windows (optional task). HKCU because Bullet runs unelevated as the desktop user;
+; an admin install elevated by the same user writes that user's hive. The quoted path is
 ; what the app writes too, so the tray shows the item checked.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Bullet"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
 ; Always registered for removal, task or not: the entry may have been turned on later from the tray,
@@ -163,13 +146,12 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 [UninstallDelete]
 ; What Bullet creates at runtime and that has no value without it: logs, state (caches, history,
 ; party config), the WebView2 profile, built overlays (gigabytes), generated mods, and a tools copy
-; in the profile. User content (skins and custom mods) is handled in [Code]: asked, not assumed
-; (backlog #77).
+; in the profile. User content (skins and custom mods) is handled in [Code]: asked, not assumed.
 ;
 ; Best effort, with the same caveat as [InstallDelete]: an admin uninstall may resolve {localappdata}
 ; to the elevating admin's profile, not the desktop user's, so a multi-user machine can be left with
 ; the real user's folder untouched. The reliable, profile-correct cleanup is the app's own, which
-; resolves the desktop user by API (backlog #134). `cargo xtask install-audit uninstalled` checks the
+; resolves the desktop user by API. `cargo xtask install-audit uninstalled` checks the
 ; result in the single-user case.
 Type: filesandordirs; Name: "{localappdata}\Bullet\logs"
 Type: filesandordirs; Name: "{localappdata}\Bullet\state"
@@ -177,6 +159,9 @@ Type: filesandordirs; Name: "{localappdata}\Bullet\webview2"
 Type: filesandordirs; Name: "{localappdata}\Bullet\overlay"
 Type: filesandordirs; Name: "{localappdata}\Bullet\mods"
 Type: filesandordirs; Name: "{localappdata}\Bullet\tools"
+; The injector is copied in by the user, not installed by Setup, so Setup does not know to remove it.
+Type: files; Name: "{app}\tools\ltk_patcher_host.exe"
+Type: files; Name: "{app}\tools\ltk_patcher_dll.dll"
 Type: dirifempty; Name: "{app}\tools"
 Type: dirifempty; Name: "{app}\assets"
 Type: dirifempty; Name: "{app}"
@@ -190,7 +175,7 @@ english.DeleteUserContent=Also remove the skins and custom mods saved by Bullet?
 // A silent uninstall keeps them (the safe default): nothing the user may want is deleted unasked.
 // Same profile caveat as [UninstallDelete]: under an admin uninstall {localappdata} may be the
 // admin's profile, so this prompt then lists and removes that profile's folders, not the desktop
-// user's. Correct per-user cleanup is the app's job (backlog #134).
+// user's. Correct per-user cleanup is the app's job.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir, Listing: String;

@@ -147,8 +147,8 @@ mod tests {
     fn test_rejects_foreign_or_damaged_codes() {
         let code = PartyToken::generate(1, 100).encode();
         assert!(
-            PartyToken::decode("ROSE:abcdef", 100).is_err(),
-            "Rose codes are not ours"
+            PartyToken::decode("OTHER:abcdef", 100).is_err(),
+            "codes from other clients are not ours"
         );
         assert!(PartyToken::decode(&code[..code.len() - 4], 100).is_err());
         assert!(PartyToken::decode("BULLET1:!!!", 100).is_err());

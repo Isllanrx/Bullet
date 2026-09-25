@@ -23,8 +23,6 @@ fn main() {
         "wad-probe" => run_wad_probe(&args[2..]),
         "wad-writer-probe" => run_wad_writer_probe(&args[2..]),
         "wad-types" => run_wad_types(&args[2..]),
-        "overlay-parity" => run_overlay_parity(&args[2..]),
-        "parity-classic" => run_parity_classic(&args[2..]),
         "install-audit" => run_install_audit(&args[2..]),
         _ => print_help(),
     }
@@ -43,21 +41,13 @@ fn print_help() {
     eprintln!(
         "  ipc-probe        - Click the real overlay from script and prove the choice reaches Rust"
     );
-    eprintln!(
-        "  classic-probe    - Build Rift Classic mods from the installed game (<Alias...> [--mkoverlay])"
-    );
+    eprintln!("  classic-probe    - Build Rift Classic mods from the installed game (<Alias...>)");
     eprintln!(
         "  wad-probe        - Decode every entry of the game WADs whose path matches <filter...>"
     );
     eprintln!("  wad-writer-probe - Copy real game WADs through WadWriter and check every entry");
     eprintln!(
-        "  overlay-parity   - Native mkoverlay vs mod-tools.exe on real mods (--mod-tools <exe> <mod...>)"
-    );
-    eprintln!(
         "  wad-types        - Count entry types from the tables of contents ([--root <folder>])"
-    );
-    eprintln!(
-        "  parity-classic   - Compare Bullet's Rift Classic mods with Rose's, byte by byte (<Alias...>)"
     );
     eprintln!(
         "  install-audit    - After (un)install: files, hashes and registry as bullet.iss promises (installed | uninstalled [--kept-user-content])"
@@ -69,7 +59,7 @@ fn print_help() {
 }
 
 fn run_check() {
-    println!("==> Step 0/4: ADR-008 sweep (every discarded Result justified)...");
+    println!("==> Step 0/4: Error-handling sweep (every discarded Result justified)...");
     run_adr008_check();
 
     println!("==> Step 1/4: Checking formatting (cargo fmt)...");
@@ -322,7 +312,7 @@ fn run_adr008_check() {
 
     eprintln!(
         "
-[ERROR] ADR-008: {} discarded Result(s) without a `// ignore-ok: <reason>`:",
+[ERROR] Error-handling sweep: {} discarded Result(s) without a `// ignore-ok: <reason>`:",
         offenders.len()
     );
     for offender in &offenders {
@@ -794,7 +784,6 @@ fn click_script(entry_id: u32) -> String {
 fn run_classic_probe(args: &[String]) {
     use bullet_classic::generator::{ClassicChampion, jade_characters, main_character, slots_for};
 
-    let mkoverlay = args.iter().any(|a| a == "--mkoverlay");
     let aliases: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
 
     let Some(game) = game_dir() else {
@@ -875,73 +864,8 @@ fn run_classic_probe(args: &[String]) {
             "  mods Classic gerados dos bins reais: {built} ok, {} falharam {failed:?}",
             failed.len()
         );
-
-        if mkoverlay {
-            let Some(number) = jade_numbers.iter().copied().find(|n| *n != 0 && *n < 300) else {
-                continue;
-            };
-            let folder = match champion.build_mod(number, &slots_for(None), &known, &staging) {
-                Ok(folder) => folder,
-                Err(e) => {
-                    println!("  mkoverlay: nao gerou o mod: {e}");
-                    continue;
-                }
-            };
-            let overlay = std::env::temp_dir().join("bullet_classic_probe_overlay");
-            let _ = std::fs::remove_dir_all(&overlay); // ignore-ok: probe scratch folder may not exist
-            let started = std::time::Instant::now();
-            let output = std::process::Command::new(tools.join("mod-tools.exe"))
-                .arg("mkoverlay")
-                .arg(&staging)
-                .arg(&overlay)
-                .arg(format!("--game:{}", game.display()))
-                .arg(format!("--mods:{folder}"))
-                .arg("--noTFT")
-                .arg("--ignoreConflict")
-                .stdin(std::process::Stdio::null())
-                .output();
-            match output {
-                Ok(out) => {
-                    let wads = count_wads(&overlay);
-                    println!(
-                        "  mkoverlay skin {number}: exit {:?} em {} ms, {} WAD(s) no overlay",
-                        out.status.code(),
-                        started.elapsed().as_millis(),
-                        wads
-                    );
-                    if !out.status.success() {
-                        println!("  stderr: {}", String::from_utf8_lossy(&out.stderr).trim());
-                    }
-                }
-                Err(e) => println!("  mkoverlay nao executou: {e}"),
-            }
-            let _ = std::fs::remove_dir_all(&overlay); // ignore-ok: probe scratch folder
-        }
     }
     let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
-}
-
-fn count_wads(dir: &std::path::Path) -> usize {
-    let mut count = 0;
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path
-                .to_string_lossy()
-                .to_ascii_lowercase()
-                .ends_with(".wad.client")
-            {
-                count += 1;
-            }
-        }
-    }
-    count
 }
 
 #[derive(Default)]
@@ -1102,182 +1026,6 @@ fn run_wad_probe(args: &[String]) {
             println!("  {line}");
         }
     }
-}
-
-fn run_overlay_parity(args: &[String]) {
-    use std::collections::BTreeMap;
-    use std::sync::atomic::AtomicBool;
-    use std::time::Instant;
-
-    use bullet_wad::wad::WadFile;
-
-    let mut mod_tools = None;
-    let mut mods_dir = None;
-    let mut mods = Vec::new();
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        match arg.as_str() {
-            "--mod-tools" => mod_tools = iter.next().map(PathBuf::from),
-            "--mods-dir" => mods_dir = iter.next().map(PathBuf::from),
-            other => mods.push(other.to_owned()),
-        }
-    }
-    let (Some(mod_tools), false) = (mod_tools, mods.is_empty()) else {
-        println!(
-            "uso: cargo xtask overlay-parity --mod-tools <mod-tools.exe> [--mods-dir <pasta>] <mod...>"
-        );
-        return;
-    };
-    let mods_dir = mods_dir.unwrap_or_else(|| bullet_data_dir().join("mods"));
-    let Some(game) = game_dir() else {
-        return;
-    };
-    let work = std::env::temp_dir().join("bullet_overlay_parity");
-    let (reference, native) = (work.join("mod-tools"), work.join("native"));
-    let _ = std::fs::remove_dir_all(&work); // ignore-ok: scratch folder may not exist
-    println!(
-        "jogo: {}\nmods: {} em {}",
-        game.display(),
-        mods.join(", "),
-        mods_dir.display()
-    );
-
-    let started = Instant::now();
-    let output = std::process::Command::new(&mod_tools)
-        .arg("mkoverlay")
-        .arg(&mods_dir)
-        .arg(&reference)
-        .arg(format!("--game:{}", game.display()))
-        .arg(format!("--mods:{}", mods.join("/")))
-        .arg("--noTFT")
-        .arg("--ignoreConflict")
-        .stdin(std::process::Stdio::null())
-        .output();
-    let reference_ms = started.elapsed().as_millis();
-    match output {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => {
-            println!(
-                "mod-tools falhou ({}): {}",
-                out.status,
-                String::from_utf8_lossy(&out.stderr)
-            );
-            return;
-        }
-        Err(e) => {
-            println!("mod-tools nao executou: {e}");
-            return;
-        }
-    }
-
-    let started = Instant::now();
-    let built = bullet_inject::overlay_builder::build(
-        &game,
-        &mods_dir,
-        &native,
-        &mods,
-        &AtomicBool::new(false),
-    );
-    let native_ms = started.elapsed().as_millis();
-    if let Err(e) = built {
-        println!("nativo falhou: {e}");
-        return;
-    }
-    println!("tempo: mod-tools {reference_ms} ms | nativo {native_ms} ms");
-
-    let list = |root: &PathBuf| -> BTreeMap<String, PathBuf> {
-        let mut files = Vec::new();
-        collect_wad_files(root, &mut files);
-        files
-            .into_iter()
-            .map(|p| {
-                let key = p
-                    .strip_prefix(root)
-                    .unwrap_or(&p)
-                    .to_string_lossy()
-                    .replace('\\', "/")
-                    .to_ascii_lowercase();
-                (key, p)
-            })
-            .collect()
-    };
-    let (a, b) = (list(&reference), list(&native));
-    let mut failures = 0usize;
-    for missing in a.keys().filter(|k| !b.contains_key(*k)) {
-        println!("  [FALTA no nativo] {missing}");
-        failures += 1;
-    }
-    for extra in b.keys().filter(|k| !a.contains_key(*k)) {
-        println!("  [SOBRA no nativo] {extra}");
-        failures += 1;
-    }
-
-    for (key, path_a) in &a {
-        let Some(path_b) = b.get(key) else { continue };
-        let (wad_a, wad_b) = match (WadFile::open(path_a), WadFile::open(path_b)) {
-            (Ok(x), Ok(y)) => (x, y),
-            (x, y) => {
-                println!("  [ERRO] {key}: {:?} / {:?}", x.err(), y.err());
-                failures += 1;
-                continue;
-            }
-        };
-        let (mut same_stored, mut same_decoded, mut different, mut missing) = (0, 0, 0, 0);
-        for ea in wad_a.toc() {
-            let Some(eb) = wad_b.entry(ea.path_hash) else {
-                missing += 1;
-                continue;
-            };
-            if ea.compression == eb.compression
-                && ea.compressed_size == eb.compressed_size
-                && ea.uncompressed_size == eb.uncompressed_size
-                && ea.checksum == eb.checksum
-            {
-                same_stored += 1;
-            } else {
-                match (wad_a.read(ea.path_hash), wad_b.read(ea.path_hash)) {
-                    (Ok(Some(x)), Ok(Some(y))) if x == y => same_decoded += 1,
-                    _ => different += 1,
-                }
-            }
-        }
-        let extra = wad_b.len().saturating_sub(wad_a.len() - missing);
-
-        let game_signature = path_b
-            .strip_prefix(&native)
-            .ok()
-            .and_then(|rel| WadFile::open_toc_only(&game.join(rel)).ok())
-            .map(|g| *g.signature());
-        let signature = game_signature.as_ref() == Some(wad_b.signature());
-        let reference_style = if wad_a.signature() == wad_b.signature() {
-            "igual"
-        } else {
-            "mod-tools anterior a 2025-07"
-        };
-        let ok = missing == 0 && extra == 0 && different == 0 && signature;
-        if !ok {
-            failures += 1;
-        }
-        println!(
-            "  {} {key}: {} entradas | iguais armazenadas {same_stored} | iguais decodificadas {same_decoded} | diferentes {different} | faltando {missing} | sobrando {extra} | assinatura do jogo {} (mod-tools: {reference_style})",
-            if ok { "OK  " } else { "FALHA" },
-            wad_a.len(),
-            if signature {
-                "preservada"
-            } else {
-                "NAO PRESERVADA"
-            }
-        );
-    }
-    println!(
-        "\n{}",
-        if failures == 0 {
-            "PARIDADE: todos os WADs e entradas equivalentes"
-        } else {
-            "PARIDADE FALHOU"
-        }
-    );
-    let _ = std::fs::remove_dir_all(&work); // ignore-ok: scratch folder
 }
 
 fn run_wad_types(args: &[String]) {
@@ -1485,198 +1233,6 @@ fn run_wad_writer_probe(args: &[String]) {
     }
     let _ = std::fs::remove_dir_all(&scratch); // ignore-ok: probe scratch folder
     println!("\ntotal: {total_entries} entradas, {total_bad} divergentes");
-}
-
-fn run_parity_classic(args: &[String]) {
-    use std::collections::BTreeMap;
-
-    use bullet_classic::generator::{ClassicChampion, jade_characters, main_character, slots_for};
-
-    let aliases: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
-    if aliases.is_empty() {
-        println!("uso: cargo xtask parity-classic <Alias...>");
-        return;
-    }
-    let Some(game) = game_dir() else {
-        return;
-    };
-
-    let Some(rose_root) = std::env::var_os("ROSE_SOURCE").map(PathBuf::from) else {
-        println!("defina ROSE_SOURCE com a pasta do codigo-fonte do Rose (a que tem .venv)");
-        return;
-    };
-    let python = rose_root.join(".venv").join("Scripts").join("python.exe");
-    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("parity")
-        .join("rose_classic.py");
-    let table = bullet_tools_dir().join("hashes.game.txt");
-    for (label, path) in [("python do Rose", &python), ("tabela de hashes", &table)] {
-        if !path.is_file() {
-            println!("{label} ausente: {}", path.display());
-            return;
-        }
-    }
-
-    let work = std::env::temp_dir().join("bullet_parity_classic");
-    let _ = std::fs::remove_dir_all(&work); // ignore-ok: scratch folder may not exist
-    let (bullet_dir, rose_dir) = (work.join("bullet"), work.join("rose"));
-    if let Err(e) = std::fs::create_dir_all(&bullet_dir) {
-        println!("pasta temporaria indisponivel: {e}");
-        return;
-    }
-    let known = jade_characters(&table, &work.join("bullet_characters.json"));
-    let slots = slots_for(None);
-
-    let mut cases: Vec<(String, u32)> = Vec::new();
-    let mut bullet: BTreeMap<(String, u32), Result<String, String>> = BTreeMap::new();
-    for alias in &aliases {
-        let champion = match ClassicChampion::open(&game, alias) {
-            Ok(champion) => champion,
-            Err(e) => {
-                println!("{alias}: nao abriu ({e})");
-                continue;
-            }
-        };
-        for skin in champion.skin_numbers(&main_character(alias), 1000) {
-            let built = champion
-                .build_mod(skin, &slots, &known, &bullet_dir)
-                .map_err(|e| e.to_string());
-            bullet.insert((alias.to_string(), skin), built);
-            cases.push((alias.to_string(), skin));
-        }
-    }
-
-    let manifest = serde_json::json!({
-        "game_dir": game,
-        "out_dir": rose_dir,
-        "hashes": table,
-        "cache": work.join("rose_characters.json"),
-        "cases": cases
-            .iter()
-            .map(|(alias, skin)| serde_json::json!({"alias": alias, "skin": skin, "slots": slots}))
-            .collect::<Vec<_>>(),
-    });
-    let manifest_path = work.join("manifest.json");
-    let result_path = work.join("rose_result.json");
-    if let Err(e) = std::fs::write(&manifest_path, manifest.to_string()) {
-        println!("manifesto nao gravado: {e}");
-        return;
-    }
-    let status = Command::new(&python)
-        .arg(&script)
-        .arg(&rose_root)
-        .arg(&manifest_path)
-        .arg(&result_path)
-        .status();
-    if !matches!(status, Ok(s) if s.success()) {
-        println!("o gerador do Rose nao rodou: {status:?}");
-        return;
-    }
-    let rose: serde_json::Value = match std::fs::read(&result_path)
-        .map_err(|e| e.to_string())
-        .and_then(|b| serde_json::from_slice(&b).map_err(|e| e.to_string()))
-    {
-        Ok(value) => value,
-        Err(e) => {
-            println!("resultado do Rose ilegivel: {e}");
-            return;
-        }
-    };
-    let rose_known: Vec<&str> = rose["known"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
-        .unwrap_or_default();
-    println!(
-        "personagens conhecidos: Bullet {} / Rose {} {}",
-        known.len(),
-        rose_known.len(),
-        if rose_known
-            .iter()
-            .copied()
-            .eq(known.iter().map(String::as_str))
-        {
-            "(iguais)"
-        } else {
-            "(DIFERENTES)"
-        }
-    );
-
-    let mut identical = 0usize;
-    let mut differ = Vec::new();
-    let mut rose_type4 = 0usize;
-    let mut other = Vec::new();
-    for entry in rose["results"].as_array().into_iter().flatten() {
-        let alias = entry["alias"].as_str().unwrap_or_default().to_owned();
-        let skin = entry["skin"].as_u64().unwrap_or_default() as u32;
-        let ours = bullet.get(&(alias.clone(), skin));
-        match (ours, entry["folder"].as_str(), entry["error"].as_str()) {
-            (Some(Ok(ours)), Some(theirs), _) => {
-                let diffs = compare_mod_trees(&bullet_dir.join(ours), &rose_dir.join(theirs));
-                if diffs.is_empty() {
-                    identical += 1;
-                } else {
-                    differ.push(format!("{alias} skin{skin}: {}", diffs.join("; ")));
-                }
-            }
-            (Some(Ok(_)), None, Some(error)) if error.contains("type 4") => rose_type4 += 1,
-            (ours, _, error) => other.push(format!(
-                "{alias} skin{skin}: Bullet={:?} Rose={:?}",
-                ours.map(|r| r.as_ref().map(String::as_str)),
-                error
-            )),
-        }
-    }
-
-    println!(
-        "\ncasos: {}  identicos byte a byte: {identical}  diferentes: {}  Rose recusou tipo 4 (ADR-006, Bullet gerou): {rose_type4}  outros: {}",
-        cases.len(),
-        differ.len(),
-        other.len()
-    );
-    for line in differ.iter().chain(other.iter()).take(20) {
-        println!("  {line}");
-    }
-}
-
-fn compare_mod_trees(ours: &std::path::Path, theirs: &std::path::Path) -> Vec<String> {
-    fn files(root: &std::path::Path) -> std::collections::BTreeMap<String, PathBuf> {
-        let mut out = std::collections::BTreeMap::new();
-        let mut stack = vec![root.to_path_buf()];
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if let Ok(rel) = path.strip_prefix(root) {
-                    let key = rel
-                        .to_string_lossy()
-                        .replace('\\', "/")
-                        .to_ascii_lowercase();
-                    out.insert(key, path);
-                }
-            }
-        }
-        out
-    }
-    let (a, b) = (files(ours), files(theirs));
-    let mut diffs = Vec::new();
-    for key in a.keys().filter(|k| !b.contains_key(*k)) {
-        diffs.push(format!("so no Bullet: {key}"));
-    }
-    for key in b.keys().filter(|k| !a.contains_key(*k)) {
-        diffs.push(format!("so no Rose: {key}"));
-    }
-    for (key, path) in &a {
-        if key == "meta/info.json" {
-            continue;
-        }
-        if let Some(other) = b.get(key) {
-            if std::fs::read(path).ok() != std::fs::read(other).ok() {
-                diffs.push(format!("bytes diferem: {key}"));
-            }
-        }
-    }
-    diffs
 }
 
 #[cfg(test)]

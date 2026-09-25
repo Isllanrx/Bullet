@@ -62,8 +62,8 @@ impl ModCategory {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ModSource {
-    /// `%LOCALAPPDATA%\Bullet\custom_mods`. The only source since the independence decision of
-    /// 2026-09-23; Rose's folder is no longer read (backlog #112).
+    /// `%LOCALAPPDATA%\Bullet\custom_mods`, the only folder mods are read from; Bullet never reads
+    /// another product's mod folder.
     Bullet,
 }
 
@@ -98,7 +98,7 @@ pub struct ModEntry {
     #[serde(skip)]
     pub path: PathBuf,
     pub package: ModPackage,
-    /// `description.txt` next to or inside the mod, as Rose reads it.
+    /// `description.txt` next to or inside the mod.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -155,7 +155,7 @@ impl ModCatalog {
 /// Maximum characters read from a `description.txt`: it is shown in a tooltip, not a document.
 const MAX_DESCRIPTION_CHARS: usize = 300;
 
-/// Whether `dir` is a mod folder `mkoverlay` accepts: `META/info.json` plus a non-empty `WAD/` or
+/// Whether `dir` is a mod folder the overlay builder accepts: `META/info.json` plus a non-empty `WAD/` or
 /// `RAW/`. Names are matched case-insensitively, like Windows does.
 #[must_use]
 pub fn is_valid_mod_dir(dir: &Path) -> bool {
@@ -226,8 +226,8 @@ fn list_dir(dir: &Path, root: &ModRoot, category: ModCategory, id_prefix: &str) 
             rejected += 1;
             continue;
         };
-        // Rose leaves `.rose-import-*` temporaries behind on a failed import; anything hidden this
-        // way is not a mod.
+        // Mod managers leave hidden `.<name>-import-*` temporaries behind on a failed import;
+        // anything hidden this way is not a mod.
         if file_name.starts_with('.') {
             continue;
         }

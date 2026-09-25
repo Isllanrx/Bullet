@@ -6,7 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "Standalone, high-performance party relay server in Rust (ADR-020, #159)"
+description = "Standalone, high-performance party relay server in Rust"
 
 [dependencies]
 tokio = { workspace = true }

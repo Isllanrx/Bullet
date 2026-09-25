@@ -50,11 +50,11 @@ fn test_a_mod_folder_needs_meta_and_content_as_mkoverlay_does() {
     assert!(is_valid_mod_dir(&wad));
     assert!(
         is_valid_mod_dir(&raw),
-        "RAW/ becomes a synthetic WAD in mkoverlay"
+        "RAW/ becomes a synthetic WAD in the overlay"
     );
     assert!(
         !is_valid_mod_dir(&no_meta),
-        "mkoverlay requires META/info.json"
+        "the overlay builder requires META/info.json"
     );
     assert!(
         !is_valid_mod_dir(&empty),
@@ -262,9 +262,9 @@ fn test_prune_drops_mods_that_left_the_disk() {
 }
 
 #[test]
-fn test_staged_names_are_mkoverlay_safe_and_change_with_the_source() {
-    let a = staged_name("rose:maps/Spirit Blossom (2)", "100:1");
-    let b = staged_name("rose:maps/Spirit Blossom (2)", "100:2");
+fn test_staged_names_are_overlay_safe_and_change_with_the_source() {
+    let a = staged_name("bullet:maps/Spirit Blossom (2)", "100:1");
+    let b = staged_name("bullet:maps/Spirit Blossom (2)", "100:2");
     assert!(a.starts_with(STAGED_PREFIX));
     assert!(a.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
     assert_ne!(a, b, "a replaced archive must not reuse the old extraction");
