@@ -48,7 +48,7 @@ pub struct OverlayWadRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OverlayFingerprint {
     pub version: u32,
-    /// Which builder wrote the overlay (`native` or `modtools`).
+    /// Which builder wrote the overlay (`native`); an unknown value invalidates the cache.
     pub builder: String,
     /// The revision of that builder's output ([`OVERLAY_BUILDER_REVISION`] for the native one).
     pub builder_revision: u32,

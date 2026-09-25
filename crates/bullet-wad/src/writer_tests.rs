@@ -52,7 +52,7 @@ fn test_header_follows_cslol_and_toc_is_sorted_and_deduplicated() {
     assert_eq!(
         u64::from_le_bytes(bytes[260..268].try_into().expect("8 bytes")),
         expected.digest(),
-        "header checksum is XXH3(version, (name, checksum)...), as cslol writes it"
+        "header checksum is XXH3(version, (name, checksum)...)"
     );
 
     let archive = WadArchive::parse(&bytes).expect("parse");

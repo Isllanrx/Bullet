@@ -105,7 +105,7 @@ fn test_arm_is_scheduled_for_a_valid_champ_select_selection() {
             assert_eq!(request.key.entry_id, Some(81065));
             assert_eq!(
                 request.key.mods, 0,
-                "no custom mod: the key is the pre-ADR-019 key"
+                "no custom mod: the key is the same as without custom mod support"
             );
             assert_eq!(request.key.classic_slot, None);
             assert_eq!(request.key.party, 0);
@@ -433,19 +433,19 @@ fn test_half_a_toolset_is_not_a_toolset() {
 }
 
 #[test]
-fn test_the_ltk_backend_is_the_toolset_and_the_removed_cslol_is_not() {
+fn test_the_ltk_backend_is_the_toolset_and_another_injector_is_not() {
     let ltk = tools_fixture("ltk_only", &["ltk_patcher_host.exe", "ltk_patcher_dll.dll"]);
-    let cslol = tools_fixture("cslol_only", &["cslol-dll.dll"]);
+    let other = tools_fixture("other_only", &["other-injector.dll"]);
     assert_eq!(
         resolve_tools_dir(std::slice::from_ref(&ltk)).1,
         ToolsSource::Own
     );
     assert_eq!(
-        resolve_tools_dir(std::slice::from_ref(&cslol)).1,
+        resolve_tools_dir(std::slice::from_ref(&other)).1,
         ToolsSource::Missing
     );
     let _ = std::fs::remove_dir_all(&ltk); // ignore-ok: test temp dir teardown
-    let _ = std::fs::remove_dir_all(&cslol); // ignore-ok: test temp dir teardown
+    let _ = std::fs::remove_dir_all(&other); // ignore-ok: test temp dir teardown
 }
 
 #[test]

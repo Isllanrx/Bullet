@@ -52,7 +52,7 @@ impl ResolvedPaths {
                 error!(
                     expected = %tools_dir.display(),
                     "Injection tools not found. Place ltk_patcher_host.exe and ltk_patcher_dll.dll \
-                     (or the legacy cslol-dll.dll) in that folder — no skin can be injected until then"
+                     in that folder — no skin can be injected until then"
                 );
             }
         }
@@ -431,7 +431,7 @@ impl InjectionTrigger {
             warn!(
                 champ_id,
                 entry_id = ?entry_id,
-                mkoverlay_ms = build.elapsed.as_millis(),
+                build_ms = build.elapsed.as_millis(),
                 "Patcher armed after the game process already existed; the hook may land too late for the skin to load"
             );
         } else {
@@ -809,7 +809,7 @@ impl InjectionTrigger {
         info!(
             champ_id = key.champ_id,
             mods = ?mods,
-            "Mods prepared for mkoverlay, in merge order"
+            "Mods prepared for the overlay build, in merge order"
         );
         Some(mods)
     }
@@ -1263,11 +1263,10 @@ impl InjectionTrigger {
                 mods_dir: self.paths.mods_dir.clone(),
                 overlay_dir: self.paths.overlay_dir.clone(),
                 game_dir,
-                config_file: self.paths.state_dir.join("config.json"),
             },
             state_dir: self.paths.state_dir.clone(),
             hook_timeout: bullet_inject::pipeline::DEFAULT_HOOK_TIMEOUT,
-            mkoverlay_timeout: bullet_inject::pipeline::DEFAULT_MKOVERLAY_TIMEOUT,
+            build_timeout: bullet_inject::pipeline::DEFAULT_BUILD_TIMEOUT,
             max_suspension: bullet_inject::pipeline::DEFAULT_MAX_SUSPENSION,
         }
     }

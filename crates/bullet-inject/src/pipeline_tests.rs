@@ -37,11 +37,10 @@ fn temp_config(dir: &std::path::Path, host_exe: PathBuf, host_hash: String) -> P
             mods_dir: dir.join("mods"),
             overlay_dir: dir.join("overlay"),
             game_dir: dir.join("game"),
-            config_file: dir.join("config.json"),
         },
         state_dir: dir.join("state"),
         hook_timeout: Duration::from_millis(50),
-        mkoverlay_timeout: Duration::from_secs(5),
+        build_timeout: Duration::from_secs(5),
         max_suspension: Duration::from_secs(30),
     }
 }

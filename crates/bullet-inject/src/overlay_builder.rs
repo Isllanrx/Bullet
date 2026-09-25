@@ -694,7 +694,7 @@ fn clone_into<'a>(
 }
 
 /// Remove `.wad.client` files of earlier builds that this overlay no longer has, and partial files
-/// a crash left behind (cslol `cleanup_in_directory`, plus the partials this writer creates).
+/// a crash left behind (including the partials this writer creates).
 fn remove_strays(dir: &Path, keep: &HashSet<&str>) -> usize {
     let mut removed = 0usize;
     let mut stack = vec![dir.to_path_buf()];

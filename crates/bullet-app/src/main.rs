@@ -227,12 +227,15 @@ async fn main() -> Result<()> {
         );
     }
 
-    if bullet_app::skin_sync::sync_enabled(
+    if let Some(sync_config) = bullet_app::skin_sync::SkinSyncConfig::from_env_value(
         std::env::var(bullet_core::env::SKIN_SYNC).ok().as_deref(),
     ) {
-        info!(library = %library_root.display(), "Skin library download from upstream enabled (BULLET_SKIN_SYNC)");
+        info!(
+            library = %library_root.display(),
+            source = %sync_config.zip_url,
+            "Skin library download enabled (BULLET_SKIN_SYNC)"
+        );
         let sync_lib_dir = library_root.clone();
-        let sync_config = bullet_app::skin_sync::SkinSyncConfig::default();
         supervisor.spawn("skin-sync", move |child_token| async move {
             tokio::select! {
                 _ = child_token.cancelled() => {}

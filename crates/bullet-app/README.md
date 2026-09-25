@@ -45,7 +45,7 @@ trusted.
 | `mods_store.rs` | Custom mod folders, the saved selection and preparing the selected mods |
 | `historic_store.rs` | Remembers the last skin used on each champion |
 | `party_manager.rs` | Connects party mode to the app state and the tray |
-| `skin_sync.rs` | Optional download of a shared skin library (`BULLET_SKIN_SYNC=1`) |
+| `skin_sync.rs` | Optional download of a skin library from a GitHub repository the user names in `BULLET_SKIN_SYNC` (`owner/repo`); there is no built-in source |
 | `logging.rs` | Log setup and level handling (`BULLET_LOG`, `RUST_LOG`) |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Bullet running without administrator rights |
 

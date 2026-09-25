@@ -207,7 +207,7 @@ mod tests {
         };
         assert!(
             open_member(&unreadable, &cipher, 1).is_err(),
-            "a Rose-style cleartext skin is not accepted"
+            "a cleartext skin from another client is not accepted"
         );
     }
 }

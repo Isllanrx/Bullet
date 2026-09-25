@@ -148,10 +148,22 @@ pub fn overlay_placement_with_monitor(
 
 #[must_use]
 pub fn overlay_placement(client: WindowRect, width: i32, height: i32, padding: i32) -> WindowRect {
-    if let Some(hwnd) = find_client_hwnd() {
-        if let Some(monitor) = get_monitor_work_area(hwnd) {
-            return overlay_placement_with_monitor(client, monitor, width, height, padding);
-        }
+    let monitor = find_client_hwnd().and_then(get_monitor_work_area);
+    overlay_placement_on(client, monitor, width, height, padding)
+}
+
+/// Pure placement, with the work area of the monitor holding the client when it is known. Kept apart
+/// from [`overlay_placement`] so tests do not depend on a real League client being open.
+#[must_use]
+pub fn overlay_placement_on(
+    client: WindowRect,
+    monitor: Option<WindowRect>,
+    width: i32,
+    height: i32,
+    padding: i32,
+) -> WindowRect {
+    if let Some(monitor) = monitor {
+        return overlay_placement_with_monitor(client, monitor, width, height, padding);
     }
 
     let height = height.min(client.height() - padding * 2).max(120);
@@ -245,7 +257,7 @@ mod tests {
             right: 800,
             bottom: 300,
         };
-        let placement = overlay_placement(short, 360, 520, 16);
+        let placement = overlay_placement_on(short, None, 360, 520, 16);
 
         assert!(
             placement.height() <= short.height(),

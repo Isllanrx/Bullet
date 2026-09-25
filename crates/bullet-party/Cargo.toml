@@ -6,7 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "Party mode: encrypted shared room over a relay (ADR-010, ADR-020)"
+description = "Party mode: encrypted shared room over a relay"
 
 [dependencies]
 bullet-core = { path = "../bullet-core" }

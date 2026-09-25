@@ -6,7 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "Injection pipeline: overlay, mod-tools, suspension, hook confirmation"
+description = "Injection pipeline: mod checks, native overlay builder, injector host, suspension guard"
 
 [dependencies]
 bullet-core = { path = "../bullet-core" }

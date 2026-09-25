@@ -54,7 +54,7 @@ fn main() {
             );
         }
         // A silent failure here ships an exe without icon, version info and the asInvoker
-        // manifest (ADR-026), so the build must stop.
+        // manifest that keeps it unelevated, so the build must stop.
         if let Err(e) = res.compile() {
             panic!("failed to compile Windows resources (icon, version info, manifest): {e}");
         }

@@ -169,7 +169,7 @@ impl<'a> Cursor<'a> {
     }
 }
 
-/// Parse a PROP binary completely (Rose `classic_skin_builder.py::_parse_prop_entries`).
+/// Parse a PROP binary completely.
 ///
 /// Every length is checked against the buffer, a version below 2 is refused, and trailing bytes
 /// after the last object are an error — a file that does not end where its own table says it
@@ -372,10 +372,7 @@ mod tests {
 
         let mut old = bytes.clone();
         old[4..8].copy_from_slice(&1u32.to_le_bytes());
-        assert!(
-            parse_prop_file(&old).is_err(),
-            "version 1 is refused, as in Rose"
-        );
+        assert!(parse_prop_file(&old).is_err(), "version 1 is refused");
     }
 
     #[test]

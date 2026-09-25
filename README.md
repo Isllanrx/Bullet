@@ -13,6 +13,7 @@
   <a href="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml"><img src="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/Isllanrx/Bullet"><img src="https://api.scorecard.dev/projects/github.com/Isllanrx/Bullet/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/v/release/Isllanrx/Bullet?include_prereleases&sort=semver" alt="Release"></a>
+  <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/downloads/Isllanrx/Bullet/total?label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
   <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
@@ -42,10 +43,12 @@ scratch in Rust with one goal: the skin you chose is the skin you get in every g
 
 ## Contents
 
-- [How it works](#how-it-works)
-- [Status](#status)
+- [Features](#features)
+- [Why Bullet](#why-bullet)
 - [Installation](#installation)
 - [Usage](#usage)
+- [How it works](#how-it-works)
+- [Status](#status)
 - [Where Bullet keeps its files](#where-bullet-keeps-its-files)
 - [Security and risk](#security-and-risk)
 - [Troubleshooting](#troubleshooting)
@@ -57,6 +60,175 @@ scratch in Rust with one goal: the skin you chose is the skin you get in every g
 - [Acknowledgements](#acknowledgements)
 - [Disclaimer](#disclaimer)
 - [License](#license)
+
+## Features
+
+- **Every skin, automatically.** Pick any skin or chroma in Bullet's window during champion select; it loads
+  when the game starts. No clicks in the client, no files to swap.
+- **Chromas and special forms.** Chromas and form skins such as Spirit Blossom Morgana, Sahn-Uzal Mordekaiser
+  and Radiant Sett.
+- **Random skin and history.** Roll a random skin, or let Bullet reuse the last skin you played on each
+  champion.
+- **Skins you own keep their name.** An owned skin is registered with the client, so your loading card shows
+  its real name.
+- **Custom mods.** `.fantome` mods in ten categories (skins, maps, fonts, announcers, UI, voiceover, loading
+  screens, VFX, SFX, others), checked against the current patch before use.
+- **Classic Rift.** Legacy champion models, generated from your installed game.
+- **Party mode.** Friends on your team see each other's skins, through an end-to-end encrypted relay.
+- **Always up to date.** Skins are generated from the game you have installed, so a patch never leaves you with
+  outdated skin files.
+- **In your language.** The interface is available in English, Portuguese and Spanish.
+- **Free and open source.** Bullet costs nothing. If you paid for it, you were scammed.
+
+## Why Bullet
+
+| | Bullet | Python changers with client plugins (e.g. Rose) | In-memory changers (e.g. R3nzSkin) | General mod managers (cslol-manager, LTK Manager) |
+| --- | --- | --- | --- | --- |
+| Picks the skin for you in champion select | Yes, automatically | Yes | Yes | No, you install mods by hand |
+| Code running inside the League client | **None** | Plugin loader injected into the client | None | None |
+| Writes to game memory | **No** | No | Yes, the approach that got such tools detected | No |
+| Skins generated from your installed game on each patch | **Yes** | No, pre-built skin packages | Not applicable | No, pre-built mods |
+| Unchanged game data kept byte for byte in the overlay | **Yes** | No, archives are recompressed | Not applicable | Depends on the tool |
+| Runtime | One native executable | Python runtime plus a JavaScript plugin loader | Native DLL inside the game | Native application |
+
+What that means in practice:
+
+| | How Bullet gets there |
+| --- | --- |
+| **Security** | Runs without administrator rights. Never writes to the game folder. Loads its injector only after checking its SHA-256 against an audited build. No telemetry. Party mode data is end-to-end encrypted, so the relay cannot read it. |
+| **Robustness** | The overlay keeps every untouched byte exactly as the game shipped it, which is what patch 16.19 requires. Mods broken by a patch are dropped before they can crash the loading screen. A suspended game is always resumed, even after a crash. Every error is logged with its cause. |
+| **Performance** | Written in Rust with no garbage collector or interpreter. The index of the game's archives is built in the background at startup. Built overlays are reused while the game build is unchanged, and entries identical to the game's are left out. |
+| **Dynamic** | Finds the game on any drive or region, follows the client's language, re-reads your champion right before building (ARAM swaps, trades, last-second locks), and rebuilds itself after every patch with no manual update of skin packages. |
+| **Independence** | One self-contained program. No client plugin loader, no Python runtime, no files read from other tools. The only external piece is the injector, loaded from Bullet's own folder. |
+| **Transparency** | Open source under MIT, with CI and security scanning on every change and release installers you can verify with a checksum and a build provenance attestation. |
+
+## Installation
+
+Setup takes three steps: install Bullet, add the injector, start Bullet.
+
+### Requirements
+
+| Requirement | Notes |
+| --- | --- |
+| Windows 10 or 11, 64-bit | |
+| [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) | Already present on Windows 11. On Windows 10, install it if it is missing |
+| League of Legends | Any install location. Bullet finds the game on its own |
+
+### Step 1 — Install Bullet
+
+1. Download `Bullet-Setup-<version>-x64.exe` from [Releases](https://github.com/Isllanrx/Bullet/releases).
+2. Optional but recommended: check that the download is intact. Compare the result with the `SHA256SUMS` file
+   published next to the installer:
+
+   ```powershell
+   Get-FileHash .\Bullet-Setup-<version>-x64.exe -Algorithm SHA256
+   ```
+
+3. Run the installer. Windows asks for administrator permission **once, to install** into
+   `C:\Program Files\Bullet`. Bullet itself never runs as administrator.
+
+### Step 2 — Add the injector
+
+Bullet needs two files made by League Toolkit, `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`. Their license
+does not allow other projects to redistribute them, so you take them from the official
+[LTK Manager](https://github.com/LeagueToolkit/ltk-manager) installer and copy them into Bullet's `tools`
+folder. It only takes a minute.
+
+> [!IMPORTANT]
+> Bullet only accepts the **exact build** it has audited. Today that is the build shipped with
+> **LTK Manager 1.21.0 and 1.22.0**. Older versions contain a different build, which Bullet refuses. When a
+> future LTK Manager changes these files, use the version named in the latest Bullet release notes.
+
+#### A. Get LTK Manager
+
+1. Open the [LTK Manager releases](https://github.com/LeagueToolkit/ltk-manager/releases) and download
+   `LTK.Manager_1.22.0_x64-setup.exe` (or 1.21.0).
+2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
+3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
+   Bullet is running: two injectors at once will conflict.
+
+#### B. Copy the two files with File Explorer
+
+1. Press `Win + R`, type `%LOCALAPPDATA%\LTK Manager` and press Enter. If it does not open, right-click the
+   LTK Manager shortcut in the Start menu and choose **Open file location** (twice, if it opens the shortcut
+   folder first).
+2. Select `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` and copy them (`Ctrl + C`).
+3. Press `Win + R` again, type `C:\Program Files\Bullet\tools` and press Enter.
+4. Paste (`Ctrl + V`). Windows asks for administrator permission because this is a protected folder; choose
+   **Continue**.
+
+#### B (alternative). Copy the two files with PowerShell
+
+Open PowerShell **as administrator** (Start menu → type `PowerShell` → **Run as administrator**) and run:
+
+```powershell
+$from = Join-Path $env:LOCALAPPDATA 'LTK Manager'
+$to   = Join-Path $env:ProgramFiles 'Bullet\tools'
+Copy-Item (Join-Path $from 'ltk_patcher_host.exe'), (Join-Path $from 'ltk_patcher_dll.dll') $to -Force
+Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
+```
+
+#### C. Check the files (optional)
+
+The folder `C:\Program Files\Bullet\tools` should now contain both files, with these SHA-256 hashes:
+
+| File | SHA-256 |
+| --- | --- |
+| `ltk_patcher_host.exe` | `a7c4047ce7548c7ae820bc440735f15b9d1a495acf061dbb5a5a2893a0ed8d7c` |
+| `ltk_patcher_dll.dll` | `07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b` |
+
+You do not have to check them by hand: Bullet checks both at startup. If one is missing or is a different
+build, Bullet tells you and shows the exact path it expected. You can uninstall LTK Manager afterwards; the
+copies in Bullet's folder keep working.
+
+### Step 3 — Start Bullet
+
+Open Bullet from the Start menu, normally. Do not use **Run as administrator**. It lives in the system tray
+next to the clock.
+
+Uninstalling Bullet removes the program, its tools, logs, cache and generated files. The uninstaller asks
+before it deletes your own skin library.
+
+## Usage
+
+1. Open the League client and Bullet, in either order.
+2. Enter champion select and pick a champion. Bullet's window lists the skins and chromas available for it.
+3. Choose one. Bullet builds the overlay and arms the injector while you are still in champion select.
+4. Play.
+
+From the tray icon you can open the mods and logs folders, create or join a party, and turn on start with
+Windows.
+
+### Custom mods
+
+Drop `.fantome` mods into the category folders under `%LOCALAPPDATA%\Bullet\custom_mods`. The categories are
+`skins`, `maps`, `fonts`, `announcers`, `ui`, `voiceover`, `loading_screen`, `vfx`, `sfx` and `others`. Then
+select them in the **Mods** tab of Bullet's window. You can pick at most one skin, one map, one font and one
+announcer at a time. The other categories can be combined.
+
+Before a mod is used, Bullet checks that every internal reference it contains still exists in the current
+game. After a patch, a mod whose references are gone is left out, with a warning, so it cannot crash the
+loading screen.
+
+### Party mode
+
+One player creates a room from the tray and shares the invite code. Up to five players can join. Each player's
+chosen skin is encrypted on their own machine before it is sent. The relay only passes the encrypted messages
+along and never sees who the players are or which skins they picked. Bullet only accepts a teammate's skin when
+that teammate's champion matches the one the client reports for your team. A player cannot push a skin onto a
+champion they are not playing.
+
+### Environment variables
+
+| Variable | Effect |
+| --- | --- |
+| `BULLET_LOG` | Log detail (`info` by default, `debug` to troubleshoot) |
+| `BULLET_RELAY_URL` | Party relay to use instead of the default one |
+| `BULLET_SKIN_SYNC` | A GitHub repository as `owner/repo` to download a skin library from in the background; off when unset |
+| `BULLET_PATCHER_FLAGS` | Advanced: numeric hook flags passed to the injector host |
+
+All of them are optional. [`.env.example`](.env.example) documents each one and how to set it on Windows.
+Bullet reads them from the environment; it does not load a `.env` file.
 
 ## How it works
 
@@ -94,74 +266,6 @@ late swap (ARAM bench, trades, a pick in the last second) is not lost.
 > built after 2026-10-04 07:00 UTC. The build you have installed keeps working after that date. The first patch
 > built later needs a refreshed DLL. Bullet checks this at startup and tells you.
 
-## Installation
-
-### Requirements
-
-| Requirement | Notes |
-| --- | --- |
-| Windows 10 or 11, 64-bit | |
-| [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) | Already present on Windows 11. On Windows 10, install it if it is missing |
-| League of Legends | Any install location. Bullet finds the game on its own |
-
-### Steps
-
-1. Download `Bullet-Setup-<version>-x64.exe` from [Releases](https://github.com/Isllanrx/Bullet/releases).
-   Compare its hash with the `SHA256SUMS` file published next to it:
-
-   ```powershell
-   Get-FileHash .\Bullet-Setup-<version>-x64.exe -Algorithm SHA256
-   ```
-
-2. Run the installer. It installs Bullet to `Program Files\Bullet`.
-3. Get the injector from an official [LTK Manager release](https://github.com/LeagueToolkit/ltk-manager/releases)
-   and copy `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` into `Program Files\Bullet\tools\`. They are not
-   bundled because their license does not allow other projects to redistribute League Toolkit's signed
-   binaries. Bullet checks both files' hashes before using them. If one is missing or is a different build,
-   Bullet says so and shows the exact path it expected.
-4. Start Bullet normally. Do not use "Run as administrator". It runs from the system tray.
-
-Uninstalling removes the program, its tools, logs, cache and generated files. The uninstaller asks before it
-deletes your own skin library.
-
-## Usage
-
-1. Open the League client and Bullet, in either order.
-2. Enter champion select and pick a champion. Bullet's window lists the skins and chromas available for it.
-3. Choose one. Bullet builds the overlay and arms the injector while you are still in champion select.
-4. Play.
-
-From the tray icon you can open the mods and logs folders, create or join a party, and turn on start with
-Windows.
-
-### Custom mods
-
-Drop `.fantome` mods into the category folders under `%LOCALAPPDATA%\Bullet\custom_mods`. The categories are
-`skins`, `maps`, `fonts`, `announcers`, `ui`, `voiceover`, `loading_screen`, `vfx`, `sfx` and `others`. Then
-select them in the **Mods** tab of Bullet's window. You can pick at most one skin, one map, one font and one
-announcer at a time. The other categories can be combined.
-
-Before a mod is used, Bullet checks that every internal reference it contains still exists in the current
-game. After a patch, a mod whose references are gone is left out, with a warning, so it cannot crash the
-loading screen.
-
-### Party mode
-
-One player creates a room from the tray and shares the invite code. Up to five players can join. Each player's
-chosen skin is encrypted on their own machine before it is sent. The relay only passes the encrypted messages
-along and never sees who the players are or which skins they picked. Bullet only accepts a teammate's skin when
-that teammate's champion matches the one the client reports for your team. A player cannot push a skin onto a
-champion they are not playing.
-
-### Environment variables
-
-| Variable | Effect |
-| --- | --- |
-| `BULLET_LOG` | Log detail (`info` by default, `debug` to troubleshoot) |
-| `BULLET_RELAY_URL` | Party relay to use instead of the default one |
-| `BULLET_SKIN_SYNC` | Set to `1` to download a shared skin library in the background |
-| `BULLET_PATCHER_FLAGS` | Advanced: numeric hook flags passed to the injector host |
-
 ## Where Bullet keeps its files
 
 ```text
@@ -195,7 +299,8 @@ C:\Program Files\Bullet\              installed program (read-only for users)
 
 ### What Bullet does to keep you safe
 
-- It runs as a normal user and never asks for administrator rights.
+- It runs as a normal user. Only the installer, and copying the injector into `Program Files`, need
+  administrator permission.
 - It only loads its injector from its own folders, never from another product's. Before loading it, Bullet
   checks the file's SHA-256 hash against the one built into Bullet. A file that has been swapped is refused
   and logged.
@@ -218,10 +323,11 @@ Please report security issues privately through
 
 | Symptom | What to check |
 | --- | --- |
-| Bullet says a tool is missing or does not match | The file in `Program Files\Bullet\tools` is missing or is a different build; the message shows the path |
+| Bullet says a tool is missing or does not match | A file in `C:\Program Files\Bullet\tools` is missing or comes from another LTK Manager version. Redo [Step 2](#step-2--add-the-injector) with the version it names |
 | The skin does not show up in game | Set `BULLET_LOG=debug`, play again, and read the latest log in `%LOCALAPPDATA%\Bullet\logs` |
 | The game opens its repair screen | Update Bullet, then report it with Bullet's log and the game's log from the same match |
-| After a patch the injector refuses the game | The DLL does not support the new game build yet; a refreshed DLL is needed |
+| After a patch the injector refuses the game | The DLL does not support the new game build yet. Wait for a Bullet release that names a newer LTK Manager, then redo [Step 2](#step-2--add-the-injector) |
+| The skin does not load and LTK Manager is open | Close LTK Manager: its patcher and Bullet's cannot run at the same time |
 
 When you open an issue, attach the Bullet log from the match where it failed. Without it the problem is
 usually impossible to diagnose. For quick help, ask on [Discord](https://discord.gg/ASUW6J98jg).

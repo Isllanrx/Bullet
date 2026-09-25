@@ -22,9 +22,7 @@ rather than an assumption.
 | `wad-probe <filter…>` | Every matching entry in the game archives decodes |
 | `wad-types` | How many entries of each storage type the installed game uses |
 | `wad-writer-probe` | Copying real archives through the writer reproduces every entry |
-| `overlay-parity` | The native overlay builder matches the reference tool on real mods |
 | `classic-probe <Name…>` | Classic Rift mods can be built from the installed game |
-| `parity-classic` | Generated Classic Rift mods match the original project's output byte for byte |
 | `client-probe` | Where the League client window is and where the selection window would sit |
 | `overlay-demo` | Shows the selection window attached to the client for 30 seconds |
 | `ipc-probe` | A scripted click in the real selection window reaches the Rust side |

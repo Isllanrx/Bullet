@@ -187,7 +187,7 @@ impl WadWriter {
     }
 
     /// Where each distinct payload lands. Payloads from files come first, in file and offset
-    /// order (cslol orders by source address, which keeps reads sequential); in-memory ones
+    /// order (ordering by source address keeps reads sequential); in-memory ones
     /// follow, in name order.
     ///
     /// Two entries share one stored copy only when they are provably the same bytes, never on a
@@ -466,8 +466,8 @@ fn toc_entry(
 }
 
 /// Whether decoded content is a Wwise bank (`.bnk`) or package (`.wpk`) — the two kinds
-/// `mkoverlay` stores uncompressed (cslol `Magic::find`, first match wins: `r3d2` followed by
-/// `Mesh`, `aims`, `anmd`, `canm`, `sklt`, `blnd` or `wght` is a model or animation, not audio).
+/// the overlay stores uncompressed (first match wins: `r3d2` followed by `Mesh`, `aims`, `anmd`,
+/// `canm`, `sklt`, `blnd` or `wght` is a model or animation, not audio).
 #[must_use]
 pub fn is_audio_bank(head: &[u8]) -> bool {
     const NOT_AUDIO: [&[u8]; 7] = [
@@ -483,7 +483,7 @@ pub fn is_audio_bank(head: &[u8]) -> bool {
         || (head.starts_with(b"r3d2") && !NOT_AUDIO.iter().any(|m| head.starts_with(m)))
 }
 
-/// A file's decoded bytes, in the form `mkoverlay` writes them: zstd, or raw for audio banks.
+/// A file's decoded bytes, in the form the overlay stores them: zstd, or raw for audio banks.
 pub fn optimal_raw(decoded: Vec<u8>) -> Result<WriterEntry, WadError> {
     let uncompressed_size = decoded.len() as u64;
     let (kind, stored) = if is_audio_bank(&decoded) {
