@@ -1,0 +1,26 @@
+[package]
+name = "bullet-relay"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Standalone, high-performance party relay server in Rust (ADR-020, #159)"
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+bullet-core = { path = "../bullet-core" }
+bullet-party = { path = "../bullet-party" }
+reqwest = { workspace = true }
+

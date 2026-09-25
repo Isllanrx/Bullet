@@ -1,0 +1,24 @@
+[package]
+name = "xtask"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+rust-version.workspace = true
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+bullet-app = { path = "../crates/bullet-app" }
+bullet-core = { path = "../crates/bullet-core" }
+bullet-classic = { path = "../crates/bullet-classic" }
+bullet-inject = { path = "../crates/bullet-inject" }
+bullet-party = { path = "../crates/bullet-party" }
+bullet-platform = { path = "../crates/bullet-platform" }
+bullet-wad = { path = "../crates/bullet-wad" }
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true }
