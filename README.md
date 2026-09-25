@@ -129,10 +129,17 @@ Setup takes three steps: install Bullet, add the injector, start Bullet.
 
 ### Step 2 — Add the injector
 
-Bullet needs two files made by League Toolkit, `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`. Their license
-does not allow other projects to redistribute them, so you take them from the official
-[LTK Manager](https://github.com/LeagueToolkit/ltk-manager) installer and copy them into Bullet's `tools`
-folder. It only takes a minute.
+Bullet needs two files made by League Toolkit, `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`. They are not
+included in Bullet's installer. There are two ways to get them; both end with the two files in
+`C:\Program Files\Bullet\tools`:
+
+| Option | How | Best for |
+| --- | --- | --- |
+| **Official** (recommended) | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Getting the files straight from their authors |
+| **Direct download** | Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) and extract it (see [Direct download](#direct-download-alternative)) | A quicker setup |
+
+Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anything that is not the audited
+build.
 
 > [!IMPORTANT]
 > Bullet only accepts the **exact build** it has audited. Today that is the build shipped with
@@ -168,9 +175,33 @@ Copy-Item (Join-Path $from 'ltk_patcher_host.exe'), (Join-Path $from 'ltk_patche
 Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
 ```
 
-#### C. Check the files (optional)
+#### Direct download (alternative)
 
-The folder `C:\Program Files\Bullet\tools` should now contain both files, with these SHA-256 hashes:
+1. Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) from MediaFire. It
+   contains `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`.
+2. Right-click `tools.zip` → **Extract All…**.
+3. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
+4. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
+   **Continue**.
+5. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
+   official option instead.
+
+Or in PowerShell **as administrator**, from the folder where you downloaded the zip:
+
+```powershell
+$to = Join-Path $env:ProgramFiles 'Bullet\tools'
+Expand-Archive .\tools.zip -DestinationPath $to -Force
+Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
+```
+
+These files belong to League Toolkit and are covered by the
+[LTK Patcher License](https://github.com/LeagueToolkit/ltk-manager/blob/main/LTK-PATCHER-LICENSE.md). The
+download is a convenience mirror; it is not an official League Toolkit release.
+
+#### C. Check the files
+
+Optional for the official option, recommended for the direct download. The folder
+`C:\Program Files\Bullet\tools` should now contain both files, with these SHA-256 hashes:
 
 | File | SHA-256 |
 | --- | --- |
@@ -178,8 +209,8 @@ The folder `C:\Program Files\Bullet\tools` should now contain both files, with t
 | `ltk_patcher_dll.dll` | `07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b` |
 
 You do not have to check them by hand: Bullet checks both at startup. If one is missing or is a different
-build, Bullet tells you and shows the exact path it expected. You can uninstall LTK Manager afterwards; the
-copies in Bullet's folder keep working.
+build, Bullet tells you and shows the exact path it expected. If you used LTK Manager, you can uninstall it
+afterwards; the copies in Bullet's folder keep working.
 
 ### Step 3 — Start Bullet
 

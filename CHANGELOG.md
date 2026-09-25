@@ -31,8 +31,8 @@ First public release.
 
 ### Known limitations
 
-- The LTK injector is not bundled because its license does not allow it. Users copy it from an official LTK
-  Manager release: the audited build ships with LTK Manager 1.21.0 and 1.22.0.
+- The LTK injector is not bundled in the installer. Users copy it from LTK Manager 1.21.0 or 1.22.0, which ship
+  the audited build, or from the direct download linked in the README.
 
 - Proven in live matches for Draft and Ranked; other modes are still being validated.
 - The injector DLL refuses game builds made after 2026-10-04 07:00 UTC; a refreshed DLL is needed then.

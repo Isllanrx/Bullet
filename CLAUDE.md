@@ -92,7 +92,8 @@ inject→core+platform+wad, party→core, app→all.
 10. **The LTK injector lives in Bullet's own folder, is hash-validated, and its absence tells the user.**
     Never patch the DLL bytes or strip its signature. **Never bundle it:** the LTK Patcher License forbids
     redistributing League Toolkit's signed binaries outside an official LTK Manager release, so users copy
-    host + DLL from that release into `tools\`. The audited hashes match **LTK Manager 1.21.0 and 1.22.0**
+    host + DLL from that release into `tools\` (the README also links a convenience mirror, `tools.zip` on
+    MediaFire, chosen by the maintainer). The audited hashes match **LTK Manager 1.21.0 and 1.22.0**
     (`src-tauri/resources/`, installed to `%LOCALAPPDATA%\LTK Manager`). Changing `AUDITED_*_HASH` means
     updating the version and hashes in the README's "Step 2 — Add the injector".
 

@@ -7,15 +7,17 @@ components Bullet uses or depends on and the terms they come with.
 
 `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` are made by the League Toolkit organization and ship with
 [LTK Manager](https://github.com/LeagueToolkit/ltk-manager). They are **not** part of this repository, are
-**not** covered by Bullet's MIT license, and are **not** redistributed by Bullet or its installer.
+**not** covered by Bullet's MIT license, and are **not** included in Bullet's installer. The README links an
+official way to get them (LTK Manager) and a convenience download mirror, which is not an official League
+Toolkit release.
 
 They are governed by the
 [LTK Patcher License](https://github.com/LeagueToolkit/ltk-manager/blob/main/LTK-PATCHER-LICENSE.md), published by
 League Toolkit. In short, it allows using, studying and building software that uses the binaries. Anyone who
 redistributes them outside an unmodified official LTK Manager release must remove League Toolkit's code
-signature and may only sign them with their own certificate. To stay within those terms without altering the
-binaries, Bullet asks users to copy both files from an official LTK Manager release. Bullet only runs copies
-whose SHA-256 matches an audited build.
+signature and may only sign them with their own certificate. The official way to get them is to copy both
+files from an LTK Manager release. Bullet only runs copies whose SHA-256 matches an audited build, whatever
+their source.
 
 For questions about these binaries or their license, use the contact published by League Toolkit in that
 license. Bullet is not affiliated with or endorsed by League Toolkit.

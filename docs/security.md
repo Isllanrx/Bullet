@@ -37,8 +37,9 @@ to the workflow and the commit that produced it.
 - `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`, the injection backend. The DLL refuses game builds newer
   than a fixed timestamp (`0x6ac1f970`, 2026-10-04 07:00 UTC). The limit applies to the game build, not to
   the clock. Its bytes are never modified and its signature is never stripped.
-- Bullet does not redistribute them. Their license requires anyone who redistributes them outside an official
-  LTK Manager release to strip League Toolkit's signature, so users take them from that release.
+- They are not included in the installer. Users take them from an official LTK Manager release or from the
+  convenience mirror linked in the README. Either way, only the audited hashes are accepted, so a tampered
+  download is refused.
 - None of them may be loaded from another product's folder. If one is missing, the user is told the exact
   path Bullet expected.
 
