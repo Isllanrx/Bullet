@@ -1,0 +1,20 @@
+# Every change needs a maintainer's review. The paths below decide trust, permissions or what ships,
+# and the auto-merge workflow never merges them on its own.
+*                                   @Isllanrx
+
+/.github/                           @Isllanrx
+/installer/                         @Isllanrx
+/xtask/                             @Isllanrx
+/.cargo/                            @Isllanrx
+/rust-toolchain.toml                @Isllanrx
+/deny.toml                          @Isllanrx
+/.gitleaks.toml                     @Isllanrx
+/Cargo.lock                         @Isllanrx
+/crates/bullet-app/build.rs         @Isllanrx
+/crates/bullet-app/src/trigger.rs   @Isllanrx
+/crates/bullet-inject/src/ltk_host.rs      @Isllanrx
+/crates/bullet-inject/src/dll_validator.rs @Isllanrx
+/crates/bullet-inject/src/suspend.rs       @Isllanrx
+/crates/bullet-party/src/crypto.rs  @Isllanrx
+/crates/bullet-party/src/token.rs   @Isllanrx
+/relay-worker/wrangler.toml         @Isllanrx
