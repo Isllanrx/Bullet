@@ -43,20 +43,36 @@ scratch in Rust with one goal: the skin you chose is the skin you get in every g
 
 ## Contents
 
+- [Contents](#contents)
 - [Features](#features)
 - [Why Bullet](#why-bullet)
 - [Installation](#installation)
+  - [Requirements](#requirements)
+  - [Step 1 — Install Bullet](#step-1--install-bullet)
+  - [Step 2 — Add the injector](#step-2--add-the-injector)
+    - [A. Get LTK Manager](#a-get-ltk-manager)
+    - [B. Copy the two files with File Explorer](#b-copy-the-two-files-with-file-explorer)
+    - [B (alternative). Copy the two files with PowerShell](#b-alternative-copy-the-two-files-with-powershell)
+    - [Direct download (alternative)](#direct-download-alternative)
+    - [C. Check the files](#c-check-the-files)
+  - [Step 3 — Start Bullet](#step-3--start-bullet)
 - [Usage](#usage)
+  - [Custom mods](#custom-mods)
+  - [Party mode](#party-mode)
+  - [Environment variables](#environment-variables)
 - [How it works](#how-it-works)
 - [Status](#status)
 - [Where Bullet keeps its files](#where-bullet-keeps-its-files)
 - [Security and risk](#security-and-risk)
+  - [What Bullet does to keep you safe](#what-bullet-does-to-keep-you-safe)
+  - [What you should know](#what-you-should-know)
 - [Troubleshooting](#troubleshooting)
 - [Community](#community)
 - [Contact](#contact)
 - [Project layout](#project-layout)
 - [Building from source](#building-from-source)
 - [CI/CD](#cicd)
+  - [Publishing a release](#publishing-a-release)
 - [Acknowledgements](#acknowledgements)
 - [Disclaimer](#disclaimer)
 - [License](#license)
@@ -136,7 +152,6 @@ included in Bullet's installer. There are two ways to get them; both end with th
 | Option | How | Best for |
 | --- | --- | --- |
 | **Official** (recommended) | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Getting the files straight from their authors |
-| **Direct download** | Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) and extract it (see [Direct download](#direct-download-alternative)) | A quicker setup |
 
 Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anything that is not the audited
 build.
@@ -177,13 +192,11 @@ Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Ha
 
 #### Direct download (alternative)
 
-1. Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) from MediaFire. It
-   contains `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`.
-2. Right-click `tools.zip` → **Extract All…**.
-3. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
-4. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
+1. Right-click `tools.zip` → **Extract All…**.
+2. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
+3. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
    **Continue**.
-5. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
+4. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
    official option instead.
 
 Or in PowerShell **as administrator**, from the folder where you downloaded the zip:
