@@ -2,7 +2,7 @@
 
 | You want to… | Go to |
 | --- | --- |
-| Ask a question, get help installing, share mods | [Discord](https://discord.gg/ASUW6J98jg) |
+| Ask a question, get help installing, share mods | [Discord](https://discord.gg/e2dH2nUjd9) |
 | Report a bug (with the log attached) | [Bug report](https://github.com/Isllanrx/Bullet/issues/new?template=bug_report.yml) |
 | Suggest a feature | [Feature request](https://github.com/Isllanrx/Bullet/issues/new?template=feature_request.yml) |
 | Contact the maintainer | [isllan.dev](https://isllan.dev/) |
