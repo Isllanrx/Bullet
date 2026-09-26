@@ -13,7 +13,7 @@ Bullet follows the [Contributor Covenant, version 2.1](https://www.contributor-c
 ## Scope
 
 This applies to the GitHub repository (issues, pull requests, discussions) and to the
-[Bullet Discord](https://discord.gg/ASUW6J98jg).
+[Bullet Discord](https://discord.gg/e2dH2nUjd9).
 
 ## Enforcement
 
