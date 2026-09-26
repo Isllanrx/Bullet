@@ -32,7 +32,7 @@ memmap2 = "0.9"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 windows = { version = "0.58", features = [] }  # features added per-crate
 base64 = "0.23"
-sha2 = "0.10"
+sha2 = "0.11"
 # Party payload encryption: XChaCha20-Poly1305, RustCrypto.
 chacha20poly1305 = "0.10"
 uuid = { version = "1", features = ["v4"] }
