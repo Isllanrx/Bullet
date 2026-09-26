@@ -23,8 +23,14 @@ fn main() {
         res.set_icon(&icon_to_use.to_string_lossy());
 
         // Shown in Explorer > Properties > Details. winres defaults ProductName to the crate name
-        // ("bullet-app"); FileVersion/ProductVersion already come from the workspace version.
-        let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
+        // ("bullet-app"); ProductVersion/FileVersion default to CARGO_PKG_VERSION (e.g. 1.0.0).
+        // Format with two components when patch is 0 (e.g. "1.0", "1.1").
+        let raw_version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
+        let display_version = if let Some(stripped) = raw_version.strip_suffix(".0") {
+            stripped.to_string()
+        } else {
+            raw_version.clone()
+        };
         res.set("ProductName", "Bullet")
             .set("FileDescription", "Bullet - League of Legends skin changer")
             .set("CompanyName", "Isllan Toso")
@@ -35,7 +41,8 @@ fn main() {
             .set("InternalName", "bullet")
             .set("OriginalFilename", "bullet.exe")
             .set("Comments", "https://github.com/Isllanrx/Bullet")
-            .set("ProductVersion", &version);
+            .set("ProductVersion", &display_version)
+            .set("FileVersion", &display_version);
 
         let profile = std::env::var("PROFILE").unwrap_or_default();
         if profile == "release" {
