@@ -57,6 +57,9 @@ relay-worker/.dev.vars
 # Local AI and agent context (kept private; CLAUDE.md and AGENTS.md are the public entry points)
 .claude/
 .agents/
+!.agents/skills/
+!.agents/skills/github-pipeline/
+!.agents/skills/github-pipeline/**
 graphify-out/
 
 # Local diagnostics, sessions and scratch files
