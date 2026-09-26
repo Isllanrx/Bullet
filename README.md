@@ -17,12 +17,12 @@
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
   <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
-  <a href="https://discord.gg/ASUW6J98jg"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://discord.gg/e2dH2nUjd9"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><b>Download</b></a> ·
-  <a href="https://discord.gg/ASUW6J98jg"><b>Discord community</b></a> ·
+  <a href="https://discord.gg/e2dH2nUjd9"><b>Discord community</b></a> ·
   <a href="https://github.com/Isllanrx/Bullet/issues"><b>Report a bug</b></a>
 </p>
 
@@ -43,20 +43,36 @@ scratch in Rust with one goal: the skin you chose is the skin you get in every g
 
 ## Contents
 
+- [Contents](#contents)
 - [Features](#features)
 - [Why Bullet](#why-bullet)
 - [Installation](#installation)
+  - [Requirements](#requirements)
+  - [Step 1 — Install Bullet](#step-1--install-bullet)
+  - [Step 2 — Add the injector](#step-2--add-the-injector)
+    - [A. Get LTK Manager](#a-get-ltk-manager)
+    - [B. Copy the two files with File Explorer](#b-copy-the-two-files-with-file-explorer)
+    - [B (alternative). Copy the two files with PowerShell](#b-alternative-copy-the-two-files-with-powershell)
+    - [Direct download (alternative)](#direct-download-alternative)
+    - [C. Check the files](#c-check-the-files)
+  - [Step 3 — Start Bullet](#step-3--start-bullet)
 - [Usage](#usage)
+  - [Custom mods](#custom-mods)
+  - [Party mode](#party-mode)
+  - [Environment variables](#environment-variables)
 - [How it works](#how-it-works)
 - [Status](#status)
 - [Where Bullet keeps its files](#where-bullet-keeps-its-files)
 - [Security and risk](#security-and-risk)
+  - [What Bullet does to keep you safe](#what-bullet-does-to-keep-you-safe)
+  - [What you should know](#what-you-should-know)
 - [Troubleshooting](#troubleshooting)
 - [Community](#community)
 - [Contact](#contact)
 - [Project layout](#project-layout)
 - [Building from source](#building-from-source)
 - [CI/CD](#cicd)
+  - [Publishing a release](#publishing-a-release)
 - [Acknowledgements](#acknowledgements)
 - [Disclaimer](#disclaimer)
 - [License](#license)
@@ -136,7 +152,6 @@ included in Bullet's installer. There are two ways to get them; both end with th
 | Option | How | Best for |
 | --- | --- | --- |
 | **Official** (recommended) | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Getting the files straight from their authors |
-| **Direct download** | Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) and extract it (see [Direct download](#direct-download-alternative)) | A quicker setup |
 
 Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anything that is not the audited
 build.
@@ -177,13 +192,11 @@ Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Ha
 
 #### Direct download (alternative)
 
-1. Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) from MediaFire. It
-   contains `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`.
-2. Right-click `tools.zip` → **Extract All…**.
-3. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
-4. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
+1. Right-click `tools.zip` → **Extract All…**.
+2. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
+3. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
    **Continue**.
-5. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
+4. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
    official option instead.
 
 Or in PowerShell **as administrator**, from the folder where you downloaded the zip:
@@ -361,11 +374,11 @@ Please report security issues privately through
 | The skin does not load and LTK Manager is open | Close LTK Manager: its patcher and Bullet's cannot run at the same time |
 
 When you open an issue, attach the Bullet log from the match where it failed. Without it the problem is
-usually impossible to diagnose. For quick help, ask on [Discord](https://discord.gg/ASUW6J98jg).
+usually impossible to diagnose. For quick help, ask on [Discord](https://discord.gg/e2dH2nUjd9).
 
 ## Community
 
-Join the **[Bullet Discord](https://discord.gg/ASUW6J98jg)** to get help with setup, report what works in each game mode, share
+Join the **[Bullet Discord](https://discord.gg/e2dH2nUjd9)** to get help with setup, report what works in each game mode, share
 custom mods and hear about new builds first. Pre-releases are announced there before they are promoted, so
 it is the best place to help test them.
 
@@ -379,7 +392,7 @@ If Bullet is useful to you, **a star on GitHub** helps other players find it.
 
 The project is maintained by **Isllan Toso**: [isllan.dev](https://isllan.dev/).
 
-For help and bug reports, the [Discord community](https://discord.gg/ASUW6J98jg) and
+For help and bug reports, the [Discord community](https://discord.gg/e2dH2nUjd9) and
 [GitHub issues](https://github.com/Isllanrx/Bullet/issues) are the fastest routes. Security issues go through a
 [private advisory](https://github.com/Isllanrx/Bullet/security/advisories/new).
 
