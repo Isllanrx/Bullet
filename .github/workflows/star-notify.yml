@@ -29,9 +29,9 @@ jobs:
             exit 0
           fi
 
-          python3 -c "
-          import os
-          import json
+          python3 -c "import textwrap; exec(textwrap.dedent('''
+              import os
+              import json
           import urllib.request
           from datetime import datetime, timezone
 
@@ -85,4 +85,4 @@ jobs:
           )
           with urllib.request.urlopen(req) as resp:
               print(f'Discord notified successfully (status: {resp.status})')
-          "
+          '''))"
