@@ -64,89 +64,95 @@ jobs:
             exit 0
           fi
 
-          INSTALLER_NAME=$(cd assets && ls *.exe 2>/dev/null | head -n 1 || echo "")
-          INSTALLER_HASH=""
-          if [ -f assets/SHA256SUMS ]; then
-            INSTALLER_HASH=$(awk '{print $1}' assets/SHA256SUMS | head -n 1)
-          fi
-          gh release view "$TAG" --repo "$REPO" --json body --jq .body > /tmp/release_body.txt 2>/dev/null || echo "" > /tmp/release_body.txt
+          gh release view "$TAG" --repo "$REPO" --json body --jq .body > /tmp/release_body.txt 2>/dev/null || true
 
-          export INSTALLER_NAME INSTALLER_HASH
-          python3 -c "import textwrap; exec(textwrap.dedent('''
+          python3 -c 'import textwrap; exec(textwrap.dedent("""
               import json
               import os
               import urllib.request
               from datetime import datetime, timezone
 
-              webhook_url = os.environ['DISCORD_WEBHOOK']
-              tag = os.environ.get('TAG', '')
-              repo = os.environ.get('REPO', 'Isllanrx/Bullet')
-              repo_url = f'https://github.com/{repo}'
-              release_url = f'{repo_url}/releases/tag/{tag}'
-              installer_name = os.environ.get('INSTALLER_NAME', '')
-              installer_hash = os.environ.get('INSTALLER_HASH', '')
+              webhook_url = os.environ.get("DISCORD_WEBHOOK")
+              tag = os.environ.get("TAG", "")
+              repo = os.environ.get("REPO", "Isllanrx/Bullet")
+              repo_url = f"https://github.com/{repo}"
+              release_url = f"{repo_url}/releases/tag/{tag}"
 
-              body = ''
-              if os.path.exists('/tmp/release_body.txt'):
-                  with open('/tmp/release_body.txt', 'r', encoding='utf-8') as f:
+              installer_name = ""
+              if os.path.exists("assets"):
+                  for f in os.listdir("assets"):
+                      if f.endswith(".exe"):
+                          installer_name = f
+                          break
+
+              installer_hash = ""
+              if os.path.exists("assets/SHA256SUMS"):
+                  with open("assets/SHA256SUMS", "r", encoding="utf-8") as f:
+                      line = f.readline().strip()
+                      if line:
+                          installer_hash = line.split()[0]
+
+              body = ""
+              if os.path.exists("/tmp/release_body.txt"):
+                  with open("/tmp/release_body.txt", "r", encoding="utf-8") as f:
                       body = f.read().strip()
 
               if len(body) > 1000:
-                  body = body[:997] + '...'
+                  body = body[:997] + "..."
 
-              download_url = f'{repo_url}/releases/download/{tag}/{installer_name}' if installer_name else release_url
+              download_url = f"{repo_url}/releases/download/{tag}/{installer_name}" if installer_name else release_url
 
               fields = [
                   {
-                      'name': '🏷️ Versão',
-                      'value': f'**{tag}**',
-                      'inline': True
+                      "name": "🏷️ Versão",
+                      "value": f"**{tag}**",
+                      "inline": True
                   },
                   {
-                      'name': '📦 Instalador',
-                      'value': f'[{installer_name}]({download_url})' if installer_name else f'[Acessar Release]({release_url})',
-                      'inline': True
+                      "name": "📦 Instalador",
+                      "value": f"[{installer_name}]({download_url})" if installer_name else f"[Acessar Release]({release_url})",
+                      "inline": True
                   }
               ]
 
               if installer_hash:
                   fields.append({
-                      'name': '🔐 SHA-256',
-                      'value': f'`{installer_hash}`',
-                      'inline': False
+                      "name": "🔐 SHA-256",
+                      "value": f"`{installer_hash}`",
+                      "inline": False
                   })
 
               fields.append({
-                  'name': '🔗 Links Úteis',
-                  'value': f'[Notas da Versão e Código no GitHub]({release_url})',
-                  'inline': False
+                  "name": "🔗 Links Úteis",
+                  "value": f"[Notas da Versão e Código no GitHub]({release_url})",
+                  "inline": False
               })
 
               payload = {
-                  'username': 'Bullet Releases',
-                  'avatar_url': 'https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png',
-                  'embeds': [
+                  "username": "Bullet Releases",
+                  "avatar_url": "https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png",
+                  "embeds": [
                       {
-                          'title': f'🎉 Nova versão lançada: {tag}!',
-                          'description': body if body else 'Uma nova versão estável do Bullet está disponível para download!',
-                          'url': release_url,
-                          'color': 5763719,
-                          'fields': fields,
-                          'footer': {
-                              'text': 'Bullet • League of Legends Skin Changer',
-                              'icon_url': 'https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png'
+                          "title": f"🎉 Nova versão lançada: {tag}!",
+                          "description": body if body else "Uma nova versão estável do Bullet está disponível para download!",
+                          "url": release_url,
+                          "color": 5763719,
+                          "fields": fields,
+                          "footer": {
+                              "text": "Bullet • League of Legends Skin Changer",
+                              "icon_url": "https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png"
                           },
-                          'timestamp': datetime.now(timezone.utc).isoformat()
+                          "timestamp": datetime.now(timezone.utc).isoformat()
                       }
                   ]
               }
 
-              data = json.dumps(payload).encode('utf-8')
+              data = json.dumps(payload).encode("utf-8")
               req = urllib.request.Request(
                   webhook_url,
                   data=data,
-                  headers={'Content-Type': 'application/json', 'User-Agent': 'Bullet-Release-Notifier'}
+                  headers={"Content-Type": "application/json", "User-Agent": "Bullet-Release-Notifier"}
               )
               with urllib.request.urlopen(req) as resp:
-                  print(f'Discord notified successfully (status: {resp.status})')
-          '''))"
+                  print(f"Discord notified successfully (status: {resp.status})")
+          """))'
