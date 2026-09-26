@@ -34,7 +34,7 @@ windows = { version = "0.58", features = [] }  # features added per-crate
 base64 = "0.23"
 sha2 = "0.10"
 # Party payload encryption: XChaCha20-Poly1305, RustCrypto.
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 uuid = { version = "1", features = ["v4"] }
 futures-util = "0.3"
 # Selection window: hosts a WebView2 child inside our own Win32 window.
