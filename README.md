@@ -17,12 +17,12 @@
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
   <img src="https://img.shields.io/badge/rust-stable%20%C2%B7%201.85%2B-B7410E" alt="Rust stable">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT">
-  <a href="https://discord.gg/ASUW6J98jg"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://discord.gg/e2dH2nUjd9"><img src="https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><b>Download</b></a> ·
-  <a href="https://discord.gg/ASUW6J98jg"><b>Discord community</b></a> ·
+  <a href="https://discord.gg/e2dH2nUjd9"><b>Discord community</b></a> ·
   <a href="https://github.com/Isllanrx/Bullet/issues"><b>Report a bug</b></a>
 </p>
 
@@ -34,6 +34,10 @@ of its own files. The game installation itself is never modified.
 
 Bullet began as a rewrite of [Rose](https://github.com/Alban1911/Rose), a Python project, and was rebuilt from
 scratch in Rust with one goal: the skin you chose is the skin you get in every game mode.
+
+<p align="center">
+  <img src="assets/select.png" alt="Bullet in Champion Select" width="800">
+</p>
 
 > [!IMPORTANT]
 > **Educational project.** Bullet is an improved skin changer built in Rust to study and demonstrate how such a
@@ -374,11 +378,11 @@ Please report security issues privately through
 | The skin does not load and LTK Manager is open | Close LTK Manager: its patcher and Bullet's cannot run at the same time |
 
 When you open an issue, attach the Bullet log from the match where it failed. Without it the problem is
-usually impossible to diagnose. For quick help, ask on [Discord](https://discord.gg/ASUW6J98jg).
+usually impossible to diagnose. For quick help, ask on [Discord](https://discord.gg/e2dH2nUjd9).
 
 ## Community
 
-Join the **[Bullet Discord](https://discord.gg/ASUW6J98jg)** to get help with setup, report what works in each game mode, share
+Join the **[Bullet Discord](https://discord.gg/e2dH2nUjd9)** to get help with setup, report what works in each game mode, share
 custom mods and hear about new builds first. Pre-releases are announced there before they are promoted, so
 it is the best place to help test them.
 
@@ -392,7 +396,7 @@ If Bullet is useful to you, **a star on GitHub** helps other players find it.
 
 The project is maintained by **Isllan Toso**: [isllan.dev](https://isllan.dev/).
 
-For help and bug reports, the [Discord community](https://discord.gg/ASUW6J98jg) and
+For help and bug reports, the [Discord community](https://discord.gg/e2dH2nUjd9) and
 [GitHub issues](https://github.com/Isllanrx/Bullet/issues) are the fastest routes. Security issues go through a
 [private advisory](https://github.com/Isllanrx/Bullet/security/advisories/new).
 
