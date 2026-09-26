@@ -35,7 +35,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad tag $TAG"; exit 1; }
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad tag $TAG"; exit 1; }
           [[ "$(gh release view "$TAG" --repo "$REPO" --json isPrerelease --jq .isPrerelease)" == true ]] \
             || { echo "::error::$TAG is not a pre-release"; exit 1; }
           mkdir assets && cd assets
