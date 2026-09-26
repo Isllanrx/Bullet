@@ -1,0 +1,53 @@
+name: Promote release
+
+# The one step that stays manual: turning a pre-release into the release users are pointed at. It
+# requires the `production` environment, whose required reviewers are configured in the repository
+# settings, and it refuses an installer that this repository's release workflow did not build.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Pre-release tag to promote, e.g. v1.0.0
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote to latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: write
+      attestations: read
+    steps:
+      - name: Verify provenance and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad tag $TAG"; exit 1; }
+          [[ "$(gh release view "$TAG" --repo "$REPO" --json isPrerelease --jq .isPrerelease)" == true ]] \
+            || { echo "::error::$TAG is not a pre-release"; exit 1; }
+          mkdir assets && cd assets
+          gh release download "$TAG" --repo "$REPO"
+          sha256sum -c SHA256SUMS
+          for exe in *.exe; do
+            gh attestation verify "$exe" --repo "$REPO" \
+              --signer-workflow "$REPO/.github/workflows/release.yml"
+          done
+
+      - name: Mark as latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --repo "$REPO" --prerelease=false --latest
