@@ -29,60 +29,60 @@ jobs:
             exit 0
           fi
 
-          python3 -c "import textwrap; exec(textwrap.dedent('''
-              import os
+          python3 -c 'import textwrap; exec(textwrap.dedent("""
               import json
-          import urllib.request
-          from datetime import datetime, timezone
+              import os
+              import urllib.request
+              from datetime import datetime, timezone
 
-          webhook_url = os.environ['DISCORD_WEBHOOK']
-          user = os.environ.get('SENDER_LOGIN', 'alguém')
-          user_url = os.environ.get('SENDER_URL', '')
-          avatar = os.environ.get('SENDER_AVATAR', '')
-          repo = os.environ.get('REPO_NAME', 'Bullet')
-          repo_url = os.environ.get('REPO_URL', '')
-          stars = os.environ.get('STARS_COUNT', '1')
+              webhook_url = os.environ["DISCORD_WEBHOOK"]
+              user = os.environ.get("SENDER_LOGIN", "alguém")
+              user_url = os.environ.get("SENDER_URL", "")
+              avatar = os.environ.get("SENDER_AVATAR", "")
+              repo = os.environ.get("REPO_NAME", "Bullet")
+              repo_url = os.environ.get("REPO_URL", "")
+              stars = os.environ.get("STARS_COUNT", "1")
 
-          payload = {
-              'username': 'Bullet Stars',
-              'avatar_url': 'https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png',
-              'embeds': [
-                  {
-                      'title': '⭐ Nova estrela recebida!',
-                      'description': f'O usuário [**{user}**]({user_url}) acabou de marcar o repositório [**{repo}**]({repo_url}) com uma estrela!',
-                      'color': 16766720,
-                      'fields': [
-                          {
-                              'name': '⭐ Total de Estrelas',
-                              'value': f'**{stars}**',
-                              'inline': True
+              payload = {
+                  "username": "Bullet Stars",
+                  "avatar_url": "https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png",
+                  "embeds": [
+                      {
+                          "title": "⭐ Nova estrela recebida!",
+                          "description": f"O usuário [**{user}**]({user_url}) acabou de marcar o repositório [**{repo}**]({repo_url}) com uma estrela!",
+                          "color": 16766720,
+                          "fields": [
+                              {
+                                  "name": "⭐ Total de Estrelas",
+                                  "value": f"**{stars}**",
+                                  "inline": True
+                              },
+                              {
+                                  "name": "👤 Quem avaliou",
+                                  "value": f"[{user}]({user_url})",
+                                  "inline": True
+                              }
+                          ],
+                          "author": {
+                              "name": user,
+                              "url": user_url,
+                              "icon_url": avatar
                           },
-                          {
-                              'name': '👤 Quem avaliou',
-                              'value': f'[{user}]({user_url})',
-                              'inline': True
-                          }
-                      ],
-                      'author': {
-                          'name': user,
-                          'url': user_url,
-                          'icon_url': avatar
-                      },
-                      'footer': {
-                          'text': 'Bullet • League of Legends Skin Changer',
-                          'icon_url': 'https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png'
-                      },
-                      'timestamp': datetime.now(timezone.utc).isoformat()
-                  }
-              ]
-          }
+                          "footer": {
+                              "text": "Bullet • League of Legends Skin Changer",
+                              "icon_url": "https://raw.githubusercontent.com/Isllanrx/Bullet/main/assets/bullet.png"
+                          },
+                          "timestamp": datetime.now(timezone.utc).isoformat()
+                      }
+                  ]
+              }
 
-          data = json.dumps(payload).encode('utf-8')
-          req = urllib.request.Request(
-              webhook_url,
-              data=data,
-              headers={'Content-Type': 'application/json', 'User-Agent': 'Bullet-Star-Notifier'}
-          )
-          with urllib.request.urlopen(req) as resp:
-              print(f'Discord notified successfully (status: {resp.status})')
-          '''))"
+              data = json.dumps(payload).encode("utf-8")
+              req = urllib.request.Request(
+                  webhook_url,
+                  data=data,
+                  headers={"Content-Type": "application/json", "User-Agent": "Bullet-Star-Notifier"}
+              )
+              with urllib.request.urlopen(req) as resp:
+                  print(f"Discord notified successfully (status: {resp.status})")
+          """))'
