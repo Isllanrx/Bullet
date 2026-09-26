@@ -152,7 +152,6 @@ included in Bullet's installer. There are two ways to get them; both end with th
 | Option | How | Best for |
 | --- | --- | --- |
 | **Official** (recommended) | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Getting the files straight from their authors |
-| **Direct download** | Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) and extract it (see [Direct download](#direct-download-alternative)) | A quicker setup |
 
 Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anything that is not the audited
 build.
@@ -193,13 +192,11 @@ Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Ha
 
 #### Direct download (alternative)
 
-1. Download [`tools.zip`](https://www.mediafire.com/file/y3yq5dsafxtdtgw/tools.zip/file) from MediaFire. It
-   contains `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`.
-2. Right-click `tools.zip` → **Extract All…**.
-3. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
-4. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
+1. Right-click `tools.zip` → **Extract All…**.
+2. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
+3. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
    **Continue**.
-5. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
+4. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
    official option instead.
 
 Or in PowerShell **as administrator**, from the folder where you downloaded the zip:
