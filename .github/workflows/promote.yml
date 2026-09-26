@@ -22,7 +22,8 @@ jobs:
     name: Promote to latest
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
+    environment:
+      name: production
     permissions:
       contents: write
       attestations: read

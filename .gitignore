@@ -57,6 +57,9 @@ relay-worker/.dev.vars
 # Local AI and agent context (kept private;  and  are the public entry points)
 
 
+!skills/
+!skills/github-pipeline/
+!skills/github-pipeline/**
 graphify-out/
 
 # Local diagnostics, sessions and scratch files
