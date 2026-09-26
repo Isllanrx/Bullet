@@ -35,6 +35,10 @@ of its own files. The game installation itself is never modified.
 Bullet began as a rewrite of [Rose](https://github.com/Alban1911/Rose), a Python project, and was rebuilt from
 scratch in Rust with one goal: the skin you chose is the skin you get in every game mode.
 
+<p align="center">
+  <img src="assets/select.png" alt="Bullet in Champion Select" width="800">
+</p>
+
 > [!IMPORTANT]
 > **Educational project.** Bullet is an improved skin changer built in Rust to study and demonstrate how such a
 > tool can be engineered safely and reliably. It is provided as is, without warranty, and the author accepts
