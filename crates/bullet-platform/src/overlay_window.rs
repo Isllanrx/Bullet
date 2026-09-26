@@ -342,8 +342,9 @@ fn run_overlay_message_loop(
     crate::paths::ensure_webview2_data_dir();
 
     let hwnd_raw = hwnd.0 as isize;
+    let html = OVERLAY_HTML.replace("{{version}}", crate::version::display_version());
     let webview = match WebViewBuilder::new()
-        .with_html(OVERLAY_HTML)
+        .with_html(html)
         .with_ipc_handler(move |request| {
             let payload = request.body();
 

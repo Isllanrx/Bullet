@@ -250,14 +250,15 @@ fn run_installer() {
     let script = workspace_root.join("installer").join("bullet.iss");
     println!("==> Building installer with {}...", iscc.display());
 
-    let version = env!("CARGO_PKG_VERSION");
+    let raw_version = env!("CARGO_PKG_VERSION");
+    let version = raw_version.strip_suffix(".0").unwrap_or(raw_version);
     let status = Command::new(iscc)
         .arg(format!("/DMyAppVersion={version}"))
         .arg(&script)
         .status()
         .expect("failed to run ISCC");
     check_status("ISCC", status);
-    println!("  Version:  {version} (from Cargo.toml)");
+    println!("  Version:  {version} (display format from Cargo.toml)");
 
     let output = workspace_root.join(format!("dist/installer/Bullet-Setup-{version}-x64.exe"));
     match std::fs::metadata(&output) {

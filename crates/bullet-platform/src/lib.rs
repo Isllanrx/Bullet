@@ -18,4 +18,5 @@ pub mod shell;
 pub mod single_instance;
 pub mod tray;
 pub mod user_profile;
+pub mod version;
 pub mod welcome;
