@@ -45,9 +45,10 @@ jobs:
           set -euo pipefail
           version=$(cargo metadata --no-deps --format-version 1 --locked \
             | jq -r '.packages[] | select(.name == "bullet-app") | .version')
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad version $version"; exit 1; }
-          tag="v$version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad version $version"; exit 1; }
+          display_version="${version%.0}"
+          tag="v$display_version"
+          echo "version=$display_version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1 \
              || git ls-remote --exit-code --tags "https://github.com/$REPO" "refs/tags/$tag" >/dev/null; then

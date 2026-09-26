@@ -42,7 +42,7 @@ VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Setup - {#MyAppDescription}
 VersionInfoCopyright={#MyAppCopyright}
 ; Programs and Features entry.
-UninstallDisplayName={#MyAppName}
+UninstallDisplayName={#MyAppName} {#MyAppVersion}
 ; Program Files, not %LOCALAPPDATA%\Programs: nothing that touches the game may live in a folder a
 ; normal user can write to, and the injection tools live under {app}\tools. With
 ; PrivilegesRequired=lowest, {autopf} would send the whole install to the user-writable LocalAppData.

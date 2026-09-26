@@ -36,6 +36,7 @@ fn welcome_html(text: &crate::i18n::Text) -> String {
     };
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
+        .replace("{{version}}", crate::version::display_version())
         .replace("{{welcome_active}}", &escape_html(text.welcome_active))
         .replace(
             "{{welcome_background}}",
@@ -61,6 +62,7 @@ fn about_html(text: &crate::i18n::Text) -> String {
     };
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
+        .replace("{{version}}", crate::version::display_version())
         .replace("{{welcome_active}}", &escape_html(text.about_title))
         .replace(
             "{{welcome_background}}",

@@ -36,7 +36,8 @@ Bullet began as a rewrite of [Rose](https://github.com/Alban1911/Rose), a Python
 scratch in Rust with one goal: the skin you chose is the skin you get in every game mode.
 
 <p align="center">
-  <img src="assets/select.png" alt="Bullet in Champion Select" width="800">
+  <img src="assets/urgot-select.png" alt="Bullet in Champion Select" width="49%">
+  <img src="assets/urgot-ingame.png" alt="Bullet in Game" width="49%">
 </p>
 
 > [!IMPORTANT]

@@ -259,7 +259,11 @@ fn run_tray_message_loop(
         ..Default::default()
     };
 
-    let tip_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+    let initial_tip = format!("Bullet v{}: {}", crate::version::display_version(), title);
+    let tip_wide: Vec<u16> = initial_tip
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
     let copy_len = tip_wide.len().min(nid.szTip.len());
     nid.szTip[..copy_len].copy_from_slice(&tip_wide[..copy_len]);
 
@@ -374,7 +378,11 @@ unsafe extern "system" fn tray_wnd_proc(
         WM_UPDATE_STATUS => {
             if let Ok(current) = state.status_shared.lock() {
                 state.status_text = current.clone();
-                let tooltip = format!("Bullet: {}", state.status_text);
+                let tooltip = format!(
+                    "Bullet v{}: {}",
+                    crate::version::display_version(),
+                    state.status_text
+                );
                 let tip_wide: Vec<u16> = tooltip.encode_utf16().chain(std::iter::once(0)).collect();
                 state.nid.szTip = [0; 128];
                 let copy_len = tip_wide.len().min(state.nid.szTip.len());
@@ -410,7 +418,11 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
             Err(_) => return,
         };
 
-        let status_item = format!("Bullet: {}", state.status_text);
+        let status_item = format!(
+            "Bullet v{}: {}",
+            crate::version::display_version(),
+            state.status_text
+        );
         let status_wide: Vec<u16> = status_item
             .encode_utf16()
             .chain(std::iter::once(0))
