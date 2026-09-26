@@ -61,6 +61,7 @@ graphify-out/
 
 # Local diagnostics, sessions and scratch files
 vanguard_logs_*/
+logs_*/
 sessoes/
 META/
 registro.txt
