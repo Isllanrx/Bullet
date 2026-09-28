@@ -32,8 +32,7 @@ Bullet lets you use any skin during a match. You pick the skin in Bullet's own w
 Bullet then builds a copy of the game files that contain it, and when the game starts it opens that copy instead
 of its own files. The game installation itself is never modified.
 
-Bullet began as a rewrite of [Rose](https://github.com/Alban1911/Rose), a Python project, and was rebuilt from
-scratch in Rust with one goal: the skin you chose is the skin you get in every game mode.
+Bullet was inspired by [Rose](https://github.com/Alban1911/Rose), a Python project that sparked the idea of rebuilding the concept in Rust. It became an opportunity to apply and deepen my Rust knowledge while designing the project from the ground up, with one goal: the skin you choose is the skin you get in every game mode.
 
 <p align="center">
   <img src="assets/urgot-select.png" alt="Bullet in Champion Select" width="49%">
