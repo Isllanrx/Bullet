@@ -8,7 +8,7 @@ use bullet_party::client::{PartyClient, PartyExit};
 use bullet_party::token::{PartyToken, random_member_id, unix_now};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PartyCommand {
@@ -110,12 +110,35 @@ impl PartyManager {
         }
     }
 
-    fn start(&self, running: &mut Option<Running>, relay: String, token: PartyToken) {
+    /// The OS random generator failed: nothing secret can be made, so the party is not started.
+    fn explain_no_randomness(&self, e: &bullet_party::error::PartyError) {
+        error!(error = %e, "Party not started: no secure randomness for the room key or member id");
+        set_party_status(
+            &self.state_tx,
+            PartyStatus::Unavailable {
+                reason: e.to_string(),
+            },
+        );
+        let text = bullet_platform::i18n::text();
+        notify(
+            text.party_unavailable_title,
+            bullet_platform::i18n::fill(text.party_unavailable_body, "reason", &e.to_string()),
+        );
+    }
+
+    fn start(&self, running: &mut Option<Running>, relay: String, token: PartyToken) -> bool {
+        let member_id = match random_member_id() {
+            Ok(id) => id,
+            Err(e) => {
+                self.explain_no_randomness(&e);
+                return false;
+            }
+        };
         let stop = CancellationToken::new();
         let client = PartyClient::new(
             relay,
             token,
-            random_member_id(),
+            member_id,
             self.state_tx.clone(),
             self.state_rx.clone(),
         );
@@ -123,6 +146,7 @@ impl PartyManager {
             task: Box::pin(client.run(stop.clone())),
             stop,
         });
+        true
     }
 
     async fn create(&self, running: &mut Option<Running>) {
@@ -131,7 +155,14 @@ impl PartyManager {
         };
         Self::stop(running).await;
 
-        let token = PartyToken::generate(random_member_id(), unix_now());
+        let token = match random_member_id().and_then(|host| PartyToken::generate(host, unix_now()))
+        {
+            Ok(token) => token,
+            Err(e) => {
+                self.explain_no_randomness(&e);
+                return;
+            }
+        };
         let code = token.encode();
 
         let copied = tokio::task::spawn_blocking({
@@ -145,8 +176,9 @@ impl PartyManager {
             Err(e) => warn!(error = %e, "Party room created; the clipboard copy task failed"),
         }
 
-        self.start(running, relay, token);
-        show_created_dialog(code);
+        if self.start(running, relay, token) {
+            show_created_dialog(code);
+        }
     }
 
     async fn join(&self, running: &mut Option<Running>) {
@@ -220,8 +252,9 @@ impl PartyManager {
                     issued_at = token.issued_at,
                     "Joining a party room from an entered code"
                 );
-                self.start(running, relay, token);
-                notify(ui.party_join_title, ui.party_joining.to_owned());
+                if self.start(running, relay, token) {
+                    notify(ui.party_join_title, ui.party_joining.to_owned());
+                }
             }
             Err(e) => {
                 warn!(error = %e, "Entered party code refused");

@@ -1,6 +1,6 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use chacha20poly1305::aead::{Aead, AeadCore, KeyInit, OsRng};
+use chacha20poly1305::aead::{Aead, Generate, KeyInit};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -40,13 +40,16 @@ impl RoomCipher {
             .chain_update(b"bullet-party/aead/v1")
             .chain_update(key)
             .finalize();
+        let key: [u8; 32] = derived.into();
         Self {
-            cipher: XChaCha20Poly1305::new(Key::from_slice(&derived)),
+            cipher: XChaCha20Poly1305::new(&Key::from(key)),
         }
     }
 
     pub fn seal(&self, plaintext: &[u8]) -> Result<SealedBlob, PartyError> {
-        let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+        // Fallible on purpose: an OS RNG failure refuses to send instead of panicking.
+        let nonce = XNonce::try_generate()
+            .map_err(|e| PartyError::Crypto(format!("no randomness for a nonce: {e}")))?;
         let ciphertext = self
             .cipher
             .encrypt(&nonce, plaintext)
@@ -68,14 +71,13 @@ impl RoomCipher {
         let nonce = STANDARD
             .decode(&blob.n)
             .map_err(|_| PartyError::Crypto("nonce is not base64".into()))?;
-        if nonce.len() != 24 {
-            return Err(PartyError::Crypto("nonce has the wrong length".into()));
-        }
+        let nonce = XNonce::try_from(nonce.as_slice())
+            .map_err(|_| PartyError::Crypto("nonce has the wrong length".into()))?;
         let ciphertext = STANDARD
             .decode(&blob.c)
             .map_err(|_| PartyError::Crypto("ciphertext is not base64".into()))?;
         self.cipher
-            .decrypt(XNonce::from_slice(&nonce), ciphertext.as_ref())
+            .decrypt(&nonce, ciphertext.as_ref())
             .map_err(|_| PartyError::Crypto("authentication failed".into()))
     }
 }

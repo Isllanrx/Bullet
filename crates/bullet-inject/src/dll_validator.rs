@@ -8,10 +8,19 @@ use crate::error::InjectError;
 
 #[must_use]
 pub fn compute_sha256(data: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    format!("{result:x}")
+    to_hex(&Sha256::digest(data))
+}
+
+/// Lowercase hex of a digest; sha2's output array no longer implements `LowerHex`.
+#[must_use]
+pub fn to_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut out, b| {
+            let _ = write!(out, "{b:02x}"); // ignore-ok: writing to a String cannot fail
+            out
+        })
 }
 
 pub fn validate_binary_hashes(path: &Path, expected_hashes: &[&str]) -> Result<(), InjectError> {
