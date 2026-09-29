@@ -123,9 +123,7 @@ fn run_package() {
     std::fs::copy(binary_path, &target_dest).expect("failed to copy binary to dist/");
 
     let bytes = std::fs::read(&target_dest).expect("read binary");
-    let mut hasher = Sha256::new();
-    hasher.update(&bytes);
-    let hash_hex = format!("{:x}", hasher.finalize());
+    let hash_hex = bullet_inject::dll_validator::to_hex(&Sha256::digest(&bytes));
 
     let mut checksum_content = format!("{hash_hex} *bullet.exe\n");
 
@@ -137,9 +135,8 @@ fn run_package() {
         let relay_dest = dist_dir.join("bullet-relay.exe");
         if std::fs::copy(relay_bin, &relay_dest).is_ok() {
             if let Ok(bytes_relay) = std::fs::read(&relay_dest) {
-                let mut hasher_relay = Sha256::new();
-                hasher_relay.update(&bytes_relay);
-                let hash_relay = format!("{:x}", hasher_relay.finalize());
+                let hash_relay =
+                    bullet_inject::dll_validator::to_hex(&Sha256::digest(&bytes_relay));
                 checksum_content.push_str(&format!("{hash_relay} *bullet-relay.exe\n"));
                 println!(
                     "  Relay:    {} ({} bytes, SHA-256: {})",
@@ -416,7 +413,7 @@ fn run_install_audit(args: &[String]) {
     let sha256 = |path: &std::path::Path| -> Option<String> {
         std::fs::read(path)
             .ok()
-            .map(|bytes| format!("{:x}", Sha256::digest(&bytes)))
+            .map(|bytes| bullet_inject::dll_validator::to_hex(&Sha256::digest(&bytes)))
     };
     let mut checks = install_audit::audit_files(&layout, phase, &tools, &sha256);
     checks.extend(install_audit::audit_registry(
@@ -663,6 +660,9 @@ fn run_catalog_demo(champion_id: u32) {
                 bullet_core::overlay::OverlayCommand::ImportMod { category } => {
                     println!("  mods -> importar em {category:?}")
                 }
+                bullet_core::overlay::OverlayCommand::ChromaPreview { id } => {
+                    println!("  hover -> preview do chroma {id}")
+                }
             }
         }
         std::thread::sleep(Duration::from_millis(200));
@@ -761,6 +761,9 @@ fn run_ipc_probe(champion_id: u32) {
             Ok(OverlayCommand::Random) => println!("  recebido no Rust: sortear skin"),
             Ok(OverlayCommand::ImportMod { category }) => {
                 println!("  recebido no Rust: importar mod em {category:?}")
+            }
+            Ok(OverlayCommand::ChromaPreview { id }) => {
+                println!("  recebido no Rust: preview do chroma {id}")
             }
             Err(_) => std::thread::sleep(Duration::from_millis(100)),
         }

@@ -239,12 +239,12 @@ impl LcuObserver {
         let sub_champ_select = make_subscribe_frame(TOPIC_CHAMP_SELECT);
 
         ws_stream
-            .send(Message::Text(sub_gameflow))
+            .send(Message::Text(sub_gameflow.into()))
             .await
             .map_err(|e| LcuError::WebSocket(e.to_string()))?;
 
         ws_stream
-            .send(Message::Text(sub_champ_select))
+            .send(Message::Text(sub_champ_select.into()))
             .await
             .map_err(|e| LcuError::WebSocket(e.to_string()))?;
 

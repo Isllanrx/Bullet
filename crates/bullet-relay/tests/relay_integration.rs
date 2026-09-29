@@ -52,7 +52,7 @@ async fn test_relay_e2e_two_clients() {
     let body = resp.text().await.expect("health text");
     assert!(body.contains("bullet-party-relay"));
 
-    let token = PartyToken::generate(random_member_id(), unix_now());
+    let token = PartyToken::generate(random_member_id().expect("rng"), unix_now()).expect("rng");
     let joined = PartyToken::decode(&token.encode(), unix_now()).expect("decode token");
 
     let (tx_a, rx_a) = new_state_channel();
@@ -61,7 +61,7 @@ async fn test_relay_e2e_two_clients() {
     let client_a = PartyClient::new(
         relay_url.clone(),
         token.clone(),
-        random_member_id(),
+        random_member_id().expect("rng"),
         tx_a,
         rx_a.clone(),
     );
@@ -72,7 +72,7 @@ async fn test_relay_e2e_two_clients() {
     let client_b = PartyClient::new(
         relay_url.clone(),
         joined,
-        random_member_id(),
+        random_member_id().expect("rng"),
         tx_b,
         rx_b.clone(),
     );
@@ -127,7 +127,7 @@ async fn test_a_sixth_member_is_refused_with_409_and_the_client_gives_up() {
     });
 
     let relay_url = format!("ws://127.0.0.1:{port}");
-    let token = PartyToken::generate(random_member_id(), unix_now());
+    let token = PartyToken::generate(random_member_id().expect("rng"), unix_now()).expect("rng");
     let room_url = format!("{relay_url}/room?key={}", room_id(token.key()));
 
     let mut members = Vec::new();
@@ -154,7 +154,13 @@ async fn test_a_sixth_member_is_refused_with_409_and_the_client_gives_up() {
 
     let (tx, rx) = new_state_channel();
     tx.send_replace(make_state(103, 103_015, "puuid-6"));
-    let client = PartyClient::new(relay_url, token, random_member_id(), tx, rx.clone());
+    let client = PartyClient::new(
+        relay_url,
+        token,
+        random_member_id().expect("rng"),
+        tx,
+        rx.clone(),
+    );
     let exit = tokio::time::timeout(
         Duration::from_secs(10),
         client.run(CancellationToken::new()),

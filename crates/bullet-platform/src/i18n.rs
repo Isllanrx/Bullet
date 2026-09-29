@@ -120,6 +120,7 @@ pub struct Text {
     pub menu_open_tools: &'static str,
     pub menu_about: &'static str,
     pub menu_autostart: &'static str,
+    pub menu_auto_accept: &'static str,
     pub menu_quit: &'static str,
 
     pub already_running_title: &'static str,
@@ -211,6 +212,7 @@ static PORTUGUESE: Text = Text {
     menu_open_tools: "Abrir pasta de ferramentas",
     menu_about: "Sobre o Bullet...",
     menu_autostart: "Iniciar com o Windows",
+    menu_auto_accept: "Aceitar partida automaticamente",
     menu_quit: "Sair do Bullet",
 
     already_running_title: "Bullet já está aberto",
@@ -298,6 +300,7 @@ static SPANISH: Text = Text {
     menu_open_tools: "Abrir carpeta de herramientas",
     menu_about: "Acerca de Bullet...",
     menu_autostart: "Iniciar con Windows",
+    menu_auto_accept: "Aceptar partida automáticamente",
     menu_quit: "Salir de Bullet",
 
     already_running_title: "Bullet ya está abierto",
@@ -385,6 +388,7 @@ static ENGLISH: Text = Text {
     menu_open_tools: "Open tools folder",
     menu_about: "About Bullet...",
     menu_autostart: "Start with Windows",
+    menu_auto_accept: "Accept matches automatically",
     menu_quit: "Quit Bullet",
 
     already_running_title: "Bullet is already open",

@@ -352,6 +352,12 @@ async fn main() -> Result<()> {
                                         Err(e) => warn!(error = %e, "Could not change the Start with Windows setting"),
                                     }
                                 }
+                                bullet_platform::tray::TrayEvent::ToggleAutoAccept => {
+                                    match bullet_platform::auto_accept::toggle() {
+                                        Ok(enabled) => info!(enabled, "Automatic match accept changed from the tray"),
+                                        Err(e) => warn!(error = %e, "Could not change the automatic match accept setting"),
+                                    }
+                                }
                             }
                         }
                     }
@@ -382,6 +388,16 @@ async fn main() -> Result<()> {
             }
         });
     }
+
+    let auto_accept = bullet_platform::auto_accept::load();
+    info!(
+        enabled = auto_accept,
+        "Automatic match accept setting loaded"
+    );
+    let state_rx_accept = state_rx.clone();
+    supervisor.spawn("auto-accept", move |child_token| {
+        bullet_app::auto_accept::run(state_rx_accept, child_token)
+    });
 
     bullet_core::state::set_mod_selection(
         &state_tx,

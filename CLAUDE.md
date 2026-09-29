@@ -96,6 +96,23 @@ inject→core+platform+wad, party→core, app→all.
     chosen by the maintainer). The audited hashes match **LTK Manager 1.21.0 and 1.22.0**
     (`src-tauri/resources/`, installed to `%LOCALAPPDATA%\LTK Manager`). Changing `AUDITED_*_HASH` means
     updating the version and hashes in the README's "Step 2 — Add the injector".
+11. **Never perform git commit or git push without explicit user approval.** Code modifications are made,
+    tested, and presented to the user; commits/pushes are executed only when the user explicitly requests it.
+    Commits and PRs never carry `Co-Authored-By` or any AI attribution trailer.
+12. **Version format is two numbers (`1.0`, `1.1`, `2.0`) across UI, installer, and release tags.**
+    Cargo strictly requires SemVer 2.0.0 (`MAJOR.MINOR.PATCH`), so Cargo.toml bumps minor (e.g. `1.1.0`)
+    and helper functions (`display_version()`) strip the zero for user-facing surfaces.
+13. **Overlay keyboard focus goes to the WebView, never to the host window.** The UI asks for focus over
+    IPC; Rust takes the foreground (thread-input attach) and then calls `webview.focus()`. `SetFocus` on the
+    host HWND pulls focus out of the WebView2 child and the search box stops receiving keys.
+14. **A retargeted skin bin keeps the source bin's links.** `retarget_skin_bin` re-keys only the skin
+    object and its Resources; everything they reference by hash (animation graph, VFX, shared bins) lives in
+    the source bin's dependencies, so `skin0.bin` links `SkinN.bin` **and** every link `SkinN.bin` had.
+    Dropping them left legendary/mythic skins on the base graph (God-King Garen's E: frozen sword).
+    Not yet proven in a match.
+15. **No comments in code.** No `//`, `///`, `/* */`, `<!-- -->` or `#` comments in Rust, HTML/JS, YAML,
+    TOML or scripts: names, types and tests carry the meaning; the "why" goes in `docs/`, crate READMEs or
+    ADRs. The only exception is the `// ignore-ok: <reason>` marker required by rule 4.
 
 ## Before making changes
 
