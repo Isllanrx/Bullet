@@ -54,12 +54,10 @@ relay-worker/.dev.vars
 *.p12
 *.pfx
 
-# Local AI and agent context (kept private; CLAUDE.md and AGENTS.md are the public entry points)
+# Local AI and agent context (kept private; CLAUDE.md and AGENTS.md are the public entry points).
+# No exceptions: internal skills and notes never ship with the public repository.
 .claude/
 .agents/
-!.agents/skills/
-!.agents/skills/github-pipeline/
-!.agents/skills/github-pipeline/**
 graphify-out/
 
 # Local diagnostics, sessions and scratch files
@@ -71,7 +69,7 @@ registro.txt
 fontes_base.txt
 report_user.txt
 ESTADO_PROJETO.md
-SESSION_HANDOVER.md
+SESSION_*.md
 strip_rust_comments.py
 
 # Python cache
