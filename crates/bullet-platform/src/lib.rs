@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod activation;
+pub mod auto_accept;
 pub mod autostart;
 pub mod client_window;
 pub mod clipboard;

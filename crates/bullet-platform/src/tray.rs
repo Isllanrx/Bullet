@@ -37,6 +37,7 @@ const ID_OPEN_TOOLS: usize = 1008;
 const ID_OPEN_MODS: usize = 1009;
 const ID_ABOUT: usize = 1010;
 const ID_AUTOSTART: usize = 1011;
+const ID_AUTO_ACCEPT: usize = 1012;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayEvent {
@@ -49,6 +50,8 @@ pub enum TrayEvent {
     About,
 
     ToggleAutostart,
+
+    ToggleAutoAccept,
 
     Quit,
 
@@ -356,6 +359,9 @@ unsafe extern "system" fn tray_wnd_proc(
                 ID_AUTOSTART => {
                     let _ = state.event_tx.send(TrayEvent::ToggleAutostart); // ignore-ok: the receiver is gone only when the app is already shutting down
                 }
+                ID_AUTO_ACCEPT => {
+                    let _ = state.event_tx.send(TrayEvent::ToggleAutoAccept); // ignore-ok: the receiver is gone only when the app is already shutting down
+                }
                 ID_PARTY_CREATE => {
                     let _ = state.event_tx.send(TrayEvent::PartyCreate); // ignore-ok: the receiver is gone only when the app is already shutting down
                 }
@@ -466,6 +472,7 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
         let open_tools = HSTRING::from(text.menu_open_tools);
         let about = HSTRING::from(text.menu_about);
         let autostart = HSTRING::from(text.menu_autostart);
+        let auto_accept = HSTRING::from(text.menu_auto_accept);
         let quit = HSTRING::from(text.menu_quit);
 
         let _ = AppendMenuW(menu, MF_STRING, ID_PARTY_CREATE, &create); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
@@ -495,6 +502,18 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
             MF_UNCHECKED
         };
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
+        let auto_accept_check = if crate::auto_accept::is_enabled() {
+            MF_CHECKED
+        } else {
+            MF_UNCHECKED
+        };
+        // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING | auto_accept_check,
+            ID_AUTO_ACCEPT,
+            &auto_accept,
+        );
         let _ = AppendMenuW(menu, MF_STRING | autostart_check, ID_AUTOSTART, &autostart); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
         let _ = AppendMenuW(menu, MF_STRING, ID_ABOUT, &about); // ignore-ok: a menu item that fails to append is missing from the menu, which the user sees directly
 
