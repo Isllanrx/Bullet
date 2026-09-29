@@ -51,6 +51,9 @@ pub struct OverlaySession {
     historic_consulted: Option<ChampionId>,
 
     historic_recorded: Option<OverlayTarget>,
+
+    /// Chroma previews already fetched for the current champion, as `data:` URIs.
+    chroma_previews: std::collections::HashMap<u32, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +90,7 @@ impl OverlaySession {
             historic_restored: None,
             historic_consulted: None,
             historic_recorded: None,
+            chroma_previews: std::collections::HashMap::new(),
         }
     }
 
@@ -109,6 +113,9 @@ impl OverlaySession {
                             handle_command(&self.state_tx, OverlayCommand::Clear, catalog.as_ref());
                         }
                         Some(OverlayCommand::Random) => self.roll_random(catalog.as_ref()),
+                        Some(OverlayCommand::ChromaPreview { id }) => {
+                            self.send_chroma_preview(id, catalog.as_ref()).await;
+                        }
                         Some(OverlayCommand::ImportMod { category }) => {
                             let locale = catalog.as_ref().and_then(|c| c.locale.clone());
                             let alias = catalog.as_ref().and_then(|c| c.alias.clone());
@@ -155,6 +162,7 @@ impl OverlaySession {
                     let champion = wanted.then_some(champion).flatten();
                     if champion != catalog_champion {
                         catalog_champion = champion;
+                        self.chroma_previews.clear();
                         catalog = self.refresh_catalog(champion).await;
                         if champion.is_none() {
 
@@ -402,6 +410,28 @@ impl OverlaySession {
         }
     }
 
+    async fn send_chroma_preview(&mut self, chroma_id: u32, catalog: Option<&Catalog>) {
+        let uri = match self.chroma_previews.entry(chroma_id) {
+            std::collections::hash_map::Entry::Occupied(cached) => cached.into_mut(),
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                let Some(path) = catalog.and_then(|c| c.chroma_preview_path(chroma_id)) else {
+                    debug!(chroma_id, "Chroma preview asked for an entry without one");
+                    return;
+                };
+                let Some(fetched) = catalog::fetch_chroma_preview(path).await else {
+                    return;
+                };
+                slot.insert(fetched)
+            }
+        };
+        match serde_json::to_string(uri) {
+            Ok(json) => self.controller.eval_script(format!(
+                "window.bulletOverlay.setChromaPreview({chroma_id}, {json});"
+            )),
+            Err(e) => warn!(error = %e, chroma_id, "Could not serialize a chroma preview"),
+        }
+    }
+
     fn show_selection(&self, entry_id: Option<u32>, origin: Option<&str>) {
         let id = entry_id.map_or_else(|| "null".to_owned(), |id| id.to_string());
         let origin = origin.map_or_else(|| "null".to_owned(), |o| format!("\"{o}\""));
@@ -548,6 +578,7 @@ fn handle_command(state_tx: &StateSender, command: OverlayCommand, catalog: Opti
         OverlayCommand::SetMods { .. }
         | OverlayCommand::OpenModsFolder
         | OverlayCommand::ImportMod { .. }
+        | OverlayCommand::ChromaPreview { .. }
         | OverlayCommand::Random => {
             warn!("Session command reached the skin handler; ignoring it");
         }

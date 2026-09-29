@@ -741,6 +741,84 @@
       .btn:hover {
         border-color: var(--gold);
       }
+
+      /* Wider overlay (the user dragged the grip): cards flow into columns instead of stretching. */
+      @media (min-width: 560px) {
+        .list {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        }
+      }
+
+      /* Starts the native resize loop from Rust. Inset from the corner: the window region is
+         rounded, so the very corner pixels are clipped away. */
+      .resize-grip {
+        position: fixed;
+        right: 5px;
+        bottom: 5px;
+        width: 12px;
+        height: 12px;
+        z-index: 10;
+        cursor: nwse-resize;
+        opacity: 0.7;
+        background: linear-gradient(
+          135deg,
+          transparent 45%,
+          var(--gold-dim) 45%,
+          var(--gold-dim) 55%,
+          transparent 55%,
+          transparent 70%,
+          var(--gold-dim) 70%,
+          var(--gold-dim) 80%,
+          transparent 80%
+        );
+      }
+
+      .resize-grip:hover {
+        opacity: 1;
+      }
+
+      #footerRight {
+        margin-right: 12px;
+      }
+
+      /* Chroma preview: the client's own chroma render, fetched by id on first hover. */
+      .chroma-preview {
+        position: fixed;
+        z-index: 20;
+        width: 148px;
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        border: 1px solid var(--gold-dim);
+        border-radius: 6px;
+        background: linear-gradient(180deg, var(--card) 0%, var(--panel) 100%);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.6);
+        pointer-events: none;
+        animation: rise 0.12s ease both;
+      }
+
+      .chroma-preview img {
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: contain;
+        border-radius: 4px;
+        background: radial-gradient(circle at 50% 40%, var(--card-hover) 0%, var(--bg-0) 75%);
+      }
+
+      .chroma-preview.loading img {
+        opacity: 0.35;
+      }
+
+      .chroma-preview .preview-name {
+        color: var(--gold-bright);
+        font-size: 11px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     </style>
   </head>
   <body>
@@ -784,6 +862,13 @@
       <span id="footerRight">0 skins</span>
     </footer>
 
+    <div class="resize-grip" id="resizeGrip"></div>
+
+    <div class="chroma-preview" id="chromaPreview" hidden>
+      <img id="chromaPreviewImg" alt="" />
+      <span class="preview-name" id="chromaPreviewName"></span>
+    </div>
+
     <script>
       (function () {
         const el = (id) => document.getElementById(id);
@@ -805,6 +890,13 @@
           if (window.ipc && typeof window.ipc.postMessage === "function") {
             window.ipc.postMessage(JSON.stringify(message));
           }
+        }
+
+        function normalizeText(str) {
+          return (str || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase();
         }
 
         function normalizeSelection(view) {
@@ -867,12 +959,16 @@
           return row;
         }
 
-        function renderMods(term) {
+        function renderMods(rawTerm) {
           const root = el("mods");
           root.textContent = "";
           const a = mods.available;
           const sel = mods.selection;
-          const matches = (m) => !term || m.name.toLowerCase().includes(term);
+          const term = normalizeText(rawTerm);
+          const matches = (m) =>
+            !term ||
+            normalizeText(m.name).includes(term) ||
+            (m.description && normalizeText(m.description).includes(term));
           const total =
             a.skin.length + a.map.length + a.font.length + a.announcer.length + a.others.length;
 
@@ -934,7 +1030,7 @@
           if (total > 0 && shown === 0 && term) {
             const box = document.createElement("div");
             box.className = "mod-empty";
-            box.textContent = t().noModsMatch(term);
+            box.textContent = t().noModsMatch(rawTerm);
             root.append(box);
           }
 
@@ -1177,8 +1273,11 @@
               const dot = document.createElement("span");
               dot.className =
                 "chroma" + (chroma.form ? " form" : "") + (selectedId === chroma.id ? " selected" : "");
-              dot.title = chroma.name;
               dot.dataset.id = String(chroma.id);
+              dot.dataset.name = chroma.name;
+              // With a preview the popup shows the name; the native tooltip would cover it.
+              if (chroma.hasPreview) dot.dataset.preview = "1";
+              else dot.title = chroma.name;
               const gem = document.createElement("span");
               gem.className = "chroma-gem";
               gem.style.background = chroma.color || "#3a4a5a";
@@ -1231,7 +1330,8 @@
         function render(animate) {
           const list = el("list");
           const empty = el("empty");
-          const term = el("search").value.trim().toLowerCase();
+          const rawTerm = el("search").value.trim();
+          const term = normalizeText(rawTerm);
 
           updateTabs();
           updateNotice();
@@ -1239,7 +1339,7 @@
           if (tab === "mods") {
             list.hidden = true;
             empty.hidden = true;
-            renderMods(term);
+            renderMods(rawTerm);
             updateFooterRight();
             el("championName").textContent = championLabel() || t().noChampion;
             updateChampionPortrait();
@@ -1249,9 +1349,9 @@
           const skins = (catalog.skins || []).filter(
             (s) =>
               !term ||
-              s.name.toLowerCase().includes(term) ||
+              normalizeText(s.name).includes(term) ||
               String(s.id).includes(term) ||
-              (s.chromas || []).some((c) => c.name.toLowerCase().includes(term)),
+              (s.chromas || []).some((c) => normalizeText(c.name).includes(term)),
           );
 
           list.textContent = "";
@@ -1267,9 +1367,9 @@
 
           const big = empty.querySelector(".big");
           const sub = empty.querySelector(".sub");
-          if (nothing && term) {
+          if (nothing && rawTerm) {
             big.textContent = t().noResultsBig;
-            sub.textContent = t().noResultsSub(term);
+            sub.textContent = t().noResultsSub(rawTerm);
           } else if (nothing && catalog.championName) {
             big.textContent = t().noLibraryBig(championLabel());
             sub.textContent = t().noLibrarySub;
@@ -1319,19 +1419,17 @@
         });
 
         const searchInput = el("search");
-        searchInput.addEventListener("focus", () => {
-          if (window.ipc && typeof window.ipc.postMessage === "function") {
-            window.ipc.postMessage(JSON.stringify({ type: "focus" }));
-          }
-        });
-        searchInput.addEventListener("blur", () => {
-          if (window.ipc && typeof window.ipc.postMessage === "function") {
-            window.ipc.postMessage(JSON.stringify({ type: "blur" }));
-          }
-        });
+        // Only ask Rust while the page lacks focus: once the host moves focus into the WebView the
+        // input's own `focus` fires again, and re-asking would bounce focus for nothing.
+        const requestFocus = () => {
+          if (!document.hasFocus()) post({ type: "focus" });
+        };
+        searchInput.addEventListener("focus", requestFocus);
+        searchInput.addEventListener("pointerdown", requestFocus);
         searchInput.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") {
+          if (e.key === "Escape" || e.key === "Enter") {
             searchInput.blur();
+            post({ type: "blur" });
           }
         });
         searchInput.addEventListener("input", () => render(false));
@@ -1379,7 +1477,77 @@
           post({ type: "setMods", selection: next });
         });
 
+        const preview = el("chromaPreview");
+        const previewImg = el("chromaPreviewImg");
+        // Filled by Rust through `setChromaPreview`; only `data:image/` URIs are accepted.
+        const previewCache = new Map();
+        let previewFor = null;
+        let previewAnchor = null;
+
+        function placePreview(anchor) {
+          const r = anchor.getBoundingClientRect();
+          const pw = preview.offsetWidth;
+          const ph = preview.offsetHeight;
+          const left = Math.max(6, Math.min(r.left + r.width / 2 - pw / 2, window.innerWidth - pw - 6));
+          let top = r.top - ph - 8;
+          if (top < 6) top = r.bottom + 8;
+          top = Math.max(6, Math.min(top, window.innerHeight - ph - 6));
+          preview.style.left = left + "px";
+          preview.style.top = top + "px";
+        }
+
+        function showPreview(dot) {
+          const id = Number(dot.dataset.id);
+          previewFor = id;
+          previewAnchor = dot;
+          el("chromaPreviewName").textContent = dot.dataset.name || "";
+          const uri = previewCache.get(id);
+          if (uri) {
+            previewImg.src = uri;
+            preview.classList.remove("loading");
+          } else {
+            previewImg.removeAttribute("src");
+            preview.classList.add("loading");
+            post({ type: "chromaPreview", id });
+          }
+          preview.hidden = false;
+          placePreview(dot);
+        }
+
+        function hidePreview() {
+          previewFor = null;
+          previewAnchor = null;
+          preview.hidden = true;
+        }
+
+        el("list").addEventListener("mouseover", (event) => {
+          const dot = event.target.closest(".chroma");
+          if (!dot || dot.dataset.preview !== "1") return;
+          if (Number(dot.dataset.id) !== previewFor) showPreview(dot);
+        });
+        el("list").addEventListener("mouseout", (event) => {
+          const dot = event.target.closest(".chroma");
+          if (dot && !dot.contains(event.relatedTarget)) hidePreview();
+        });
+        document.querySelector("main").addEventListener("scroll", hidePreview, { passive: true });
+
+        el("resizeGrip").addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          hidePreview();
+          post({ type: "resize" });
+        });
+
         window.bulletOverlay = {
+          setChromaPreview(id, uri) {
+            if (typeof id !== "number" || typeof uri !== "string" || !uri.startsWith("data:image/")) return;
+            previewCache.set(id, uri);
+            if (previewFor === id) {
+              previewImg.src = uri;
+              preview.classList.remove("loading");
+              if (previewAnchor) placePreview(previewAnchor);
+            }
+          },
           // A selection decided on the Rust side (historic mode restoring, or dropping, a pick).
           // Never posted back: Rust already published it.
           setSelection(id, origin) {
@@ -1407,6 +1575,8 @@
             };
             selectedId = null;
             selectionOrigin = null;
+            previewCache.clear();
+            hidePreview();
             el("search").value = "";
             document.querySelector("main").scrollTop = 0;
             if (catalog.locale) setLocale(catalog.locale);

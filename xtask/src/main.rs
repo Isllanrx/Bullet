@@ -660,6 +660,9 @@ fn run_catalog_demo(champion_id: u32) {
                 bullet_core::overlay::OverlayCommand::ImportMod { category } => {
                     println!("  mods -> importar em {category:?}")
                 }
+                bullet_core::overlay::OverlayCommand::ChromaPreview { id } => {
+                    println!("  hover -> preview do chroma {id}")
+                }
             }
         }
         std::thread::sleep(Duration::from_millis(200));
@@ -758,6 +761,9 @@ fn run_ipc_probe(champion_id: u32) {
             Ok(OverlayCommand::Random) => println!("  recebido no Rust: sortear skin"),
             Ok(OverlayCommand::ImportMod { category }) => {
                 println!("  recebido no Rust: importar mod em {category:?}")
+            }
+            Ok(OverlayCommand::ChromaPreview { id }) => {
+                println!("  recebido no Rust: preview do chroma {id}")
             }
             Err(_) => std::thread::sleep(Duration::from_millis(100)),
         }

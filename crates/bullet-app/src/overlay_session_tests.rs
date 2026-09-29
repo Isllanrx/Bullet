@@ -61,6 +61,10 @@ fn zed_catalog() -> Catalog {
                 name: "Shockblade Zed (Ruby)".into(),
                 color: None,
                 form: false,
+                preview_path: Some(
+                    "/lol-game-data/assets/v1/champion-chroma-images/238/238004.png".into(),
+                ),
+                has_preview: true,
             }],
             tile: None,
         }],

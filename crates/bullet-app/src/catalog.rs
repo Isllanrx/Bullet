@@ -17,6 +17,22 @@ pub struct CatalogChroma {
 
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub form: bool,
+
+    /// LCU asset path of the chroma's preview image. Kept on the Rust side: the page only
+    /// learns whether a preview exists and asks for it by id.
+    #[serde(skip)]
+    pub preview_path: Option<String>,
+
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub has_preview: bool,
+}
+
+impl CatalogChroma {
+    fn with_preview(mut self, path: Option<&str>) -> Self {
+        self.preview_path = path.filter(|p| p.starts_with('/')).map(str::to_owned);
+        self.has_preview = self.preview_path.is_some();
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -116,6 +132,15 @@ impl Catalog {
         }
         None
     }
+
+    #[must_use]
+    pub fn chroma_preview_path(&self, chroma_id: u32) -> Option<&str> {
+        self.skins
+            .iter()
+            .flat_map(|s| s.chromas.iter())
+            .find(|c| c.id == chroma_id)
+            .and_then(|c| c.preview_path.as_deref())
+    }
 }
 
 fn fallback_name(id: u32) -> String {
@@ -161,7 +186,10 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
                                 .or(form_name)
                                 .unwrap_or_else(|| fallback_name(chroma.id)),
                             color: chroma_meta.and_then(|c| c.colors.first().cloned()),
+                            preview_path: None,
+                            has_preview: false,
                         }
+                        .with_preview(chroma_meta.and_then(|c| c.chroma_path.as_deref()))
                     })
                     .collect();
 
@@ -203,7 +231,10 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
                                 form_name.unwrap_or_else(|| fallback_name(chroma.id))
                             },
                             color: chroma.colors.first().cloned(),
+                            preview_path: None,
+                            has_preview: false,
                         }
+                        .with_preview(chroma.chroma_path.as_deref())
                     })
                     .collect();
 
@@ -385,15 +416,20 @@ pub async fn load_classic_catalog(
                     .chromas
                     .iter()
                     .filter(|c| offerable(c.id))
-                    .map(|c| CatalogChroma {
-                        id: c.id,
-                        name: if c.name.is_empty() {
-                            fallback_name(c.id)
-                        } else {
-                            c.name.clone()
-                        },
-                        color: c.colors.first().cloned(),
-                        form: false,
+                    .map(|c| {
+                        CatalogChroma {
+                            id: c.id,
+                            name: if c.name.is_empty() {
+                                fallback_name(c.id)
+                            } else {
+                                c.name.clone()
+                            },
+                            color: c.colors.first().cloned(),
+                            form: false,
+                            preview_path: None,
+                            has_preview: false,
+                        }
+                        .with_preview(c.chroma_path.as_deref())
                     })
                     .collect();
                 dropped += skin.chromas.len() - chromas.len();
@@ -468,15 +504,30 @@ pub async fn load_classic_catalog(
     catalog
 }
 
-async fn fetch_assets(champion_id: u32) -> Option<(ChampionAssets, bullet_lcu::client::LcuClient)> {
+async fn lcu_client() -> Option<bullet_lcu::client::LcuClient> {
     let lockfile = tokio::task::spawn_blocking(|| bullet_lcu::lockfile::Lockfile::discover(None))
         .await
         .ok()?
         .ok()?;
 
-    let client =
-        bullet_lcu::client::LcuClient::new(&lockfile, bullet_lcu::client::DEFAULT_LCU_TIMEOUT)
-            .ok()?;
+    bullet_lcu::client::LcuClient::new(&lockfile, bullet_lcu::client::DEFAULT_LCU_TIMEOUT).ok()
+}
+
+/// Fetch one chroma preview from the client and return it as a `data:` URI the page can show.
+pub async fn fetch_chroma_preview(path: &str) -> Option<String> {
+    let client = lcu_client().await?;
+    match client.get_asset_bytes(path).await {
+        Ok(bytes) if !bytes.is_empty() => Some(tile_data_uri(path, &bytes)),
+        Ok(_) => None,
+        Err(e) => {
+            debug!(path, error = %e, "Chroma preview unavailable");
+            None
+        }
+    }
+}
+
+async fn fetch_assets(champion_id: u32) -> Option<(ChampionAssets, bullet_lcu::client::LcuClient)> {
+    let client = lcu_client().await?;
 
     match client.get_champion_assets(champion_id).await {
         Ok(assets) => Some((assets, client)),

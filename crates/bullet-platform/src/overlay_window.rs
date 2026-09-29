@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -16,8 +16,8 @@ use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, CreateSolidBrush, SetWin
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, HWND_TOPMOST, MSG,
     PostMessageW, RegisterClassW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetForegroundWindow,
-    SetWindowPos, ShowWindow, TranslateMessage, WM_APP, WNDCLASSW, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    SetWindowPos, ShowWindow, TranslateMessage, WM_APP, WNDCLASSW, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_POPUP, WS_THICKFRAME,
 };
 use windows::core::w;
 use wry::dpi::{LogicalPosition, LogicalSize};
@@ -36,6 +36,7 @@ enum WindowControl {
     Focus,
     Blur,
     Drag,
+    Resize,
     Hide,
 }
 
@@ -53,6 +54,26 @@ pub const OVERLAY_PADDING: i32 = 16;
 
 pub const OVERLAY_CORNER_RADIUS: i32 = 14;
 
+pub const OVERLAY_MIN_WIDTH: i32 = 320;
+
+pub const OVERLAY_MIN_HEIGHT: i32 = 380;
+
+/// Size the user dragged the overlay to; placement keeps it across client moves.
+static OVERLAY_SIZE: (AtomicI32, AtomicI32) = (
+    AtomicI32::new(OVERLAY_WIDTH),
+    AtomicI32::new(OVERLAY_HEIGHT),
+);
+
+#[must_use]
+pub fn overlay_size() -> (i32, i32) {
+    (
+        OVERLAY_SIZE.0.load(Ordering::Relaxed),
+        OVERLAY_SIZE.1.load(Ordering::Relaxed),
+    )
+}
+
+const WM_OVERLAY_RESIZED: u32 = WM_APP + 6;
+
 const WM_OVERLAY_SHOW: u32 = WM_APP + 1;
 
 const WM_OVERLAY_HIDE: u32 = WM_APP + 2;
@@ -60,6 +81,8 @@ const WM_OVERLAY_HIDE: u32 = WM_APP + 2;
 const WM_OVERLAY_QUIT: u32 = WM_APP + 3;
 
 const WM_OVERLAY_SCRIPT: u32 = WM_APP + 4;
+
+const WM_OVERLAY_FOCUS: u32 = WM_APP + 5;
 
 fn pack_point(x: i32, y: i32) -> isize {
     let x = x.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as isize;
@@ -226,13 +249,16 @@ pub fn decide_placement(
         return None;
     }
     match state {
-        ClientWindowState::Visible(rect) => Some(overlay_placement_on(
-            rect,
-            monitor,
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT,
-            OVERLAY_PADDING,
-        )),
+        ClientWindowState::Visible(rect) => {
+            let (width, height) = overlay_size();
+            Some(overlay_placement_on(
+                rect,
+                monitor,
+                width,
+                height,
+                OVERLAY_PADDING,
+            ))
+        }
         ClientWindowState::Hidden | ClientWindowState::Absent => None,
     }
 }
@@ -261,8 +287,8 @@ impl OverlayTracker {
 
         match client_window_state() {
             ClientWindowState::Visible(client_rect) => {
-                let rect =
-                    overlay_placement(client_rect, OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_PADDING);
+                let (width, height) = overlay_size();
+                let rect = overlay_placement(client_rect, width, height, OVERLAY_PADDING);
 
                 if self.last_client_rect != Some(client_rect) {
                     controller.show_at(rect);
@@ -312,10 +338,12 @@ fn run_overlay_message_loop(
 
     let hwnd = unsafe {
         CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             class_name,
             w!("Bullet"),
-            WS_POPUP,
+            // WS_THICKFRAME only makes the native size loop available (started from the UI's
+            // grip); WM_NCCALCSIZE hands the whole window to the client so no frame is drawn.
+            WS_POPUP | WS_THICKFRAME,
             0,
             0,
             OVERLAY_WIDTH,
@@ -351,14 +379,56 @@ fn run_overlay_message_loop(
             match WindowControl::try_parse(payload) {
                 Some(WindowControl::Focus) => {
                     unsafe {
-                        let _ = SetForegroundWindow(HWND(hwnd_raw as *mut _)); // ignore-ok: best-effort focus grant; typing simply fails silently if this is refused
+                        use windows::Win32::System::Threading::{
+                            AttachThreadInput, GetCurrentThreadId,
+                        };
+                        use windows::Win32::UI::WindowsAndMessaging::{
+                            BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId,
+                        };
+
+                        let target_hwnd = HWND(hwnd_raw as *mut _);
+                        let foreground_hwnd = GetForegroundWindow();
+                        let foreground_thread = GetWindowThreadProcessId(foreground_hwnd, None);
+                        let current_thread = GetCurrentThreadId();
+
+                        // Only the foreground is taken here. Keyboard focus must land on the
+                        // WebView2 child, not on this host: `SetFocus(host)` pulled it out of the
+                        // page and the search box stopped receiving keystrokes.
+                        if foreground_thread != 0 && foreground_thread != current_thread {
+                            let _ = AttachThreadInput(foreground_thread, current_thread, true); // ignore-ok: best-effort thread input attachment
+                            let _ = BringWindowToTop(target_hwnd); // ignore-ok: brings window to top of z-order
+                            let _ = SetForegroundWindow(target_hwnd); // ignore-ok: transfer foreground focus
+                            let _ = AttachThreadInput(foreground_thread, current_thread, false); // ignore-ok: detach thread input after transfer
+                        } else {
+                            let _ = BringWindowToTop(target_hwnd); // ignore-ok: brings window to top of z-order
+                            let _ = SetForegroundWindow(target_hwnd); // ignore-ok: best-effort focus grant
+                        }
+                        // ignore-ok: our own window; a failure means the loop already ended
+                        let _ = PostMessageW(target_hwnd, WM_OVERLAY_FOCUS, WPARAM(0), LPARAM(0));
                     }
                     return;
                 }
                 Some(WindowControl::Blur) => {
                     if let Some(client) = crate::client_window::find_client_hwnd() {
                         unsafe {
-                            let _ = SetForegroundWindow(client); // ignore-ok: best-effort; the client keeps working even if this particular call is refused
+                            use windows::Win32::System::Threading::{
+                                AttachThreadInput, GetCurrentThreadId,
+                            };
+                            use windows::Win32::UI::WindowsAndMessaging::{
+                                GetForegroundWindow, GetWindowThreadProcessId,
+                            };
+
+                            let foreground_hwnd = GetForegroundWindow();
+                            let foreground_thread = GetWindowThreadProcessId(foreground_hwnd, None);
+                            let current_thread = GetCurrentThreadId();
+
+                            if foreground_thread != 0 && foreground_thread != current_thread {
+                                let _ = AttachThreadInput(foreground_thread, current_thread, true); // ignore-ok: best-effort thread input attachment
+                                let _ = SetForegroundWindow(client); // ignore-ok: restore focus to client
+                                let _ = AttachThreadInput(foreground_thread, current_thread, false); // ignore-ok: detach thread input after transfer
+                            } else {
+                                let _ = SetForegroundWindow(client); // ignore-ok: restore focus to client
+                            }
                         }
                     }
                     return;
@@ -383,6 +453,26 @@ fn run_overlay_message_loop(
                     }
                     return;
                 }
+                Some(WindowControl::Resize) => {
+                    unsafe {
+                        use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+                        use windows::Win32::UI::WindowsAndMessaging::{
+                            HTBOTTOMRIGHT, SendMessageW, WM_NCLBUTTONDOWN,
+                        };
+
+                        // ignore-ok: the WebView holds the capture; releasing it lets the size loop take the mouse
+                        let _ = ReleaseCapture();
+
+                        // ignore-ok: non-client click on the corner starts the system resize loop
+                        let _ = SendMessageW(
+                            HWND(hwnd_raw as *mut _),
+                            WM_NCLBUTTONDOWN,
+                            WPARAM(HTBOTTOMRIGHT as usize),
+                            LPARAM(0),
+                        );
+                    }
+                    return;
+                }
                 Some(WindowControl::Hide) => {
                     unsafe {
                         // ignore-ok: user requested close/hide via overlay titlebar button
@@ -395,7 +485,12 @@ fn run_overlay_message_loop(
 
             match OverlayCommand::parse(payload) {
                 Ok(command) => {
-                    info!(?command, "Overlay UI command received");
+                    // Hovering chromas sends these continuously; they are not state transitions.
+                    if matches!(command, OverlayCommand::ChromaPreview { .. }) {
+                        debug!(?command, "Overlay UI command received");
+                    } else {
+                        info!(?command, "Overlay UI command received");
+                    }
                     if command_tx.send(command).is_err() {
                         debug!("Nobody is listening for overlay commands any more");
                     }
@@ -422,19 +517,7 @@ fn run_overlay_message_loop(
         }
     };
 
-    unsafe {
-        let region = CreateRoundRectRgn(
-            0,
-            0,
-            OVERLAY_WIDTH + 1,
-            OVERLAY_HEIGHT + 1,
-            OVERLAY_CORNER_RADIUS,
-            OVERLAY_CORNER_RADIUS,
-        );
-        if SetWindowRgn(hwnd, region, true) == 0 {
-            warn!("Could not apply rounded-corner region to the overlay window");
-        }
-    }
+    apply_rounded_region(hwnd, OVERLAY_WIDTH, OVERLAY_HEIGHT);
 
     if ready_tx.send(Ok(hwnd.0 as isize)).is_err() {
         alive.store(false, Ordering::SeqCst);
@@ -462,6 +545,21 @@ fn run_overlay_message_loop(
                 WM_OVERLAY_HIDE => {
                     let _ = ShowWindow(hwnd, SW_HIDE); // ignore-ok: returns the previous visibility, not an error
                 }
+                WM_OVERLAY_RESIZED => {
+                    let (w, h) = overlay_size();
+                    apply_rounded_region(hwnd, w, h);
+                    if let Err(e) = webview.set_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: LogicalSize::new(w, h).into(),
+                    }) {
+                        debug!(error = %e, "Could not resize the overlay WebView");
+                    }
+                }
+                WM_OVERLAY_FOCUS => {
+                    if let Err(e) = webview.focus() {
+                        debug!(error = %e, "Could not move keyboard focus into the overlay WebView");
+                    }
+                }
                 WM_OVERLAY_SCRIPT => {
                     let queued: Vec<String> = pending_scripts
                         .lock()
@@ -486,13 +584,60 @@ fn run_overlay_message_loop(
     debug!("Overlay message loop finished");
 }
 
+fn apply_rounded_region(hwnd: HWND, width: i32, height: i32) {
+    unsafe {
+        let region = CreateRoundRectRgn(
+            0,
+            0,
+            width + 1,
+            height + 1,
+            OVERLAY_CORNER_RADIUS,
+            OVERLAY_CORNER_RADIUS,
+        );
+        if SetWindowRgn(hwnd, region, true) == 0 {
+            warn!("Could not apply rounded-corner region to the overlay window");
+        }
+    }
+}
+
 unsafe extern "system" fn overlay_wnd_proc(
     hwnd: HWND,
     msg: u32,
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+    use windows::Win32::UI::WindowsAndMessaging::{
+        MINMAXINFO, WM_GETMINMAXINFO, WM_NCCALCSIZE, WM_SIZE,
+    };
+
+    match msg {
+        // The whole window is client area: no frame from WS_THICKFRAME is ever painted.
+        WM_NCCALCSIZE if wparam.0 != 0 => LRESULT(0),
+        WM_GETMINMAXINFO => {
+            let info = lparam.0 as *mut MINMAXINFO;
+            if !info.is_null() {
+                // SAFETY: Windows passes a valid MINMAXINFO for this message.
+                unsafe {
+                    (*info).ptMinTrackSize.x = OVERLAY_MIN_WIDTH;
+                    (*info).ptMinTrackSize.y = OVERLAY_MIN_HEIGHT;
+                }
+            }
+            LRESULT(0)
+        }
+        WM_SIZE => {
+            let (w, h) = unpack_point(lparam.0);
+            if w > 0 && h > 0 {
+                OVERLAY_SIZE.0.store(w, Ordering::Relaxed);
+                OVERLAY_SIZE.1.store(h, Ordering::Relaxed);
+                unsafe {
+                    // ignore-ok: our own window; a lost message is redone by the next WM_SIZE
+                    let _ = PostMessageW(hwnd, WM_OVERLAY_RESIZED, WPARAM(0), LPARAM(0));
+                }
+            }
+            LRESULT(0)
+        }
+        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
 }
 
 struct OverlayWindowHandle(HWND);
