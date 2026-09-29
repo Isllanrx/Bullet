@@ -13,6 +13,9 @@ pub struct ChampionChroma {
 
     #[serde(default)]
     pub colors: Vec<String>,
+
+    #[serde(default)]
+    pub chroma_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
@@ -124,7 +127,8 @@ mod tests {
             { "id": 238001, "name": "Shockblade Zed", "isBase": false,
               "tilePath": "/lol-game-data/assets/ASSETS/Characters/Zed/Skins/Skin01/ZedSquare.png",
               "chromas": [
-                { "id": 238004, "name": "Shockblade Zed (Rose Quartz)", "colors": ["#E58BA5", "#E58BA5"] },
+                { "id": 238004, "name": "Shockblade Zed (Rose Quartz)", "colors": ["#E58BA5", "#E58BA5"],
+                  "chromaPath": "/lol-game-data/assets/v1/champion-chroma-images/238/238004.png" },
                 { "id": 238005, "name": "Shockblade Zed (Catseye)", "colors": ["#FFEE59", "#FFEE59"] }
               ] },
             { "id": 238002, "name": "SKT T1 Zed", "isBase": false }
@@ -155,6 +159,23 @@ mod tests {
         assert_eq!(
             assets.skins[2].tile_path, None,
             "a skin the client omitted the icon for must not become a parse error"
+        );
+    }
+
+    #[test]
+    fn test_chroma_path_parses_when_present_and_is_none_when_absent() {
+        let assets = zed();
+        assert_eq!(
+            assets
+                .chroma(238_004)
+                .and_then(|c| c.chroma_path.as_deref()),
+            Some("/lol-game-data/assets/v1/champion-chroma-images/238/238004.png")
+        );
+        assert_eq!(
+            assets
+                .chroma(238_005)
+                .and_then(|c| c.chroma_path.as_deref()),
+            None
         );
     }
 

@@ -6,17 +6,29 @@ use crate::selection::{ChampionId, ChromaId, SkinId};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum OverlayCommand {
-    Select { id: u32 },
+    Select {
+        id: u32,
+    },
 
     Clear,
 
     Random,
 
-    SetMods { selection: ModSelectionView },
+    SetMods {
+        selection: ModSelectionView,
+    },
 
     OpenModsFolder,
 
-    ImportMod { category: crate::mods::ModCategory },
+    ImportMod {
+        category: crate::mods::ModCategory,
+    },
+
+    /// The UI hovers a chroma and wants its preview image. Only the id travels: the image path
+    /// is resolved from the catalog Rust built, never taken from the page.
+    ChromaPreview {
+        id: u32,
+    },
 }
 
 impl OverlayCommand {
@@ -89,6 +101,14 @@ mod tests {
             OverlayCommand::ImportMod {
                 category: crate::mods::ModCategory::LoadingScreen
             }
+        );
+        assert_eq!(
+            OverlayCommand::parse(r#"{"type":"chromaPreview","id":238004}"#).expect("must parse"),
+            OverlayCommand::ChromaPreview { id: 238_004 }
+        );
+        assert!(
+            OverlayCommand::parse(r#"{"type":"chromaPreview","path":"/x"}"#).is_err(),
+            "a preview request carries an id, never a path"
         );
         assert!(
             OverlayCommand::parse(r#"{"type":"importMod","category":"C:/Windows"}"#).is_err(),
