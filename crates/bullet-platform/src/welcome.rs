@@ -14,10 +14,11 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, LoadCursorW, LoadIconW, PostMessageW,
-    PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, SendMessageW, SetTimer,
-    ShowWindow, TranslateMessage, WINDOW_EX_STYLE, WM_CLOSE, WM_CREATE, WM_DESTROY, WM_PAINT,
-    WM_SETICON, WM_TIMER, WNDCLASSW, WS_CAPTION, WS_OVERLAPPED, WS_SYSMENU, WS_VISIBLE,
+    GetSystemMetrics, HICON, ICON_BIG, ICON_SMALL, IDC_ARROW, LoadCursorW, LoadIconW, MINMAXINFO,
+    PostMessageW, PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, SendMessageW,
+    SetTimer, ShowWindow, TranslateMessage, WINDOW_EX_STYLE, WM_APP, WM_CLOSE, WM_CREATE,
+    WM_DESTROY, WM_GETMINMAXINFO, WM_PAINT, WM_SETICON, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CAPTION,
+    WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU, WS_THICKFRAME, WS_VISIBLE,
 };
 use windows::core::{PCWSTR, w};
 use wry::WebViewBuilder;
@@ -25,15 +26,27 @@ use wry::WebViewBuilder;
 const WELCOME_HTML: &str = include_str!("welcome_ui.html");
 const TIMER_AUTO_DISMISS: usize = 2001;
 
-fn welcome_html(text: &crate::i18n::Text) -> String {
-    let quote_item = if text.welcome_quote.is_empty() {
+/// Posted by the window procedure on `WM_SIZE`: the WebView lives on the pump, not in the proc.
+const WM_WELCOME_RESIZED: u32 = WM_APP + 1;
+
+const WELCOME_WIDTH: i32 = 530;
+const WELCOME_HEIGHT: i32 = 440;
+const WELCOME_MIN_WIDTH: i32 = 420;
+const WELCOME_MIN_HEIGHT: i32 = 340;
+
+/// One list row, or nothing: an empty string must not leave a bare bullet behind.
+fn list_item(value: &str) -> String {
+    if value.is_empty() {
         String::new()
     } else {
         format!(
             "<li><span class=\"bullet\">&#9670;</span><span>{}</span></li>",
-            escape_html(text.welcome_quote)
+            escape_html(value)
         )
-    };
+    }
+}
+
+fn welcome_html(text: &crate::i18n::Text) -> String {
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{version}}", crate::version::display_version())
@@ -44,22 +57,14 @@ fn welcome_html(text: &crate::i18n::Text) -> String {
         )
         .replace("{{welcome_author}}", &escape_html(text.welcome_author))
         .replace(
-            "{{welcome_tray_hint}}",
-            &escape_html(text.welcome_tray_hint),
+            "{{welcome_tray_hint_item}}",
+            &list_item(text.welcome_tray_hint),
         )
         .replace("{{welcome_dismiss}}", &escape_html(text.welcome_dismiss))
-        .replace("{{welcome_quote_item}}", &quote_item)
+        .replace("{{welcome_quote_item}}", &list_item(text.welcome_quote))
 }
 
 fn about_html(text: &crate::i18n::Text) -> String {
-    let quote_item = if text.about_quote.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "<li><span class=\"bullet\">&#9670;</span><span>{}</span></li>",
-            escape_html(text.about_quote)
-        )
-    };
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{version}}", crate::version::display_version())
@@ -69,9 +74,9 @@ fn about_html(text: &crate::i18n::Text) -> String {
             &escape_html(text.about_educational),
         )
         .replace("{{welcome_author}}", &escape_html(text.welcome_author))
-        .replace("{{welcome_tray_hint}}", "")
+        .replace("{{welcome_tray_hint_item}}", "")
         .replace("{{welcome_dismiss}}", &escape_html(text.about_dismiss))
-        .replace("{{welcome_quote_item}}", &quote_item)
+        .replace("{{welcome_quote_item}}", &list_item(text.about_quote))
 }
 
 fn escape_html(value: &str) -> String {
@@ -144,8 +149,8 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
         let _ = RegisterClassW(&wc); // ignore-ok: failure just means already registered
     }
 
-    let width = 530;
-    let height = 380;
+    let width = WELCOME_WIDTH;
+    let height = WELCOME_HEIGHT;
 
     // SAFETY: GetSystemMetrics queries screen resolution
     let screen_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
@@ -160,7 +165,13 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
             WINDOW_EX_STYLE(0),
             class_name,
             w!("Bullet — League of Legends Skin Changer"),
-            WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+            WS_OVERLAPPED
+                | WS_CAPTION
+                | WS_SYSMENU
+                | WS_THICKFRAME
+                | WS_MINIMIZEBOX
+                | WS_MAXIMIZEBOX
+                | WS_VISIBLE,
             pos_x,
             pos_y,
             width,
@@ -247,7 +258,7 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
         })
         .build_as_child(&host);
     // Kept alive until the pump ends: dropping it tears the page down.
-    let _webview = match webview {
+    let webview = match webview {
         Ok(webview) => webview,
         Err(e) => {
             // An empty frame is worse than no window: the welcome is informational only.
@@ -270,6 +281,23 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
 
     unsafe {
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+            if msg.message == WM_WELCOME_RESIZED {
+                let mut rect = RECT::default();
+                if GetClientRect(hwnd, &mut rect).is_ok() {
+                    let bounds = wry::Rect {
+                        position: wry::dpi::LogicalPosition::new(0, 0).into(),
+                        size: wry::dpi::LogicalSize::new(
+                            (rect.right - rect.left).max(0) as u32,
+                            (rect.bottom - rect.top).max(0) as u32,
+                        )
+                        .into(),
+                    };
+                    if let Err(e) = webview.set_bounds(bounds) {
+                        tracing::debug!(error = %e, "Welcome window: could not resize the WebView");
+                    }
+                }
+                continue;
+            }
             // ignore-ok: reports whether a key message was translated; this window takes none
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
@@ -304,6 +332,24 @@ unsafe extern "system" fn welcome_wnd_proc(
             unsafe {
                 // ignore-ok: the only failure is an already-gone window, which is the wanted outcome
                 let _ = DestroyWindow(hwnd);
+            }
+            LRESULT(0)
+        }
+        WM_SIZE => {
+            unsafe {
+                // ignore-ok: our own window; a lost resize is redone by the next WM_SIZE
+                let _ = PostMessageW(hwnd, WM_WELCOME_RESIZED, WPARAM(0), LPARAM(0));
+            }
+            LRESULT(0)
+        }
+        WM_GETMINMAXINFO => {
+            let info = lparam.0 as *mut MINMAXINFO;
+            if !info.is_null() {
+                // SAFETY: Windows passes a valid MINMAXINFO for this message.
+                unsafe {
+                    (*info).ptMinTrackSize.x = WELCOME_MIN_WIDTH;
+                    (*info).ptMinTrackSize.y = WELCOME_MIN_HEIGHT;
+                }
             }
             LRESULT(0)
         }
@@ -376,6 +422,10 @@ mod tests {
             );
 
             assert!(!about.contains(&escape_html(text.welcome_tray_hint)));
+            assert!(
+                !about.contains("<span></span>"),
+                "{language:?}: About must not render an empty list row"
+            );
         }
     }
 
