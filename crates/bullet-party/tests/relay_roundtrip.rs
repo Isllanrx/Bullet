@@ -61,7 +61,7 @@ async fn fake_relay(listener: TcpListener, room: Arc<Mutex<Room>>) {
                 tokio::select! {
                     out = rx.recv() => {
                         let Some(out) = out else { break };
-                        if write.send(Message::Text(out)).await.is_err() {
+                        if write.send(Message::Text(out.into())).await.is_err() {
                             break;
                         }
                     }
@@ -125,7 +125,7 @@ async fn two_clients_see_each_others_pick_through_an_opaque_relay() {
     let room = Arc::new(Mutex::new(Room::default()));
     tokio::spawn(fake_relay(listener, room.clone()));
 
-    let token = PartyToken::generate(random_member_id(), unix_now());
+    let token = PartyToken::generate(random_member_id().expect("rng"), unix_now()).expect("rng");
     let joined = PartyToken::decode(&token.encode(), unix_now()).expect("friend decodes the code");
 
     let (a_tx, a_rx) = new_state_channel();
@@ -134,8 +134,20 @@ async fn two_clients_see_each_others_pick_through_an_opaque_relay() {
     b_tx.send_replace(picking(238, 238_001, "puuid-b"));
 
     let cancel = CancellationToken::new();
-    let a = PartyClient::new(relay.clone(), token, random_member_id(), a_tx, a_rx.clone());
-    let b = PartyClient::new(relay, joined, random_member_id(), b_tx, b_rx.clone());
+    let a = PartyClient::new(
+        relay.clone(),
+        token,
+        random_member_id().expect("rng"),
+        a_tx,
+        a_rx.clone(),
+    );
+    let b = PartyClient::new(
+        relay,
+        joined,
+        random_member_id().expect("rng"),
+        b_tx,
+        b_rx.clone(),
+    );
     let a_task = tokio::spawn(a.run(cancel.clone()));
     let b_task = tokio::spawn(b.run(cancel.clone()));
 

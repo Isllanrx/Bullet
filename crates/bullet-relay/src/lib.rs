@@ -309,7 +309,7 @@ impl RelayServer {
             tokio::select! {
                 outgoing = rx.recv() => {
                     let Some(payload) = outgoing else { break };
-                    if write.send(Message::Text(payload)).await.is_err() {
+                    if write.send(Message::Text(payload.into())).await.is_err() {
                         break;
                     }
                 }

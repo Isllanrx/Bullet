@@ -145,6 +145,21 @@ impl LcuClient {
         Ok(value.locale)
     }
 
+    /// Accept the match found. `Ok(false)` means the client refused it (e.g. the ready check
+    /// already ended), which is not an error for the caller.
+    pub async fn accept_ready_check(&self) -> Result<bool, LcuError> {
+        let path = "/lol-matchmaking/v1/ready-check/accept";
+        let url = format!("{}{path}", self.base_url);
+        let resp = self.client.post(&url).send().await?;
+        let status = resp.status();
+        debug!(
+            path,
+            status = status.as_u16(),
+            "LCU ready-check accept answered"
+        );
+        Ok(status.is_success())
+    }
+
     async fn patch_selected_skin(&self, path: &str, skin_id: u32) -> Result<bool, LcuError> {
         let url = format!("{}{path}", self.base_url);
         let started = std::time::Instant::now();
