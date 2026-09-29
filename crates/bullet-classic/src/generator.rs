@@ -37,6 +37,10 @@ fn skin_bin(character: &str, skin: u32) -> String {
     format!("data/characters/{character}/skins/skin{skin}.bin")
 }
 
+fn animation_bin(character: &str, skin: u32) -> String {
+    format!("data/characters/{character}/animations/skin{skin}.bin")
+}
+
 pub fn retarget_skin_bin(
     source: &[u8],
     character: &str,
@@ -45,21 +49,41 @@ pub fn retarget_skin_bin(
 ) -> Result<Vec<u8>, ClassicError> {
     let source_prefix = format!("Characters/{character}/Skins/Skin{source_skin}");
     let target_prefix = format!("Characters/{character}/Skins/Skin{target_skin}");
-    let skin_key = (prop_key_hash(&source_prefix), prop_key_hash(&target_prefix));
-    let resources_key = (
-        prop_key_hash(&format!("{source_prefix}/Resources")),
-        prop_key_hash(&format!("{target_prefix}/Resources")),
-    );
+    let mut skin_source_hash = prop_key_hash(&source_prefix);
+    let skin_target_hash = prop_key_hash(&target_prefix);
+
+    let resources_source = format!("{source_prefix}/Resources");
+    let resources_target = format!("{target_prefix}/Resources");
+    let mut resources_source_hash = prop_key_hash(&resources_source);
+    let resources_target_hash = prop_key_hash(&resources_target);
 
     let parsed = parse_prop_file(source).map_err(|e| ClassicError::Bin(e.to_string()))?;
+
+    if !parsed
+        .entries
+        .iter()
+        .any(|e| e.key_hash == skin_source_hash)
+    {
+        let alt_prefix = format!(
+            "Characters/{}/Skins/Skin{source_skin}",
+            character.to_ascii_lowercase()
+        );
+        let alt_hash = prop_key_hash(&alt_prefix);
+        if parsed.entries.iter().any(|e| e.key_hash == alt_hash) {
+            skin_source_hash = alt_hash;
+            let alt_resources = format!("{alt_prefix}/Resources");
+            resources_source_hash = prop_key_hash(&alt_resources);
+        }
+    }
+
     let selected: Vec<PropEntry> = parsed
         .entries
         .into_iter()
         .filter_map(|entry| {
-            let renamed = if entry.key_hash == skin_key.0 {
-                skin_key.1
-            } else if entry.key_hash == resources_key.0 {
-                resources_key.1
+            let renamed = if entry.key_hash == skin_source_hash {
+                skin_target_hash
+            } else if entry.key_hash == resources_source_hash {
+                resources_target_hash
             } else {
                 return None;
             };
@@ -70,17 +94,88 @@ pub fn retarget_skin_bin(
         })
         .collect();
 
-    if !selected.iter().any(|e| e.key_hash == skin_key.1) {
+    if !selected.iter().any(|e| e.key_hash == skin_target_hash) {
         return Err(ClassicError::Bin(format!(
             "{source_prefix} object not found in the skin bin"
         )));
     }
 
+    // The skin object keeps pointing at its own animation graph and VFX by hash; those objects
+    // live in the source bin's dependencies (`Animations/SkinN.bin`, shared skin bins). Dropping
+    // them left legendary/mythic skins on the base graph: the model loaded but abilities froze.
+    let mut links = vec![format!(
+        "DATA/Characters/{character}/Skins/Skin{source_skin}.bin"
+    )];
+    for link in parsed.links {
+        if !links.contains(&link) {
+            links.push(link);
+        }
+    }
+
     serialize_prop_file(&PropFile {
         version: parsed.version,
-        links: vec![format!(
-            "DATA/Characters/{character}/Skins/Skin{source_skin}.bin"
-        )],
+        links,
+        entries: selected,
+    })
+    .map_err(|e| ClassicError::Bin(e.to_string()))
+}
+
+pub fn retarget_animation_bin(
+    source: &[u8],
+    character: &str,
+    source_skin: u32,
+    target_skin: u32,
+) -> Result<Vec<u8>, ClassicError> {
+    let source_prefix = format!("Characters/{character}/Animations/Skin{source_skin}");
+    let target_prefix = format!("Characters/{character}/Animations/Skin{target_skin}");
+    let mut anim_source_hash = prop_key_hash(&source_prefix);
+    let anim_target_hash = prop_key_hash(&target_prefix);
+
+    let parsed = parse_prop_file(source).map_err(|e| ClassicError::Bin(e.to_string()))?;
+
+    if !parsed
+        .entries
+        .iter()
+        .any(|e| e.key_hash == anim_source_hash)
+    {
+        let alt_prefix = format!(
+            "Characters/{}/Animations/Skin{source_skin}",
+            character.to_ascii_lowercase()
+        );
+        let alt_hash = prop_key_hash(&alt_prefix);
+        if parsed.entries.iter().any(|e| e.key_hash == alt_hash) {
+            anim_source_hash = alt_hash;
+        }
+    }
+
+    let selected: Vec<PropEntry> = parsed
+        .entries
+        .into_iter()
+        .map(|entry| {
+            let key_hash = if entry.key_hash == anim_source_hash {
+                anim_target_hash
+            } else {
+                entry.key_hash
+            };
+            PropEntry { key_hash, ..entry }
+        })
+        .collect();
+
+    if !selected.iter().any(|e| e.key_hash == anim_target_hash) {
+        return Err(ClassicError::Bin(format!(
+            "{source_prefix} object not found in the animation bin"
+        )));
+    }
+
+    let mut links = parsed.links;
+    let source_link = format!("DATA/Characters/{character}/Animations/Skin{source_skin}.bin");
+    if !links.contains(&source_link) {
+        links.push(source_link);
+    }
+
+    serialize_prop_file(&PropFile {
+        version: parsed.version,
+        links,
         entries: selected,
     })
     .map_err(|e| ClassicError::Bin(e.to_string()))
@@ -352,6 +447,12 @@ impl ClassicChampion {
     }
 
     #[must_use]
+    pub fn has_animation(&self, character: &str, skin: u32) -> bool {
+        self.wad
+            .contains(wad_path_hash(&animation_bin(character, skin)))
+    }
+
+    #[must_use]
     pub fn skin_numbers(&self, character: &str, limit: u32) -> Vec<u32> {
         (0..limit)
             .filter(|n| self.has_skin(character, *n))
@@ -412,6 +513,31 @@ impl ClassicChampion {
                 let bin = retarget_skin_bin(&source, &display, skin, slot)?;
                 std::fs::write(bins_dir.join(format!("skin{slot}.bin")), bin)?;
                 written += 1;
+            }
+
+            let anim_target = animation_bin(character, skin);
+            if self.wad.contains(wad_path_hash(&anim_target)) {
+                if let Ok(Some(anim_source)) = self.wad.read(wad_path_hash(&anim_target)) {
+                    let anim_dir = partial
+                        .join("WAD")
+                        .join(format!("{}.wad.client", self.alias))
+                        .join("data")
+                        .join("characters")
+                        .join(character.as_str())
+                        .join("animations");
+                    let _ = std::fs::create_dir_all(&anim_dir); // ignore-ok: classic anim dir
+                    for slot in slots.iter().copied().filter(|slot| *slot != skin) {
+                        if let Ok(retargeted_anim) =
+                            retarget_animation_bin(&anim_source, &display, skin, slot)
+                        {
+                            // ignore-ok: classic anim slot write
+                            let _ = std::fs::write(
+                                anim_dir.join(format!("skin{slot}.bin")),
+                                retargeted_anim,
+                            );
+                        }
+                    }
+                }
             }
         }
 
@@ -494,6 +620,13 @@ impl StandardChampion {
     }
 
     #[must_use]
+    pub fn has_animation(&self, skin: u32) -> bool {
+        let main = self.alias.to_ascii_lowercase();
+        self.wad
+            .contains(wad_path_hash(&animation_bin(&main, skin)))
+    }
+
+    #[must_use]
     pub fn skin_numbers(&self, limit: u32) -> Vec<u32> {
         (0..limit).filter(|n| self.has_skin(*n)).collect()
     }
@@ -533,6 +666,49 @@ impl StandardChampion {
         let retargeted = retarget_skin_bin(&source, &self.alias, skin, 0)?;
         std::fs::write(bins_dir.join("skin0.bin"), retargeted)?;
 
+        let target_anim = animation_bin(&main, skin);
+        if self.wad.contains(wad_path_hash(&target_anim)) {
+            match self.wad.read(wad_path_hash(&target_anim)) {
+                Ok(Some(anim_source)) => {
+                    match retarget_animation_bin(&anim_source, &self.alias, skin, 0) {
+                        Ok(retargeted_anim) => {
+                            let anim_dir = partial
+                                .join("WAD")
+                                .join(format!("{}.wad.client", self.alias))
+                                .join("data")
+                                .join("characters")
+                                .join(&main)
+                                .join("animations");
+                            std::fs::create_dir_all(&anim_dir)?;
+                            std::fs::write(anim_dir.join("skin0.bin"), retargeted_anim)?;
+                            debug!(
+                                alias = %self.alias,
+                                skin,
+                                "Custom animation graph retargeted to slot 0 for legendary/mythic skin"
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                alias = %self.alias,
+                                skin,
+                                error = %e,
+                                "Failed to retarget custom animation bin; falling back to base animation"
+                            );
+                        }
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    warn!(
+                        alias = %self.alias,
+                        skin,
+                        error = %e,
+                        "Failed to read custom animation bin from WAD"
+                    );
+                }
+            }
+        }
+
         let companions = bullet_core::champions::companion_characters(&self.alias);
         for companion in companions {
             let comp_bin = skin_bin(companion, skin);
@@ -569,6 +745,32 @@ impl StandardChampion {
                     error = %e,
                     "Companion skin not generated; it keeps its base look in this match"
                 );
+            }
+
+            let comp_anim = animation_bin(companion, skin);
+            if self.wad.contains(wad_path_hash(&comp_anim)) {
+                let _ = self // ignore-ok: companion animation fallback
+                    .wad
+                    .read(wad_path_hash(&comp_anim))
+                    .map_err(ClassicError::from)
+                    .and_then(|source| {
+                        source.ok_or_else(|| {
+                            ClassicError::Bin(format!("{companion} anim skin{skin}.bin vanished"))
+                        })
+                    })
+                    .and_then(|source| retarget_animation_bin(&source, companion, skin, 0))
+                    .and_then(|retargeted| {
+                        let comp_anim_dir = partial
+                            .join("WAD")
+                            .join(format!("{}.wad.client", self.alias))
+                            .join("data")
+                            .join("characters")
+                            .join(companion)
+                            .join("animations");
+                        std::fs::create_dir_all(&comp_anim_dir)?;
+                        std::fs::write(comp_anim_dir.join("skin0.bin"), retargeted)?;
+                        Ok(())
+                    });
             }
         }
 
