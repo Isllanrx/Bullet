@@ -4,6 +4,27 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 versions follow [Semantic Versioning](https://semver.org/). Detailed notes for each build are on the
 [Releases](https://github.com/Isllanrx/Bullet/releases) page.
 
+## [1.1] — 2026-09-28
+
+### Added
+
+- Chroma preview when hovering a chroma in the selection window.
+- The selection window can be resized from its corner; wide windows show skins in columns.
+- Optional automatic match accept, toggled from the tray (off by default).
+
+### Fixed
+
+- Legendary and mythic skins keep their own animations and effects (for example God-King Garen's E).
+- The search box in the selection window receives typing again, and search ignores accents.
+- The About window no longer cuts its subtitle or shows an empty item, and can be resized.
+
+### Security
+
+- Releases ship the provenance bundle (`.sigstore.json`) next to the installer for offline verification.
+- Party mode refuses to start instead of crashing if the system random generator fails.
+- Cryptography and WebSocket dependencies updated (`sha2` 0.11, `chacha20poly1305` 0.11,
+  `tokio-tungstenite` 0.30).
+
 ## [1.0.0] — 2026-09-25
 
 First public release.
@@ -37,4 +58,5 @@ First public release.
 - Proven in live matches for Draft and Ranked; other modes are still being validated.
 - The injector DLL refuses game builds made after 2026-10-04 07:00 UTC; a refreshed DLL is needed then.
 
+[1.1]: https://github.com/Isllanrx/Bullet/releases/tag/v1.1
 [1.0.0]: https://github.com/Isllanrx/Bullet/releases/tag/v1.0.0
