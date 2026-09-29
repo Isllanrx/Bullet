@@ -3,8 +3,7 @@ use std::time::Duration;
 
 use bullet_core::party::PartyStatus;
 use bullet_core::state::{AppState, StateReceiver, StateSender, set_party_peers, set_party_status};
-use chacha20poly1305::aead::OsRng;
-use chacha20poly1305::aead::rand_core::RngCore;
+use chacha20poly1305::aead::Generate;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
@@ -103,7 +102,8 @@ impl PartyClient {
             }
             set_party_peers(&self.state_tx, Vec::new());
 
-            let jitter = Duration::from_millis(u64::from(OsRng.next_u32() % 500));
+            // Jitter only spreads reconnects; without randomness a plain backoff is fine.
+            let jitter = Duration::from_millis(u64::from(u32::try_generate().unwrap_or(0) % 500));
             tokio::select! {
                 () = cancel.cancelled() => break PartyExit::Left,
                 () = tokio::time::sleep(backoff + jitter) => {}
@@ -123,11 +123,9 @@ impl PartyClient {
         cipher: &RoomCipher,
         cancel: &CancellationToken,
     ) -> Result<SessionEnd, PartyError> {
-        let config = WebSocketConfig {
-            max_message_size: Some(MAX_MESSAGE_BYTES),
-            max_frame_size: Some(MAX_MESSAGE_BYTES),
-            ..Default::default()
-        };
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(MAX_MESSAGE_BYTES))
+            .max_frame_size(Some(MAX_MESSAGE_BYTES));
         let connect = tokio_tungstenite::connect_async_with_config(url, Some(config), false);
         let (stream, _) = tokio::time::timeout(CONNECT_TIMEOUT, connect)
             .await
@@ -143,7 +141,7 @@ impl PartyClient {
         let (mut write, mut read) = stream.split();
 
         let send = |message: &ClientMessage| -> Result<Message, PartyError> {
-            Ok(Message::Text(serde_json::to_string(message)?))
+            Ok(Message::Text(serde_json::to_string(message)?.into()))
         };
 
         write
