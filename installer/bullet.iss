@@ -41,6 +41,7 @@ VersionInfoProductTextVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Setup - {#MyAppDescription}
 VersionInfoCopyright={#MyAppCopyright}
+VersionInfoOriginalFileName=Bullet-Setup-{#MyAppVersion}-x64.exe
 ; Programs and Features entry.
 UninstallDisplayName={#MyAppName} {#MyAppVersion}
 ; Program Files, not %LOCALAPPDATA%\Programs: nothing that touches the game may live in a folder a
