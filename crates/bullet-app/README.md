@@ -8,14 +8,13 @@ logic that decides **what** to inject and **when**.
 1. **Single instance.** If Bullet is already running, the new process brings it to the front and exits.
 2. **User and logging.** It resolves the signed-in desktop user and starts a daily rotating log in
    `%LOCALAPPDATA%\Bullet\logs`. Logging never blocks the app, and any lines dropped under pressure are counted.
-3. **Recovery.** If a previous run died while the game was suspended, it resumes the game.
-4. **Discovery.** It finds the game install and the injector tools and checks the tools' hashes.
-5. **Game build.** It reads the installed game build. After a patch, cached overlays and locale data are thrown
+3. **Discovery.** It finds the game install and the injector tools and checks the tools' hashes.
+4. **Game build.** It reads the installed game build. After a patch, cached overlays and locale data are thrown
    away. If the injector DLL does not support this build, the user is told right away and not in the middle of
    a match.
-6. **Warm-up.** The index of the game's archives is built in the background, so champion select does not have
+5. **Warm-up.** The index of the game's archives is built in the background, so champion select does not have
    to wait for it.
-7. **Services.** It starts the supervised tasks: the League client observer, the selection window session, party
+6. **Services.** It starts the supervised tasks: the League client observer, the selection window session, party
    mode and, if enabled, the skin library sync.
 
 ## The injection trigger
@@ -46,6 +45,8 @@ trusted.
 | `historic_store.rs` | Remembers the last skin used on each champion |
 | `party_manager.rs` | Connects party mode to the app state and the tray |
 | `skin_sync.rs` | Optional download of a skin library from a GitHub repository the user names in `BULLET_SKIN_SYNC` (`owner/repo`); there is no built-in source |
+| `live_game.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors); only reads, never touches the game |
+| `update_check.rs` | Reads the latest published release from GitHub every six hours and announces a newer one once (tray notification, control panel line); never downloads or runs anything. Off with `BULLET_UPDATE_CHECK=0` |
 | `logging.rs` | Log setup and level handling (`BULLET_LOG`, `RUST_LOG`) |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Bullet running without administrator rights |
 
@@ -61,3 +62,17 @@ treated as a bug: logs record what changed, not every check.
 cargo run -p bullet-app --release
 $env:BULLET_LOG = "debug"; cargo run -p bullet-app --release   # with detailed logs
 ```
+
+## Testing
+
+```powershell
+cargo test -p bullet-app --test skin_pipeline
+```
+
+`tests/skin_pipeline.rs` builds a small, deterministic game install (Zed with a legendary skin, its chroma, the
+shadow companion, animation graphs, a texture, a Summoner's Rift map that shares the shadow and a TFT map) and a
+`.fantome` skin mod, then runs them through the production code: the skin generator, mod import, catalog,
+staging, the compatibility check and the overlay builder. It then opens the archives the game would mount (the
+overlay file where one exists, the game's otherwise, as the injector redirects them) and checks the result.
+No League client, login, match or network is needed. It checks files, not rendering: how the skin looks in game
+is only visible in a real match (see `docs/build-and-ci.md`, "Test layers").

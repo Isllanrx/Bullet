@@ -25,7 +25,7 @@ pub async fn run(mut state_rx: StateReceiver, token: CancellationToken) {
                 let now = state_rx.borrow_and_update().phase == GamePhase::ReadyCheck;
                 let entered = now && !in_ready_check;
                 in_ready_check = now;
-                if entered && bullet_platform::auto_accept::is_enabled() {
+                if entered && bullet_platform::preferences::AUTO_ACCEPT.is_enabled() {
                     accept(&state_rx, &token).await;
                 }
             }
@@ -41,7 +41,7 @@ async fn accept(state_rx: &StateReceiver, token: &CancellationToken) {
         }
         // The user may have accepted, declined or dodged by hand meanwhile.
         if state_rx.borrow().phase != GamePhase::ReadyCheck
-            || !bullet_platform::auto_accept::is_enabled()
+            || !bullet_platform::preferences::AUTO_ACCEPT.is_enabled()
         {
             return;
         }

@@ -888,6 +888,8 @@ impl InjectionTrigger {
         let cache = self.paths.state_dir.join("classic_characters.json");
         let cache_dir = self.paths.state_dir.clone();
         let mods_dir = self.paths.mods_dir.clone();
+        let classic_alias = self.classic_client_alias(champion_id).await;
+        let classic_id = champion_id;
         let built = tokio::task::spawn_blocking(move || {
             let alias = resolve_alias_with_id(
                 &game_dir,
@@ -898,7 +900,10 @@ impl InjectionTrigger {
             .ok_or_else(|| bullet_classic::error::ClassicError::ChampionNotFound {
                 alias: format!("no WAD alias found for teammate champion {regular}"),
             })?;
-            let champion = ClassicChampion::open(&game_dir, &alias)?;
+            let classic_alias = classic_alias
+                .or_else(|| bullet_classic::client_data::champion_alias(&game_dir, classic_id));
+            let champion = ClassicChampion::open(&game_dir, &alias)?
+                .with_client_character(classic_alias.as_deref());
             let mut known = jade_characters(&hashes, &cache);
             if known.is_empty() {
                 known = champion.jade_names_from_bins_cached(&cache_dir);
@@ -918,6 +923,20 @@ impl InjectionTrigger {
             }
             Err(e) => {
                 error!(champion_id, error = %e, "Teammate classic build task failed");
+                None
+            }
+        }
+    }
+
+    async fn classic_client_alias(&self, classic_id: u32) -> Option<String> {
+        let client = self.lcu_client().await?;
+        match client.get_champion_assets(classic_id).await {
+            Ok(assets) if assets.alias.to_ascii_lowercase().starts_with("jade_") => {
+                Some(assets.alias)
+            }
+            Ok(_) => None,
+            Err(e) => {
+                debug!(error = %e, classic_id, "Classic champion assets unavailable from the client");
                 None
             }
         }
@@ -959,6 +978,8 @@ impl InjectionTrigger {
         let cache_dir = self.paths.state_dir.clone();
         let mods_dir = self.paths.mods_dir.clone();
         let started = std::time::Instant::now();
+        let classic_alias = self.classic_client_alias(key.champ_id).await;
+        let classic_id = key.champ_id;
         let built = tokio::task::spawn_blocking(move || {
             let alias = resolve_alias_with_id(
                 &game_dir,
@@ -969,7 +990,10 @@ impl InjectionTrigger {
             .ok_or_else(|| bullet_classic::error::ClassicError::ChampionNotFound {
                 alias: format!("no WAD alias found for champion {regular}"),
             })?;
-            let champion = ClassicChampion::open(&game_dir, &alias)?;
+            let classic_alias = classic_alias
+                .or_else(|| bullet_classic::client_data::champion_alias(&game_dir, classic_id));
+            let champion = ClassicChampion::open(&game_dir, &alias)?
+                .with_client_character(classic_alias.as_deref());
 
             let mut known = jade_characters(&hashes, &cache);
             if known.is_empty() {
@@ -1112,10 +1136,9 @@ impl InjectionTrigger {
             return None;
         }
 
-        let client_alias = match self.lcu_client().await {
+        let assets = match self.lcu_client().await {
             Some(client) => match client.get_champion_assets(champ_id).await {
-                Ok(assets) if !assets.alias.is_empty() => Some(assets.alias),
-                Ok(_) => None,
+                Ok(assets) => Some(assets),
                 Err(e) => {
                     debug!(
                         error = %e,
@@ -1127,9 +1150,18 @@ impl InjectionTrigger {
             },
             None => None,
         };
+        let client_alias = assets
+            .as_ref()
+            .map(|a| a.alias.clone())
+            .filter(|alias| !alias.is_empty());
+        let base_skin = assets
+            .as_ref()
+            .and_then(|a| a.base_skin_of(entry_id))
+            .map(skin_number);
 
         let library_dir = self.paths.library_dir.join(champ_id.to_string());
         let mods_dir = self.paths.mods_dir.clone();
+        let cache_dir = self.paths.state_dir.clone();
         let built = tokio::task::spawn_blocking(move || {
             let alias = resolve_alias_with_id(
                 &game_dir,
@@ -1140,8 +1172,8 @@ impl InjectionTrigger {
             .ok_or_else(|| bullet_classic::error::ClassicError::ChampionNotFound {
                 alias: format!("no WAD alias found for champion {champ_id}"),
             })?;
-            let champion = StandardChampion::open(&game_dir, &alias)?;
-            champion.build_mod(skin, &mods_dir)
+            let champion = StandardChampion::open(&game_dir, &alias)?.with_cache_dir(&cache_dir);
+            champion.build_mod(skin, base_skin, &mods_dir)
         })
         .await;
 
@@ -1264,10 +1296,9 @@ impl InjectionTrigger {
                 overlay_dir: self.paths.overlay_dir.clone(),
                 game_dir,
             },
-            state_dir: self.paths.state_dir.clone(),
             hook_timeout: bullet_inject::pipeline::DEFAULT_HOOK_TIMEOUT,
             build_timeout: bullet_inject::pipeline::DEFAULT_BUILD_TIMEOUT,
-            max_suspension: bullet_inject::pipeline::DEFAULT_MAX_SUSPENSION,
+            late_budget: bullet_inject::pipeline::DEFAULT_LATE_BUDGET,
         }
     }
 
