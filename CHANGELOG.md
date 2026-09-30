@@ -13,6 +13,10 @@ versions follow [Semantic Versioning](https://semver.org/). Detailed notes for e
 - A random skin is rolled when your champion locks in with none chosen (can be turned off in the panel).
 - New version notice: a Windows notification and a download link in the panel when a new release is out.
   Nothing is downloaded or installed automatically; `BULLET_UPDATE_CHECK=0` turns the check off.
+- Diagnostics for skin reports: every generated skin and overlay archive is recorded field by field, the match is
+  followed through the game's local live data, and when a match ends the logs, records and the screenshots taken
+  in that match (F12) are zipped into the logs folder. `Ctrl+Shift+B` marks a problem during a match without
+  leaving the game. Nothing reads or writes the game's memory, and other players' names are never written.
 
 ### Fixed
 
