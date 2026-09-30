@@ -286,7 +286,17 @@ async fn main() -> Result<()> {
         let tray_controller = tray.controller();
         let mark_state = state_rx.clone();
         let mark_live = live_game.clone();
-        bullet_platform::hotkey::spawn_mark_problem_hotkey(tray_controller.events());
+        if let Some(hotkey) =
+            bullet_platform::hotkey::spawn_mark_problem_hotkey(tray_controller.events())
+        {
+            live_game.on_match(Box::new(move |playing| {
+                if playing {
+                    hotkey.arm();
+                } else {
+                    hotkey.disarm();
+                }
+            }));
+        }
         let links = panel_links_for(
             &tray_controller,
             state_rx.clone(),
