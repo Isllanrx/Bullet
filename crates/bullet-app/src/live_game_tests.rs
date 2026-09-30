@@ -192,3 +192,18 @@ fn only_screenshots_from_the_match_are_collected() {
     assert_eq!(names, vec![std::ffi::OsString::from("Screen02.png")]);
     let _ = std::fs::remove_dir_all(&install); // ignore-ok: fixture cleanup
 }
+
+#[test]
+fn the_match_hook_hears_when_a_match_starts_and_ends() {
+    let live = LiveGame::default();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&seen);
+    live.on_match(Box::new(move |playing| {
+        if let Ok(mut list) = sink.lock() {
+            list.push(playing);
+        }
+    }));
+    live.clone().match_changed(true);
+    live.match_changed(false);
+    assert_eq!(*seen.lock().expect("lock"), vec![true, false]);
+}

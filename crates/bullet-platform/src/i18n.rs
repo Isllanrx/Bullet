@@ -275,7 +275,7 @@ static PORTUGUESE: Text = Text {
     panel_update_line: "Nova versão {version} disponível (você usa a {current}).",
     panel_update_download: "Abrir página de download",
     panel_mark_problem: "Marcar problema agora",
-    panel_mark_problem_hint: "Sem sair do jogo: Ctrl+Shift+B marca o momento em que algo aparece errado e F12 tira um print. No fim da partida o diagnóstico é salvo sozinho na pasta de logs.",
+    panel_mark_problem_hint: "Sem sair do jogo: durante a partida, Ctrl+Shift+B marca o momento em que algo aparece errado e F12 tira um print. No fim da partida o diagnóstico é salvo sozinho na pasta de logs.",
     panel_export_diagnostics: "Exportar diagnóstico",
 
     missing_tools_title: "Bullet — Injetor Necessário",
@@ -397,7 +397,7 @@ static SPANISH: Text = Text {
     panel_update_line: "Nueva versión {version} disponible (usas la {current}).",
     panel_update_download: "Abrir página de descarga",
     panel_mark_problem: "Marcar problema ahora",
-    panel_mark_problem_hint: "Sin salir del juego: Ctrl+Shift+B marca el momento en que algo se ve mal y F12 toma una captura. Al terminar la partida el diagnóstico se guarda solo en la carpeta de logs.",
+    panel_mark_problem_hint: "Sin salir del juego: durante la partida, Ctrl+Shift+B marca el momento en que algo se ve mal y F12 toma una captura. Al terminar la partida el diagnóstico se guarda solo en la carpeta de logs.",
     panel_export_diagnostics: "Exportar diagnóstico",
 
     missing_tools_title: "Bullet — Inyector Requerido",
@@ -519,7 +519,7 @@ static ENGLISH: Text = Text {
     panel_update_line: "Version {version} is available (you have {current}).",
     panel_update_download: "Open download page",
     panel_mark_problem: "Mark a problem now",
-    panel_mark_problem_hint: "Without leaving the game: Ctrl+Shift+B marks the moment something looks wrong and F12 takes a screenshot. When the match ends the diagnostics are saved to the logs folder on their own.",
+    panel_mark_problem_hint: "Without leaving the game: during a match, Ctrl+Shift+B marks the moment something looks wrong and F12 takes a screenshot. When the match ends the diagnostics are saved to the logs folder on their own.",
     panel_export_diagnostics: "Export diagnostics",
 
     missing_tools_title: "Bullet — Injector Required",

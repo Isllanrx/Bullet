@@ -55,7 +55,8 @@ Two files hold everything, independent of any particular skin or field:
 When a match ends, Bullet zips the last three days of logs, these manifests and the screenshots the game saved
 during that match (F12, up to twelve) into the logs folder, keeping the five newest zips. **Export diagnostics** in
 the control panel does the same on demand. `Ctrl+Shift+B` marks a moment without leaving the game; it is a
-standard Windows shortcut registration and reads nothing from the game. Other players' names and ids are never written: the match data keeps champion, skin and team only.
+standard Windows shortcut registration, held only while a match is running so other programs keep the keys the
+rest of the time, and reads nothing from the game. Other players' names and ids are never written: the match data keeps champion, skin and team only.
 
 Nothing here reads or writes the game's memory: the records come from Bullet's own files, the game's log files
 and the game's local live data API (`https://127.0.0.1:2999/liveclientdata/allgamedata`).

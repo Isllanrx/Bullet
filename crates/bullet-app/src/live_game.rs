@@ -25,13 +25,40 @@ pub struct LiveSnapshot {
     pub skin_name: String,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct LiveGame(Arc<Mutex<Option<LiveSnapshot>>>);
+type MatchHook = Box<dyn Fn(bool) + Send + Sync>;
+
+#[derive(Clone, Default)]
+pub struct LiveGame {
+    snapshot: Arc<Mutex<Option<LiveSnapshot>>>,
+    on_match: Arc<Mutex<Option<MatchHook>>>,
+}
+
+impl std::fmt::Debug for LiveGame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LiveGame")
+            .field("snapshot", &self.latest())
+            .finish_non_exhaustive()
+    }
+}
 
 impl LiveGame {
     #[must_use]
     pub fn latest(&self) -> Option<LiveSnapshot> {
-        self.0.lock().ok().and_then(|s| s.clone())
+        self.snapshot.lock().ok().and_then(|s| s.clone())
+    }
+
+    pub fn on_match(&self, hook: MatchHook) {
+        if let Ok(mut slot) = self.on_match.lock() {
+            *slot = Some(hook);
+        }
+    }
+
+    fn match_changed(&self, playing: bool) {
+        if let Ok(slot) = self.on_match.lock() {
+            if let Some(hook) = slot.as_ref() {
+                hook(playing);
+            }
+        }
     }
 
     #[must_use]
@@ -41,7 +68,7 @@ impl LiveGame {
     }
 
     fn set(&self, snapshot: Option<LiveSnapshot>) {
-        if let Ok(mut slot) = self.0.lock() {
+        if let Ok(mut slot) = self.snapshot.lock() {
             *slot = snapshot;
         }
     }
@@ -467,6 +494,7 @@ pub async fn run(
                     ..MatchWatch::default()
                 });
                 info!("Match started; reading the game's local live data every 5 s");
+                live.match_changed(true);
             }
             (Some(current), false) => {
                 info!(
@@ -474,6 +502,7 @@ pub async fn run(
                     answered = current.answered,
                     "Match ended; live game data stopped"
                 );
+                live.match_changed(false);
                 live.set(None);
                 let since = current.started.unwrap_or(SystemTime::UNIX_EPOCH);
                 let timeline = std::mem::take(&mut current.timeline);
