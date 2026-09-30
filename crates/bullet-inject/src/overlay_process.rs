@@ -228,6 +228,8 @@ impl OverlayProcess {
                                 error!(target: "overlay::dll", reason = %message, "Patcher DLL reached end of life; a refreshed DLL is required for this game patch");
                             } else if ltk_host::is_antihack_bypassed(message) {
                                 info!(target: "overlay::ah", reason = %message, "Mod contains non-standard skin structure (c0000229); safely bypassed via OPT_OUT_AH_V1");
+                            } else if let Some(wad) = ltk_host::redirected_wad(message) {
+                                info!(target: "overlay::dll", wad = %wad, "The game opened this archive from the overlay");
                             } else if ltk_host::is_dll_failure(level, message) {
                                 warn!(target: "overlay::dll", level = %level, "{}", message);
                             } else {

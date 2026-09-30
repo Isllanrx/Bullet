@@ -8,7 +8,6 @@ use crate::dll_validator::validate_dll_hash;
 use crate::error::InjectError;
 use crate::overlay::{OverlayConfig, OverlayManager};
 use crate::overlay_process::OverlayProcess;
-use crate::suspend::SuspendGuard;
 
 pub const DEFAULT_BUILD_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -22,9 +21,9 @@ pub const DEFAULT_ARM_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub const DEFAULT_HOOK_TIMEOUT: Duration = Duration::from_secs(40);
 
-pub const DEFAULT_MAX_SUSPENSION: Duration = Duration::from_secs(60);
+pub const DEFAULT_LATE_BUDGET: Duration = Duration::from_secs(60);
 
-pub const MAX_SUSPENSION_LIMIT: Duration = Duration::from_secs(180);
+pub const LATE_BUDGET_LIMIT: Duration = Duration::from_secs(180);
 
 struct CancelOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>);
 
@@ -48,13 +47,11 @@ pub struct PipelineConfig {
 
     pub overlay_config: OverlayConfig,
 
-    pub state_dir: PathBuf,
-
     pub hook_timeout: Duration,
 
     pub build_timeout: Duration,
 
-    pub max_suspension: Duration,
+    pub late_budget: Duration,
 }
 
 pub struct InjectionOutcome {
@@ -147,40 +144,9 @@ impl InjectionPipeline {
             return Err(e);
         }
 
-        let suspend_guard = match SuspendGuard::acquire(
-            game_pid,
-            game_tid,
-            Some(&self.config.state_dir),
-        ) {
-            Ok(guard) => Some(guard),
-            Err(e) => {
-                warn!(
-                    pid = game_pid,
-                    tid = game_tid,
-                    error = %e,
-                    "Could not suspend game thread (access denied or protected); proceeding with injection without suspension"
-                );
-                None
-            }
-        };
-
-        let suspended_at = std::time::Instant::now();
-        let mut suspend_guard = suspend_guard;
-        let result = self
-            .run_with_game_suspended(mods, suspended_at, &mut suspend_guard)
-            .await;
-        if suspend_guard.is_some() {
-            info!(
-                suspended_ms = suspended_at.elapsed().as_millis(),
-                "Game suspension window closed"
-            );
-        }
-
-        match result {
+        let started = std::time::Instant::now();
+        match self.run_late(mods, started).await {
             Ok((status, overlay)) => {
-                if let Some(guard) = suspend_guard {
-                    guard.resume()?;
-                }
                 self.publish(status.clone());
                 Ok(InjectionOutcome {
                     status,
@@ -188,11 +154,6 @@ impl InjectionPipeline {
                 })
             }
             Err(e) => {
-                if let Some(guard) = suspend_guard {
-                    if let Err(resume_err) = guard.resume() {
-                        error!(error = %resume_err, "EMERGENCY: failed to resume game after injection error");
-                    }
-                }
                 error!(error = %e, "Injection failed");
                 self.publish(InjectionStatus::Failed {
                     error: e.to_string(),
@@ -202,32 +163,20 @@ impl InjectionPipeline {
         }
     }
 
-    async fn run_with_game_suspended(
+    async fn run_late(
         &self,
         mods: &[String],
-        suspended_at: std::time::Instant,
-        suspend_guard: &mut Option<SuspendGuard>,
+        started: std::time::Instant,
     ) -> Result<(InjectionStatus, OverlayProcess), InjectError> {
-        let budget = self.config.max_suspension.min(MAX_SUSPENSION_LIMIT);
+        let budget = self.config.late_budget.min(LATE_BUDGET_LIMIT);
         let remaining = |now: &std::time::Instant| budget.saturating_sub(now.elapsed());
 
-        let build_timeout = self.config.build_timeout.min(remaining(&suspended_at));
+        let build_timeout = self.config.build_timeout.min(remaining(&started));
         self.build_overlay(mods, build_timeout).await?;
 
         let mut overlay = self.spawn_patcher().await?;
 
-        if let Some(guard) = suspend_guard.take() {
-            if let Err(e) = guard.resume() {
-                error!(error = %e, "Failed to resume game after building the overlay");
-                return Err(e);
-            }
-            info!(
-                suspended_ms = suspended_at.elapsed().as_millis(),
-                "Game suspension window closed; process resumed so the patcher can hook it"
-            );
-        }
-
-        let hook_budget = self.config.hook_timeout.min(remaining(&suspended_at));
+        let hook_budget = self.config.hook_timeout.min(remaining(&started));
         let status = self.confirm_hook(&mut overlay, hook_budget).await;
 
         Ok((status, overlay))
@@ -434,7 +383,7 @@ impl InjectionPipeline {
         let waited = std::time::Instant::now();
 
         if budget.is_zero() {
-            warn!("Suspension budget already spent; resuming without waiting for the hook");
+            warn!("Late-path budget already spent; not waiting for the hook");
             return InjectionStatus::Unconfirmed;
         }
 
