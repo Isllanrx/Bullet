@@ -26,7 +26,12 @@ page explains what makes a contribution easy to accept.
 - Background tasks go through the `Supervisor`, never a bare `tokio::spawn`.
 - The shared state only changes through the named transitions in `bullet-core::state`.
 - Binary parsing checks every offset; bad input returns a typed error and never panics.
-- Code, comments, logs and docs are in English. Text shown to users goes through the translation tables.
+- Code, logs and docs are in English. Text shown to users goes through the translation tables.
+- No comments in code files (Rust, HTML/CSS/JS, TypeScript, YAML, TOML, the installer script). Names, types
+  and tests say what the code does; the reason behind it goes in `docs/`, the crate README or a decision
+  record. The only comments allowed are one-line tool directives: `// ignore-ok: <why>`, `# zizmor: ignore[...]`
+  and the version after a pinned action SHA. `cargo xtask check` enforces this, and
+  `cargo xtask comments --strip` removes the rest after proving the code is unchanged.
 - No hardcoded drive letters, folders, servers or languages.
 - Log state changes, never inside a loop.
 - A new dependency needs a short written justification in the pull request.

@@ -140,9 +140,15 @@ inject→core+platform+wad, party→core, app→all.
     animation graph, VFX and shared bins the object references live there (dropping them froze God-King
     Garen's sword). Never write `animations/skin0.bin`: the skin keeps pointing at `Animations/SkinN`, and a
     slot-0 graph only replaces the base graph other players and companions use. Not yet proven in a match.
-15. **No comments in code.** No `//`, `///`, `/* */`, `<!-- -->` or `#` comments in Rust, HTML/JS, YAML,
-    TOML or scripts: names, types and tests carry the meaning; the "why" goes in `docs/`, crate READMEs or
-    ADRs. The only exception is the `// ignore-ok: <reason>` marker required by rule 4.
+15. **No comments in code, so the code stays clean.** No `//`, `///`, `//!`, `/* */`, `<!-- -->`, `#` or `;`
+    comments in Rust, HTML/CSS/JS, TypeScript, YAML (including the shell inside `run:`), TOML or the Inno
+    script. Names, types and tests carry the meaning; explanations and definitions go in a separate `.md`
+    (`docs/`, the crate README or an ADR). A comment is at most **one line**, and only a tool directive:
+    `// ignore-ok: <reason>` (rule 4), `# zizmor: ignore[...]`, the version after a pinned `uses:` SHA.
+    `cargo xtask check` fails otherwise; `cargo xtask comments --strip` removes the rest with per-language
+    lexers (no regex), writes a file only after proving its code lines are unchanged, and lists the removed
+    text in `target/comments-removed.md` to be moved into the docs. `.md`, `.json`, ignore files,
+    `CODEOWNERS` and `.env.example` are documents or data, not code.
 16. **Every fix or improvement gets a PR file.** Before presenting a change, write
     `.claude/prs/NNN-<type>-<slug>.md`: frontmatter with `title` (conventional commit style, as in `git log`),
     `labels` (from `.github/release.yml`: `bug`, `enhancement`, `security`, `documentation`, `breaking`),

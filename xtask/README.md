@@ -6,8 +6,9 @@ Project automation, run through Cargo: `cargo xtask <command>`. Nothing here shi
 
 | Command | What it does |
 | --- | --- |
-| `check` | The error-handling sweep, formatting, clippy with warnings as errors and the full test suite |
-| `adr008` | Only the error-handling sweep: fails if any discarded `Result` lacks a `// ignore-ok: <reason>` comment |
+| `check` | The error-handling sweep, the comment check, formatting, clippy with warnings as errors and the full test suite |
+| `adr008` | Only the error-handling sweep: fails if any discarded `Result` lacks a `// ignore-ok: <reason>` marker |
+| `comments` | Fails on any comment in a tracked code file other than a one-line tool directive. `--strip` removes them: each file is read by a lexer for its language (Rust, JS/TS, CSS, HTML, TOML, YAML with the bash or PowerShell inside `run:`, Inno Setup), so text inside strings, raw strings, regular expressions, template literals and heredocs is never touched. A file is written only after it lexes again with the same directives and exactly the same code lines. The removed text goes to `target/comments-removed.md` (`--report <file>`) so it can be moved into the docs |
 | `package` | Release build into `dist\`, plus `SHA256SUMS` |
 | `installer` | Runs `package`, then Inno Setup, producing `dist\installer\Bullet-Setup-<version>-x64.exe` with the workspace version |
 | `install-audit` | After installing or uninstalling, checks files and registry entries against what the installer promises, plus the hash of any injector file the user placed in `tools\` |

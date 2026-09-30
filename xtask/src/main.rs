@@ -1,4 +1,6 @@
 mod client_audit;
+mod comment_lexers;
+mod comments;
 mod fuzz;
 mod harness;
 mod install_audit;
@@ -17,6 +19,7 @@ fn main() {
     match command {
         "check" => run_check(),
         "adr008" => run_adr008_check(),
+        "comments" => comments::run(&args[2..]),
         "package" => run_package(),
         "installer" => run_installer(&args[2..]),
         "client-probe" => run_client_probe(),
@@ -82,7 +85,12 @@ fn print_help() {
         "  fuzz             - Mutate real game WADs and bins into the parsers; checks no panic and PROP round trips ([iterations] [seed])"
     );
     eprintln!("  adr008           - Fail if any discarded Result lacks a `// ignore-ok: <reason>`");
-    eprintln!("  check            - Validate workspace with fmt, clippy (-D warnings), and test");
+    eprintln!(
+        "  comments         - Fail on comments in code files; [--strip] removes them, proves the code is unchanged and lists the removed text ([--report <file>])"
+    );
+    eprintln!(
+        "  check            - Validate workspace: error-handling sweep, no comments, fmt, clippy (-D warnings), test"
+    );
     eprintln!("  package          - Build release profile and package binary into dist/");
     eprintln!(
         "  installer        - Build the Windows installer ([--prebuilt] keeps the already built and possibly signed dist/bullet.exe)"
@@ -91,8 +99,11 @@ fn print_help() {
 }
 
 fn run_check() {
-    println!("==> Step 0/4: Error-handling sweep (every discarded Result justified)...");
+    println!(
+        "==> Step 0/4: Error-handling sweep (every discarded Result justified) and no comments in code..."
+    );
     run_adr008_check();
+    comments::run(&[]);
 
     println!("==> Step 1/4: Checking formatting (cargo fmt)...");
     let status = Command::new("cargo")
