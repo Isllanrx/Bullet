@@ -48,6 +48,29 @@ injector needs.
   language.
 - **The selection window lives outside the client.** Bullet never loads code into the League client. Its window
   follows the client's position and size instead.
+- **The page trusts nothing it displays.** Everything visible is built with `textContent`, never `innerHTML`
+  (skin names are client data), and images are only `data:image/` URIs that Rust fetched, set as `.src`. The
+  page sends back only ids it was given; Rust decides what a choice means and echoes the effective selection.
+- **One click, no re-render.** A click toggles `.selected` in place, so the entry animation plays only on the
+  first paint of a champion's catalog; a chroma pick lights its whole card like the client's picker. A second
+  click on the current pick clears it, which is how "inject nothing" is said and how a restored pick is
+  dismissed.
+- **Page details that must stay in step with Rust**: the `hidden` attribute always wins over a class that sets
+  `display` (otherwise the placeholder and the list both show and push the list below the fold), and the CSS
+  corner radius equals `OVERLAY_CORNER_RADIUS`, the window region `SetWindowRgn` clips to. The resize grip is
+  inset from the corner because the rounded region clips the corner pixels.
+- **Language fallback**: the client's exact locale when a dictionary exists, else the same language
+  (`es_MX` → `es_ES`, `pt_PT` → `pt_BR`), else English. Champion quotes exist in Portuguese only, so other
+  languages show none rather than one untranslated line.
+- **The overlay window draws no frame.** `WS_THICKFRAME` only enables the native resize loop the grip starts,
+  and `WM_NCCALCSIZE` hands the whole window to the client area. The window takes the foreground; keyboard
+  focus goes to the WebView, never to the host.
+- **Quiet by default**: chroma hover messages and "game or client not running" are debug lines, not state
+  changes. A process id with no thread means the process is gone, which the stale-lock checks rely on.
+- **A malformed game build record is overwritten** with the current build; refusing to record would hide every
+  later patch.
+- **An empty dialog is worse than none**: when the welcome or About page cannot be built, the window is
+  destroyed.
 
 ## Testing
 

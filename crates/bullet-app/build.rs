@@ -22,9 +22,6 @@ fn main() {
         let mut res = winres::WindowsResource::new();
         res.set_icon(&icon_to_use.to_string_lossy());
 
-        // Shown in Explorer > Properties > Details. winres defaults ProductName to the crate name
-        // ("bullet-app"); ProductVersion/FileVersion default to CARGO_PKG_VERSION (e.g. 1.0.0).
-        // Format with two components when patch is 0 (e.g. "1.0", "1.1").
         let raw_version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
         let display_version = if let Some(stripped) = raw_version.strip_suffix(".0") {
             stripped.to_string()
@@ -60,8 +57,6 @@ fn main() {
 "#,
             );
         }
-        // A silent failure here ships an exe without icon, version info and the asInvoker
-        // manifest that keeps it unelevated, so the build must stop.
         if let Err(e) = res.compile() {
             panic!("failed to compile Windows resources (icon, version info, manifest): {e}");
         }

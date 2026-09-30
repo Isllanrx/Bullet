@@ -638,9 +638,6 @@ fn tray_party_line(
     }
 }
 
-/// Log whether the installed game build differs from the one seen on the last run.
-///
-/// Reads only the executable's PE headers (a few hundred bytes). An unknown game folder is not an
 fn injector_unusable(paths: &trigger::ResolvedPaths) -> bool {
     use bullet_app::startup::{InjectorRefusal, injector_refusal};
 

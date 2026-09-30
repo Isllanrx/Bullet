@@ -6,7 +6,6 @@
     <title>Bullet</title>
     <style>
       :root {
-        /* Hextech-inspired palette, matched to the League client's own panels. */
         --bg-0: #05080c;
         --bg-1: #0a1428;
         --bg-2: #0e1c2e;
@@ -34,12 +33,6 @@
         margin: 0;
       }
 
-      /* Attribute-based visibility must always win over a class that also sets `display` — without
-         this, `.empty{display:flex}` (or `.list{display:flex}`) out-specs the `hidden` attribute in
-         the user-agent stylesheet, because author rules beat UA rules regardless of specificity. The
-         catalog then renders with the placeholder and the real list both visible, and the placeholder
-         (full-height) pushes the list below the fold — the exact "have to scroll after locking a
-         champion" report. */
       [hidden] {
         display: none !important;
       }
@@ -53,9 +46,6 @@
         font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
         overflow: hidden;
         user-select: none;
-        /* Matches OVERLAY_CORNER_RADIUS in overlay_window.rs: the window itself is clipped to the
-           same rounded rect via SetWindowRgn, so the content radius has to line up with it or the
-           two edges show as a mismatched notch. */
         border-radius: 14px;
       }
 
@@ -98,8 +88,6 @@
       }
 
       header::after {
-        /* Thin gold hairline under the hairline border, the way League panel headers double their
-           edge — cheap to fake with a gradient, no extra asset. */
         content: "";
         position: absolute;
         left: 0;
@@ -260,9 +248,6 @@
         transition: border-color 0.12s, background 0.12s, transform 0.08s;
       }
 
-      /* Only the first paint of a freshly locked champion's catalog animates in — re-renders caused
-         by typing in search or clicking a card must not replay this, or the whole list flashes on
-         every keystroke and every selection. */
       .skin.enter {
         animation: rise 0.16s ease both;
       }
@@ -322,8 +307,6 @@
         border-color: var(--gold);
       }
 
-      /* Everything to the right of the icon — name on top, chromas directly below it. Never a
-         sibling of `.row`: that would span the card's full width and sit under the icon too. */
       .info {
         display: flex;
         flex-direction: column;
@@ -338,16 +321,10 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        /* The client itself renders skin names in caps; the underlying string stays as the client
-           sent it — this is a pure display transform, so search and the id-based click contract
-           are unaffected. */
         text-transform: uppercase;
         letter-spacing: 0.02em;
       }
 
-      /* Historic mode: the pick Bullet restored from the last game with this champion. Shown only
-         while that restored pick is still the selection, so the user always knows where it came
-         from and that one click on it clears it. */
       .historic-tag {
         display: none;
         align-self: flex-start;
@@ -360,7 +337,6 @@
         text-transform: uppercase;
       }
 
-      /* A special form (weapon, track, transformation) is not a recolor: a diamond, not a gem. */
       .chroma.form .chroma-gem {
         border-radius: 1px;
         transform: rotate(45deg) scale(0.8);
@@ -464,7 +440,6 @@
         pointer-events: none;
       }
 
-      /* Something that blocks the result of a pick (e.g. missing injection tools). */
       .notice {
         margin: 8px 12px 0;
         padding: 8px 10px;
@@ -577,7 +552,6 @@
           transform: translateY(0);
         }
       }
-      /* Skins | Mods switch. Same gold-on-panel language as the cards below it. */
       .tabs {
         display: flex;
         gap: 4px;
@@ -742,7 +716,6 @@
         border-color: var(--gold);
       }
 
-      /* Wider overlay (the user dragged the grip): cards flow into columns instead of stretching. */
       @media (min-width: 560px) {
         .list {
           display: grid;
@@ -750,8 +723,6 @@
         }
       }
 
-      /* Starts the native resize loop from Rust. Inset from the corner: the window region is
-         rounded, so the very corner pixels are clipped away. */
       .resize-grip {
         position: fixed;
         right: 5px;
@@ -782,7 +753,6 @@
         margin-right: 12px;
       }
 
-      /* Chroma preview: the client's own chroma render, fetched by id on first hover. */
       .chroma-preview {
         position: fixed;
         z-index: 20;
@@ -874,14 +844,11 @@
         const el = (id) => document.getElementById(id);
         let catalog = { championName: "", skins: [] };
         let selectedId = null;
-        // Where the current selection came from when Rust made it: "historic" or "random".
-        // Never set by a click.
         let selectionOrigin = null;
         let tab = "skins";
 
         const EMPTY_MODS = { skin: [], map: [], font: [], announcer: [], others: [] };
         const EMPTY_SELECTION = { skin: null, map: null, font: null, announcer: null, others: [] };
-        // `available` and `selection` come from Rust; the UI only ever sends ids it was given.
         let mods = { available: EMPTY_MODS, selection: EMPTY_SELECTION };
         const OTHER_CATEGORIES = ["ui", "voiceover", "loadingScreen", "vfx", "sfx", "other"];
         let lastImportCategory = "skin";
@@ -1036,8 +1003,6 @@
 
           const actions = document.createElement("div");
           actions.className = "mod-actions";
-          // Import (#147): the category is chosen here; the file is chosen in Windows' own dialog,
-          // opened by Rust — no path ever travels from this page.
           const category = document.createElement("select");
           category.id = "importCategory";
           const choices = [
@@ -1067,10 +1032,6 @@
           root.append(actions);
         }
 
-        // Hand-written dictionaries: Portuguese, English and Spanish. The client offers about two
-        // dozen locales (`product_settings.yaml`); one without a dictionary uses its language's if
-        // there is one, else English — see `setLocale` below. Skin names already come translated
-        // from the client.
         const STRINGS = {
           pt_BR: {
             searchPlaceholder: "Buscar skin…",
@@ -1199,8 +1160,6 @@
         let locale = "pt_BR";
         const t = () => STRINGS[locale] || STRINGS.en_US;
 
-        // The client's exact locale when there is a dictionary for it, else the same language
-        // (`es_MX` → `es_ES`, `pt_PT` → `pt_BR`), else English.
         function setLocale(clientLocale) {
           const language = String(clientLocale || "").split("_")[0];
           const family = Object.keys(STRINGS).find((key) => key.split("_")[0] === language);
@@ -1220,8 +1179,6 @@
           node.textContent = text || "";
         }
 
-        // Everything the user can see is built with textContent, never innerHTML: skin names come
-        // from the client and are data, not markup we control.
         function card(skin, index, animate) {
           const node = document.createElement("div");
           const isSelected =
@@ -1236,8 +1193,6 @@
           const row = document.createElement("div");
           row.className = "row";
 
-          // The tile is a same-origin `data:` URI the Rust side already fetched and embedded — set
-          // as `.src`, never through markup, so nothing here parses as HTML either way.
           let thumb;
           if (skin.tile) {
             thumb = document.createElement("img");
@@ -1275,7 +1230,6 @@
                 "chroma" + (chroma.form ? " form" : "") + (selectedId === chroma.id ? " selected" : "");
               dot.dataset.id = String(chroma.id);
               dot.dataset.name = chroma.name;
-              // With a preview the popup shows the name; the native tooltip would cover it.
               if (chroma.hasPreview) dot.dataset.preview = "1";
               else dot.title = chroma.name;
               const gem = document.createElement("span");
@@ -1315,8 +1269,6 @@
 
         function updateFooterRight() {
           const node = el("footerRight");
-          // A quote is curated pt-BR only for now (see catalog.rs); showing it in another
-          // language's UI would mean an untranslated line sitting next to translated ones.
           if (catalog.quote && locale === "pt_BR") {
             node.textContent = "“" + catalog.quote + "”";
             node.classList.add("quote");
@@ -1379,13 +1331,9 @@
           }
         }
 
-        // Toggling `.selected` in place, instead of calling `render()`, is what keeps a click instant:
-        // no DOM rebuild, so the `.enter` fade never replays across the whole list on every pick.
         function updateSelection() {
           for (const node of el("list").querySelectorAll(".skin")) {
             const chromaMatch = !!node.querySelector('.chroma[data-id="' + selectedId + '"]');
-            // A chroma pick lights up its whole card too, the way the client's own mythic/chroma
-            // picker does — not just the small gem the click landed on.
             const selected = Number(node.dataset.id) === selectedId || chromaMatch;
             node.classList.toggle("selected", selected);
             node.classList.toggle("historic", selected && selectionOrigin === "historic");
@@ -1397,13 +1345,10 @@
         }
 
         function choose(id) {
-          // A second click on the current pick clears it — the only way to say "inject nothing",
-          // and how a skin restored by historic mode is dismissed.
           const clearing = selectedId === id;
           selectedId = clearing ? null : id;
           selectionOrigin = null;
           updateSelection();
-          // The Rust side owns what a choice means; the UI only reports it.
           post(clearing ? { type: "clear" } : { type: "select", id });
         }
 
@@ -1419,8 +1364,6 @@
         });
 
         const searchInput = el("search");
-        // Only ask Rust while the page lacks focus: once the host moves focus into the WebView the
-        // input's own `focus` fires again, and re-asking would bounce focus for nothing.
         const requestFocus = () => {
           if (!document.hasFocus()) post({ type: "focus" });
         };
@@ -1434,7 +1377,6 @@
         });
         searchInput.addEventListener("input", () => render(false));
 
-        // Random mode: Rust rolls against the catalog it sent and answers with `setSelection`.
         el("dice").addEventListener("click", () => post({ type: "random" }));
 
         for (const button of [el("tabSkins"), el("tabMods")]) {
@@ -1471,7 +1413,6 @@
           } else {
             next[slot] = id;
           }
-          // Optimistic, then corrected by Rust's echo (`setModSelection`) if it refused anything.
           mods.selection = next;
           render(false);
           post({ type: "setMods", selection: next });
@@ -1479,7 +1420,6 @@
 
         const preview = el("chromaPreview");
         const previewImg = el("chromaPreviewImg");
-        // Filled by Rust through `setChromaPreview`; only `data:image/` URIs are accepted.
         const previewCache = new Map();
         let previewFor = null;
         let previewAnchor = null;
@@ -1548,14 +1488,11 @@
               if (previewAnchor) placePreview(previewAnchor);
             }
           },
-          // A selection decided on the Rust side (historic mode restoring, or dropping, a pick).
-          // Never posted back: Rust already published it.
           setSelection(id, origin) {
             selectedId = typeof id === "number" ? id : null;
             selectionOrigin = selectedId !== null && typeof origin === "string" ? origin : null;
             updateSelection();
           },
-          // The whole mods tab again, after an import added an entry. The skin selection is untouched.
           setMods(panel) {
             mods = {
               available: normalizeAvailable(panel && panel.available),

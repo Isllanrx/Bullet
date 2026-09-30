@@ -199,9 +199,6 @@ fn run_package() {
     println!("  SHA-256:  {hash_hex}");
 }
 
-// The LTK patcher license forbids redistributing League Toolkit's signed binaries outside an official LTK
-// Manager release, so the installer ships neither: the user copies both from an LTK Manager release into
-// tools\. Bullet still refuses any copy whose hash is not the audited one.
 const USER_SUPPLIED_TOOLS: [(&str, &[&str]); 2] = [
     ("ltk_patcher_host.exe", &["AUDITED_LTK_HOST_HASH"]),
     ("ltk_patcher_dll.dll", &["AUDITED_LTK_DLL_HASH"]),

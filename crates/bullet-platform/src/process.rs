@@ -19,9 +19,7 @@ use crate::error::PlatformError;
 pub struct ProcessFinder;
 
 impl ProcessFinder {
-    /// Retrieve the full executable file path of a process by its PID.
     pub fn get_process_path(pid: u32) -> Result<Option<PathBuf>, PlatformError> {
-        // SAFETY: OpenProcess with PROCESS_QUERY_LIMITED_INFORMATION to read the image path.
         let handle = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
             Ok(h) => h,
             Err(_) => return Ok(None),
@@ -30,7 +28,6 @@ impl ProcessFinder {
         let mut buffer = [0u16; 1024];
         let mut size = buffer.len() as u32;
 
-        // SAFETY: QueryFullProcessImageNameW writes the null-terminated wide string into buffer.
         let res = unsafe {
             QueryFullProcessImageNameW(
                 handle,
@@ -40,7 +37,6 @@ impl ProcessFinder {
             )
         };
 
-        // SAFETY: Always close the process handle.
         unsafe {
             let _ = CloseHandle(handle); // ignore-ok: handle released at teardown; nothing to recover from
         };
@@ -53,7 +49,6 @@ impl ProcessFinder {
         }
     }
 
-    /// Find the executable path of a process by its name (e.g. "LeagueClient.exe").
     pub fn find_process_path(exe_name: &str) -> Result<Option<PathBuf>, PlatformError> {
         if let Some(pid) = Self::find_process_by_name(exe_name)? {
             Self::get_process_path(pid)
@@ -61,10 +56,7 @@ impl ProcessFinder {
             Ok(None)
         }
     }
-    /// Find the Process ID (PID) of an executable by image name (e.g. "League of Legends.exe").
     pub fn find_process_by_name(exe_name: &str) -> Result<Option<u32>, PlatformError> {
-        // SAFETY: CreateToolhelp32Snapshot with TH32CS_SNAPPROCESS takes a snapshot of all processes.
-        // The returned handle is checked for INVALID_HANDLE_VALUE and closed before return.
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }?;
 
         let mut entry = PROCESSENTRY32W {
@@ -72,12 +64,10 @@ impl ProcessFinder {
             ..Default::default()
         };
 
-        // SAFETY: Process32FirstW is called with a valid snapshot handle and initialized struct.
         let mut has_next = unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok();
 
         let mut found_pid = None;
         while has_next {
-            // Find nul-terminator in UTF-16 array
             let len = entry
                 .szExeFile
                 .iter()
@@ -92,28 +82,22 @@ impl ProcessFinder {
                 }
             }
 
-            // SAFETY: Process32NextW is called on valid snapshot handle until failure.
             has_next = unsafe { Process32NextW(snapshot, &mut entry) }.is_ok();
         }
 
-        // SAFETY: Close the snapshot handle.
         unsafe {
             let _ = CloseHandle(snapshot); // ignore-ok: the snapshot is released either way
         };
 
         match found_pid {
             Some(pid) => debug!(exe = exe_name, pid, "Process found"),
-            // Not finding the game or the client is an ordinary state (they are not running), so
-            // this stays at debug — but it is no longer invisible.
             None => debug!(exe = exe_name, "Process not running"),
         }
 
         Ok(found_pid)
     }
 
-    /// Find the first thread ID belonging to a given process ID.
     pub fn find_first_thread_id(pid: u32) -> Result<Option<u32>, PlatformError> {
-        // SAFETY: CreateToolhelp32Snapshot with TH32CS_SNAPTHREAD takes a snapshot of all threads.
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) }?;
 
         let mut entry = THREADENTRY32 {
@@ -121,7 +105,6 @@ impl ProcessFinder {
             ..Default::default()
         };
 
-        // SAFETY: Thread32First called on valid snapshot.
         let mut has_next = unsafe { Thread32First(snapshot, &mut entry) }.is_ok();
 
         let mut found_tid = None;
@@ -131,18 +114,14 @@ impl ProcessFinder {
                 break;
             }
 
-            // SAFETY: Thread32Next called on valid snapshot.
             has_next = unsafe { Thread32Next(snapshot, &mut entry) }.is_ok();
         }
 
-        // SAFETY: Close snapshot handle.
         unsafe {
             let _ = CloseHandle(snapshot); // ignore-ok: the snapshot is released either way
         };
 
         if found_tid.is_none() {
-            // No thread for a PID means the process is gone. Callers use this as a liveness probe
-            // (stale lockfile, stale instance lock), so the distinction matters.
             debug!(pid, "No thread found for this PID; the process is gone");
         }
 
