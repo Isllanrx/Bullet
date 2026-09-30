@@ -63,13 +63,15 @@ jobs:
     needs: plan
     if: needs.plan.outputs.release == 'true'
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
       id-token: write
       attestations: write
+      actions: read
     env:
       VERSION: ${{ needs.plan.outputs.version }}
+      SIGNING: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,8 +91,67 @@ jobs:
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
 
-      - name: Build installer (cargo xtask installer)
-        run: cargo xtask installer
+      - name: Build the release binary (cargo xtask package)
+        run: cargo xtask package
+
+      - id: unsigned-exe
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-bullet-exe-${{ env.VERSION }}
+          if-no-files-found: error
+          path: dist/bullet.exe
+
+      - name: Sign bullet.exe (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          connector-url: https://githubactions.connectors.signpath.io
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_EXE_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist
+
+      - name: Build installer around that binary (cargo xtask installer --prebuilt)
+        run: cargo xtask installer --prebuilt
+
+      - id: unsigned-setup
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-setup-${{ env.VERSION }}
+          if-no-files-found: error
+          path: dist/installer/Bullet-Setup-${{ env.VERSION }}-x64.exe
+
+      - name: Sign the installer (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          connector-url: https://githubactions.connectors.signpath.io
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_SETUP_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/installer
+
+      - name: Verify the Authenticode signatures
+        if: env.SIGNING == 'true'
+        shell: pwsh
+        run: |
+          foreach ($file in @('dist/bullet.exe', "dist/installer/Bullet-Setup-$env:VERSION-x64.exe")) {
+            $signature = Get-AuthenticodeSignature $file
+            "{0}: {1} {2}" -f $file, $signature.Status, $signature.SignerCertificate.Subject
+            if ($signature.Status -ne 'Valid') { throw "$file is not validly signed" }
+          }
 
       - name: Checksums
         shell: pwsh
