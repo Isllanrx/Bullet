@@ -2,7 +2,6 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 use anyhow::Result;
-use bullet_inject::suspend::{OrphanRecovery, recover_orphaned_suspension};
 use bullet_platform::paths::state_dir;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -25,8 +24,12 @@ async fn main() -> Result<()> {
     ) {
         Ok(guard) => Some(guard),
         Err(bullet_platform::error::PlatformError::AlreadyRunning { .. }) => {
-            let _ = bullet_platform::activation::request_activation(INSTANCE_NAME); // ignore-ok: the notice below is shown either way
-            bullet_platform::activation::notify_already_running();
+            if !matches!(
+                bullet_platform::activation::request_activation(INSTANCE_NAME),
+                Ok(true)
+            ) {
+                bullet_platform::activation::notify_already_running();
+            }
             return Ok(());
         }
 
@@ -41,17 +44,11 @@ async fn main() -> Result<()> {
     let logging = logging::init(&logs_dir_path)?;
     let elevated = bullet_platform::elevation::is_elevated();
 
-    let debug_privilege = if elevated {
-        bullet_platform::elevation::enable_debug_privilege()
-    } else {
-        false
-    };
     info!(
         version = env!("CARGO_PKG_VERSION"),
         logs_dir = %logs_dir_path.display(),
         single_instance = instance_guard.is_some(),
         elevated,
-        debug_privilege,
         "Bullet starting"
     );
 
@@ -73,39 +70,14 @@ async fn main() -> Result<()> {
             error!(reason = %reason, "No LocalAppData could be resolved");
         }
     }
-    if !elevated {
-        info!(
-            "Bullet is running without administrator privileges: the late-injection fallback \
-             cannot suspend the game"
-        );
-    }
     if let Some(e) = lock_failure {
         warn!(error = %e, "Single-instance lock unavailable; a second launch will not be blocked");
     }
 
-    match recover_orphaned_suspension(&state_dir_path, bullet_platform::game_version::GAME_EXE) {
-        OrphanRecovery::Clean => {}
-        OrphanRecovery::Corrupt { content } => {
-            warn!(content = %content, "Suspension sentinel was malformed; removed")
-        }
-        OrphanRecovery::Gone { pid } => info!(
-            pid,
-            "The game an earlier run left suspended is no longer running; nothing to resume"
-        ),
-        OrphanRecovery::NotTheGame { pid, exe } => warn!(
-            pid,
-            exe = %exe,
-            "The PID an earlier run suspended now belongs to another program; left untouched"
-        ),
-        OrphanRecovery::Resumed { pid, tid } => {
-            warn!(pid, tid, "Resumed the game an earlier run left suspended")
-        }
-        OrphanRecovery::Failed { pid, tid, error } => error!(
-            pid,
-            tid,
-            error = %error,
-            "The game an earlier run left suspended could not be resumed; close it from Task Manager"
-        ),
+    let mut paths = trigger::ResolvedPaths::discover();
+
+    if injector_unusable(&paths) {
+        return Ok(());
     }
 
     let (state_tx, state_rx) = bullet_core::state::new_state_channel();
@@ -113,7 +85,7 @@ async fn main() -> Result<()> {
     let shutdown_token = CancellationToken::new();
     let mut supervisor = bullet_core::supervisor::Supervisor::new(shutdown_token.clone());
 
-    remove_retired_bridge_files(&state_dir_path);
+    remove_retired_files(&state_dir_path);
 
     let lcu_observer = bullet_lcu::observer::LcuObserver::new(state_tx.clone(), None);
     supervisor.spawn("lcu-observer", move |child_token| async move {
@@ -154,7 +126,6 @@ async fn main() -> Result<()> {
         });
     }
 
-    let mut paths = trigger::ResolvedPaths::discover();
     paths.library_dir = catalog::resolve_library_root(&paths.library_dir);
     let mut library_root = paths.library_dir.clone();
     if let Err(e) = std::fs::create_dir_all(&library_root) {
@@ -267,7 +238,7 @@ async fn main() -> Result<()> {
         });
     }
 
-    report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
+    let game_build = report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
 
     let required_tools = trigger::required_tool_files(&paths);
 
@@ -285,12 +256,47 @@ async fn main() -> Result<()> {
             None
         }
     };
+    let random_skin = bullet_platform::preferences::RANDOM_SKIN.load();
+    info!(
+        enabled = random_skin,
+        "Random skin when none is chosen setting loaded"
+    );
+
+    let update_notice = bullet_app::update_check::UpdateNotice::default();
+    let live_game = bullet_app::live_game::LiveGame::default();
+    let live_state = state_rx.clone();
+    let live_game_dir = paths.game_dir.clone();
+    let live_for_task = live_game.clone();
+    let live_logs_dir = bullet_platform::paths::logs_dir().ok();
+    supervisor.spawn("live-game", move |child_token| {
+        bullet_app::live_game::run(
+            live_state,
+            live_game_dir,
+            live_logs_dir,
+            live_for_task,
+            child_token,
+        )
+    });
+    let mut panel_links: Option<bullet_platform::panel::PanelLinks> = None;
     if let Some(tray) = tray {
         let tray_shutdown = shutdown_token.clone();
         let tray_logs_dir = bullet_platform::paths::logs_dir().ok();
         let tray_tools_dir = paths.tools_dir.clone();
         let tray_mods_dir = paths.custom_mods_root.clone();
         let tray_controller = tray.controller();
+        let mark_state = state_rx.clone();
+        let mark_live = live_game.clone();
+        bullet_platform::hotkey::spawn_mark_problem_hotkey(tray_controller.events());
+        let links = panel_links_for(
+            &tray_controller,
+            state_rx.clone(),
+            required_tools.clone(),
+            paths.game_dir.clone(),
+            game_build,
+            elevated,
+            update_notice.clone(),
+        );
+        panel_links = Some(links.clone());
 
         bullet_platform::welcome::show_welcome_window();
 
@@ -326,7 +332,16 @@ async fn main() -> Result<()> {
                                         warn!(error = %e, mods = %tray_mods_dir.display(), "Could not open the custom mods folder");
                                     }
                                 }
-                                bullet_platform::tray::TrayEvent::OpenLogs | bullet_platform::tray::TrayEvent::Activated => {
+                                bullet_platform::tray::TrayEvent::Activated => {
+                                    bullet_platform::panel::show_panel(links.clone());
+                                }
+                                bullet_platform::tray::TrayEvent::ToggleRandomSkin => {
+                                    match bullet_platform::preferences::RANDOM_SKIN.toggle() {
+                                        Ok(enabled) => info!(enabled, "Random skin when none is chosen changed from the control panel"),
+                                        Err(e) => warn!(error = %e, "Could not change the random skin setting"),
+                                    }
+                                }
+                                bullet_platform::tray::TrayEvent::OpenLogs => {
                                     match tray_logs_dir {
                                         Some(ref dir) => {
                                             let _ = std::fs::create_dir_all(dir); // ignore-ok: open_folder below refuses a missing folder and that refusal is logged
@@ -346,6 +361,43 @@ async fn main() -> Result<()> {
                                 bullet_platform::tray::TrayEvent::About => {
                                     bullet_platform::welcome::show_about_window();
                                 }
+                                bullet_platform::tray::TrayEvent::MarkProblem => {
+                                    let phase = mark_state.borrow().phase;
+                                    match mark_live.latest() {
+                                        Some(live) => warn!(
+                                            phase = ?phase,
+                                            game_time = %mark_live
+                                                .game_time_at(std::time::SystemTime::now())
+                                                .map(bullet_app::live_game::format_game_time)
+                                                .unwrap_or_default(),
+                                            champion = %live.champion,
+                                            skin_id = live.skin_id,
+                                            skin_name = %live.skin_name,
+                                            "User marked a problem"
+                                        ),
+                                        None => warn!(phase = ?phase, "User marked a problem (no live game data at this moment)"),
+                                    }
+                                }
+                                bullet_platform::tray::TrayEvent::ExportDiagnostics => {
+                                    match tray_logs_dir.as_deref().map(|dir| bullet_app::control_panel::export_diagnostics(dir, std::time::SystemTime::now(), &[])) {
+                                        Some(Ok(zip)) => {
+                                            info!(file = %zip.display(), "Diagnostics exported");
+                                            if let Some(dir) = zip.parent() {
+                                                if let Err(e) = bullet_platform::shell::open_folder(dir) {
+                                                    warn!(error = %e, "Could not open the diagnostics folder");
+                                                }
+                                            }
+                                        }
+                                        Some(Err(e)) => warn!(error = %e, "Diagnostics could not be exported"),
+                                        None => warn!("Diagnostics requested, but the logs folder could not be resolved at boot"),
+                                    }
+                                }
+                                bullet_platform::tray::TrayEvent::OpenRelease => {
+                                    let page = bullet_app::update_check::release_page();
+                                    if let Err(e) = bullet_platform::shell::open_web_page(&page) {
+                                        warn!(error = %e, page = %page, "Could not open the release page");
+                                    }
+                                }
                                 bullet_platform::tray::TrayEvent::ToggleAutostart => {
                                     match bullet_platform::autostart::toggle() {
                                         Ok(enabled) => info!(enabled, "Start with Windows changed from the tray"),
@@ -353,7 +405,7 @@ async fn main() -> Result<()> {
                                     }
                                 }
                                 bullet_platform::tray::TrayEvent::ToggleAutoAccept => {
-                                    match bullet_platform::auto_accept::toggle() {
+                                    match bullet_platform::preferences::AUTO_ACCEPT.toggle() {
                                         Ok(enabled) => info!(enabled, "Automatic match accept changed from the tray"),
                                         Err(e) => warn!(error = %e, "Could not change the automatic match accept setting"),
                                     }
@@ -365,6 +417,35 @@ async fn main() -> Result<()> {
             }
             drop(tray);
         });
+
+        if bullet_app::update_check::is_enabled(
+            std::env::var(bullet_core::env::UPDATE_CHECK)
+                .ok()
+                .as_deref(),
+        ) {
+            let update_tray = tray_controller.clone();
+            let check = bullet_app::update_check::UpdateCheck {
+                state_dir: state_dir_path.clone(),
+                notice: update_notice.clone(),
+                notify: Box::new(move |latest| {
+                    let text = bullet_platform::i18n::text();
+                    update_tray.notify(
+                        &bullet_platform::i18n::fill(
+                            text.update_available_title,
+                            "version",
+                            &latest.to_string(),
+                        ),
+                        text.update_available_body,
+                    );
+                }),
+            };
+            let state_rx_update = state_rx.clone();
+            supervisor.spawn("update-check", move |child_token| {
+                bullet_app::update_check::run(check, state_rx_update, child_token)
+            });
+        } else {
+            info!("Update check turned off (BULLET_UPDATE_CHECK)");
+        }
 
         let mut state_rx_tray = state_rx.clone();
         let tool_files = required_tools.clone();
@@ -389,7 +470,7 @@ async fn main() -> Result<()> {
         });
     }
 
-    let auto_accept = bullet_platform::auto_accept::load();
+    let auto_accept = bullet_platform::preferences::AUTO_ACCEPT.load();
     info!(
         enabled = auto_accept,
         "Automatic match accept setting loaded"
@@ -408,12 +489,14 @@ async fn main() -> Result<()> {
         own_root: paths.custom_mods_root.clone(),
         state_dir: state_dir_path.clone(),
         game_dir: paths.game_dir.clone(),
+        overlay_dir: paths.overlay_dir.clone(),
         injection_tools: required_tools,
     };
 
     if instance_guard.is_some() {
         match bullet_platform::activation::ActivationListener::create(INSTANCE_NAME) {
             Ok(listener) => {
+                let activation_panel = panel_links.clone();
                 supervisor.spawn("activation-listener", move |child_token| async move {
                     loop {
                         tokio::select! {
@@ -421,7 +504,10 @@ async fn main() -> Result<()> {
                             () = tokio::time::sleep(tokio::time::Duration::from_millis(400)) => {
                                 if listener.take_request() {
                                     info!("Another launch was detected; surfacing this instance");
-                                    bullet_platform::welcome::show_welcome_window();
+                                    match &activation_panel {
+                                        Some(links) => bullet_platform::panel::show_panel(links.clone()),
+                                        None => bullet_platform::welcome::show_welcome_window(),
+                                    }
                                 }
                             }
                         }
@@ -545,16 +631,102 @@ fn tray_party_line(
 /// Log whether the installed game build differs from the one seen on the last run.
 ///
 /// Reads only the executable's PE headers (a few hundred bytes). An unknown game folder is not an
+fn injector_unusable(paths: &trigger::ResolvedPaths) -> bool {
+    use bullet_app::startup::{InjectorRefusal, injector_refusal};
+
+    let text = bullet_platform::i18n::text();
+    let (title, body) = match injector_refusal(
+        &paths.ltk_host_exe,
+        trigger::AUDITED_LTK_HOST_HASH,
+        &paths.ltk_dll_path,
+        trigger::AUDITED_LTK_DLL_HASH,
+    ) {
+        None => return false,
+        Some(InjectorRefusal::Missing) => {
+            warn!(
+                tools = %paths.tools_dir.display(),
+                "Bullet stopped at startup: the injector files are missing from the tools folder"
+            );
+            (text.missing_tools_title, text.missing_tools_body)
+        }
+        Some(InjectorRefusal::NotAudited(files)) => {
+            for (file, error) in &files {
+                warn!(
+                    file = %file.display(),
+                    error = %error,
+                    "Bullet stopped at startup: an injector file is not the audited build"
+                );
+            }
+            (text.broken_tools_title, text.broken_tools_body)
+        }
+    };
+    if let Err(e) = std::fs::create_dir_all(&paths.tools_dir)
+        .map_err(|e| e.to_string())
+        .and_then(|()| {
+            bullet_platform::shell::open_folder(&paths.tools_dir).map_err(|e| e.to_string())
+        })
+    {
+        warn!(tools = %paths.tools_dir.display(), error = %e, "The tools folder could not be opened for the user");
+    }
+    bullet_platform::shell::message_box_warning(title, body);
+    true
+}
+
+fn panel_links_for(
+    tray: &bullet_platform::tray::TrayController,
+    state_rx: bullet_core::state::StateReceiver,
+    tools: Vec<std::path::PathBuf>,
+    game_dir: std::path::PathBuf,
+    game_build: Option<u32>,
+    elevated: bool,
+    update: bullet_app::update_check::UpdateNotice,
+) -> bullet_platform::panel::PanelLinks {
+    let controller = tray.clone();
+    let snapshot = move || {
+        let (party_line, in_room) = controller.party();
+        let lcu_connected = state_rx.borrow().lcu_connected;
+        let autostart = match bullet_platform::autostart::is_enabled() {
+            Ok(enabled) => enabled,
+            Err(e) => {
+                debug!(error = %e, "Start with Windows setting unreadable; shown as off");
+                false
+            }
+        };
+        let facts = bullet_app::control_panel::Facts {
+            status: controller.status(),
+            party_line,
+            in_room,
+            auto_accept: bullet_platform::preferences::AUTO_ACCEPT.is_enabled(),
+            random_skin: bullet_platform::preferences::RANDOM_SKIN.is_enabled(),
+            autostart,
+            tools_present: bullet_app::control_panel::tools_present(&tools),
+            game_found: bullet_app::control_panel::game_found(&game_dir),
+            lcu_connected,
+            game_build,
+            now_secs: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+            elevated,
+            update: update.available().map(|latest| latest.to_string()),
+        };
+        bullet_app::control_panel::snapshot(&facts, bullet_platform::i18n::text())
+    };
+    bullet_platform::panel::PanelLinks {
+        events: tray.events(),
+        snapshot: std::sync::Arc::new(snapshot),
+    }
+}
+
 fn report_game_build(
     state_dir: &std::path::Path,
     game_dir: &std::path::Path,
     overlay_dir: &std::path::Path,
-) {
+) -> Option<u32> {
     use bullet_platform::game_version::{self, BuildCheck};
 
     if game_dir.as_os_str().is_empty() {
         debug!("Game build not checked: the game folder is not known yet");
-        return;
+        return None;
     }
     let stamp = match game_version::check(state_dir, game_dir) {
         Ok(BuildCheck::Unchanged { stamp }) => {
@@ -584,10 +756,11 @@ fn report_game_build(
                 error = %e,
                 "Could not read or record the game build"
             );
-            return;
+            return None;
         }
     };
     report_ltk_dll_support(stamp);
+    Some(stamp)
 }
 
 fn report_ltk_dll_support(stamp: u32) {
@@ -616,16 +789,16 @@ fn report_ltk_dll_support(stamp: u32) {
     }
 }
 
-fn remove_retired_bridge_files(state_dir: &std::path::Path) {
-    for name in ["bridge.port", "bridge.token"] {
+fn remove_retired_files(state_dir: &std::path::Path) {
+    for name in ["bridge.port", "bridge.token", "suspend.lock"] {
         let path = state_dir.join(name);
         match std::fs::remove_file(&path) {
-            Ok(()) => info!(file = %path.display(), "Removed a file of the retired local bridge"),
+            Ok(()) => info!(file = %path.display(), "Removed a file of a retired feature"),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => warn!(
                 file = %path.display(),
                 error = %e,
-                "Could not remove a file of the retired local bridge"
+                "Could not remove a file of a retired feature"
             ),
         }
     }
