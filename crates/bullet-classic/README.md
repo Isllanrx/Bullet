@@ -12,8 +12,20 @@ It covers two cases.
 
 **Store skins.** `StandardChampion` opens the champion's archive (`DATA/FINAL/Champions/<Name>.wad.client`) and
 takes the chosen skin's files. It rewrites them to take the default skin's place: in the game's data, the
-skin's definition is retargeted from `SkinN` to `Skin0`. Companion characters (pets, summons, alternate forms)
-are carried along so they match. If a companion cannot be converted, the error is logged and never ignored.
+skin's definition is retargeted from `SkinN` to `Skin0`. Companion characters (pets, summons, alternate forms,
+such as Orianna's ball or Zed's shadow) are carried along so they match. They are found by scanning the
+champion's property files for `characters/<name>/` references, cached per archive, and kept when the archive
+holds a skin file for them. A chroma that has no companion file of its own uses its base skin's. If a
+companion cannot be converted, the error is logged and never ignored.
+
+The converted file is the game's own `SkinN` definition, byte for byte, under the default skin's key: it keeps
+every file the original links to (the skin's animation graph, effects and shared data live there) and is
+marked as a base skin, as the game's default skin always is. The default skin's animation graph is never
+replaced; the converted skin keeps pointing at its own.
+
+A companion file that a map archive also holds (Zed's shadow is also in `Map11.wad.client`) is written into the
+map archive too by the overlay builder, so both agree. `cargo xtask skin-audit` lists every skin where this
+happens.
 
 **Classic Rift.** Some queues use older, "classic" versions of champions. Their ids are offset (champions by
 60000, skins by 60000000) to tell them apart. `ClassicChampion` finds these characters inside the game

@@ -61,6 +61,50 @@ fn test_retarget_keeps_only_the_skin_objects_rekeyed_and_links_the_original() {
     assert_eq!(parsed.entries[0].class_hash, 1);
 }
 
+fn classified_skin_bin(character: &str, skin: u32, classification: u32) -> Vec<u8> {
+    let mut body = 1u16.to_le_bytes().to_vec();
+    body.extend_from_slice(&prop_key_hash("skinClassification").to_le_bytes());
+    body.push(7);
+    body.extend_from_slice(&classification.to_le_bytes());
+    serialize_prop_file(&PropFile {
+        version: 3,
+        links: Vec::new(),
+        entries: vec![PropEntry {
+            class_hash: 0x9b67_e9f6,
+            key_hash: prop_key_hash(&format!("Characters/{character}/Skins/Skin{skin}")),
+            body,
+        }],
+    })
+    .expect("fixture")
+}
+
+fn classification_of(bin: &[u8]) -> u32 {
+    let body = &parse_prop_file(bin).expect("parse").entries[0].body;
+    u32::from_le_bytes([body[7], body[8], body[9], body[10]])
+}
+
+#[test]
+fn test_a_chroma_retargeted_to_slot_0_is_classified_like_a_base_skin() {
+    let chroma = classified_skin_bin("Zed", 70, 2);
+    let out = retarget_skin_bin(&chroma, "Zed", 70, 0).expect("retarget");
+    assert_eq!(
+        classification_of(&out),
+        1,
+        "slot 0 is never a chroma in the game"
+    );
+    let base = classified_skin_bin("Zed", 69, 1);
+    assert_eq!(
+        classification_of(&retarget_skin_bin(&base, "Zed", 69, 0).expect("retarget")),
+        1
+    );
+    let classic = retarget_skin_bin(&chroma, "Zed", 70, 301).expect("classic slot");
+    assert_eq!(
+        classification_of(&classic),
+        2,
+        "only the slot 0 retarget changes it"
+    );
+}
+
 #[test]
 fn test_retarget_refuses_a_bin_without_the_skin_object() {
     let source = skin_bin_fixture("Jade_Annie", 5);
@@ -201,7 +245,7 @@ fn test_standard_champion_generates_slot_0_redirection() {
     assert!(champion.has_skin(1));
     assert!(!champion.has_skin(2));
 
-    let folder = champion.build_mod(1, &mods_dir).expect("build mod");
+    let folder = champion.build_mod(1, None, &mods_dir).expect("build mod");
     assert_eq!(folder, "std_zed_1");
     assert!(
         mods_dir
@@ -226,6 +270,13 @@ fn test_standard_champion_generates_slot_0_redirection() {
     let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
 }
 
+fn tibbers_bin(skin: u32) -> Vec<u8> {
+    let mut prop = parse_prop_file(&skin_bin_fixture("annietibbers", skin)).expect("fixture");
+    prop.links
+        .push("DATA/Characters/AnnieTibbers/AnnieTibbers.bin".into());
+    serialize_prop_file(&prop).expect("fixture")
+}
+
 #[test]
 fn test_standard_champion_retargets_the_companion_too() {
     let game = std::env::temp_dir().join(format!("bullet_std_pet_{}", std::process::id()));
@@ -237,17 +288,14 @@ fn test_standard_champion_retargets_the_companion_too() {
             wad_path_hash(&skin_bin("annie", 5)),
             skin_bin_fixture("Annie", 5),
         ),
-        (
-            wad_path_hash(&skin_bin("annietibbers", 5)),
-            skin_bin_fixture("annietibbers", 5),
-        ),
+        (wad_path_hash(&skin_bin("annietibbers", 5)), tibbers_bin(5)),
     ]);
     std::fs::write(champions.join("Annie.wad.client"), wad).expect("write wad");
     let mods_dir = game.join("mods");
 
     let folder = StandardChampion::open(&game, "Annie")
         .expect("open")
-        .build_mod(5, &mods_dir)
+        .build_mod(5, None, &mods_dir)
         .expect("build");
     let chars = mods_dir
         .join(&folder)
@@ -306,7 +354,7 @@ fn test_a_broken_companion_bin_still_yields_the_champion_skin() {
     let mods_dir = game.join("mods");
     let folder = StandardChampion::open(&game, "Annie")
         .expect("open")
-        .build_mod(5, &mods_dir)
+        .build_mod(5, None, &mods_dir)
         .expect("the champion skin is still built");
     let chars = mods_dir
         .join(&folder)
@@ -345,7 +393,9 @@ fn test_standard_champion_live_wad_if_installed() {
     assert!(zed_skins.contains(&1), "Zed must have skin 1");
     assert!(zed_skins.contains(&4), "Zed chroma 4 must have skin4.bin");
     let mods_dir = std::env::temp_dir().join(format!("bullet_live_mod_{}", std::process::id()));
-    let folder = champion.build_mod(1, &mods_dir).expect("build live mod");
+    let folder = champion
+        .build_mod(1, None, &mods_dir)
+        .expect("build live mod");
     assert_eq!(folder, "std_zed_1");
     assert!(
         mods_dir
@@ -363,14 +413,16 @@ fn test_standard_champion_live_wad_if_installed() {
 
     let annie = StandardChampion::open(game, "Annie").expect("open live annie wad");
     assert!(annie.has_skin(1), "Annie must have skin 1 in live patch");
-    let folder = annie.build_mod(1, &mods_dir).expect("build live annie mod");
+    let folder = annie
+        .build_mod(1, None, &mods_dir)
+        .expect("build live annie mod");
     assert_eq!(folder, "std_annie_1");
     let _ = std::fs::remove_dir_all(&mods_dir); // ignore-ok: fixture cleanup
 
     if let Ok(garen) = StandardChampion::open(game, "Garen") {
         if garen.has_skin(44) {
             let folder = garen
-                .build_mod(44, &mods_dir)
+                .build_mod(44, None, &mods_dir)
                 .expect("build live garen 44 mod");
             assert_eq!(folder, "std_garen_44");
 
@@ -409,25 +461,24 @@ fn test_standard_champion_live_wad_if_installed() {
                 );
             }
 
-            let anim_file = mods_dir
-                .join(&folder)
-                .join("WAD")
-                .join("Garen.wad.client")
-                .join("data")
-                .join("characters")
-                .join("garen")
-                .join("animations")
-                .join("skin0.bin");
             assert!(
-                anim_file.is_file(),
-                "God-King Garen must generate animations/skin0.bin"
+                skin_prop
+                    .links
+                    .contains(&"DATA/Characters/Garen/Animations/Skin44.bin".to_string()),
+                "the skin's own animation graph is reached through its links"
             );
-
-            let anim_bytes = std::fs::read(&anim_file).expect("read generated anim");
-            let anim_prop = parse_prop_file(&anim_bytes).expect("parse generated anim");
-            assert_eq!(
-                anim_prop.entries[0].key_hash,
-                prop_key_hash("Characters/Garen/Animations/Skin0")
+            assert!(
+                !mods_dir
+                    .join(&folder)
+                    .join("WAD")
+                    .join("Garen.wad.client")
+                    .join("data")
+                    .join("characters")
+                    .join("garen")
+                    .join("animations")
+                    .join("skin0.bin")
+                    .exists(),
+                "the base animation graph is never replaced"
             );
 
             let _ = std::fs::remove_dir_all(&mods_dir); // ignore-ok: fixture cleanup
@@ -436,33 +487,27 @@ fn test_standard_champion_live_wad_if_installed() {
 
     if zed_skins.contains(&15) {
         let folder = champion
-            .build_mod(15, &mods_dir)
+            .build_mod(15, None, &mods_dir)
             .expect("build live legendary mod");
         assert_eq!(folder, "std_zed_15");
-        let anim_file = mods_dir
+        let characters = mods_dir
             .join(&folder)
             .join("WAD")
             .join("Zed.wad.client")
             .join("data")
             .join("characters")
-            .join("zed")
-            .join("animations")
-            .join("skin0.bin");
+            .join("zed");
         assert!(
-            anim_file.is_file(),
-            "legendary skin must generate animations/skin0.bin"
+            !characters.join("animations").join("skin0.bin").exists(),
+            "the base animation graph is never replaced"
         );
-        let bytes = std::fs::read(&anim_file).expect("read generated anim");
-        let prop = parse_prop_file(&bytes).expect("parse generated anim prop");
-        let expected_key = prop_key_hash("Characters/Zed/Animations/Skin0");
-        assert_eq!(
-            prop.entries[0].key_hash, expected_key,
-            "animation must be re-keyed to slot 0"
-        );
-        assert_eq!(
-            prop.links,
-            vec!["DATA/Characters/Zed/Animations/Skin15.bin"],
-            "animation must link to source skin15 animation"
+        let skin = std::fs::read(characters.join("skins").join("skin0.bin")).expect("skin0");
+        assert!(
+            parse_prop_file(&skin)
+                .expect("parse")
+                .links
+                .contains(&"DATA/Characters/Zed/Animations/Skin15.bin".to_string()),
+            "the legendary graph is reached through the skin's links"
         );
         let _ = std::fs::remove_dir_all(&mods_dir); // ignore-ok: fixture cleanup
     }
@@ -489,13 +534,11 @@ fn test_ultimate_skins_compatibility_if_installed() {
     for (champ, skin, name) in ultimates {
         if let Ok(c) = StandardChampion::open(game, champ) {
             if c.has_skin(skin) {
-                let has_anim = c.has_animation(skin);
-                eprintln!(
-                    "[ULTIMATE] {} ({}, skin {}) - has_skin: true, has_anim: {}",
-                    name, champ, skin, has_anim
-                );
+                eprintln!("[ULTIMATE] {name} ({champ}, skin {skin})");
 
-                let folder = c.build_mod(skin, &mods_dir).expect("build ultimate mod");
+                let folder = c
+                    .build_mod(skin, None, &mods_dir)
+                    .expect("build ultimate mod");
                 let skin_file = mods_dir
                     .join(&folder)
                     .join("WAD")
@@ -510,28 +553,17 @@ fn test_ultimate_skins_compatibility_if_installed() {
                     "ultimate skin0.bin must be generated for {name}"
                 );
 
-                let anim_file = mods_dir
-                    .join(&folder)
-                    .join("WAD")
-                    .join(format!("{champ}.wad.client"))
-                    .join("data")
-                    .join("characters")
-                    .join(champ.to_ascii_lowercase())
-                    .join("animations")
-                    .join("skin0.bin");
-
-                if has_anim {
+                let links = parse_prop_file(&std::fs::read(&skin_file).expect("skin0"))
+                    .expect("parse skin0")
+                    .links;
+                let source = c
+                    .read_skin_bin(&champ.to_ascii_lowercase(), skin)
+                    .expect("read")
+                    .expect("source bin");
+                for link in parse_prop_file(&source).expect("parse source").links {
                     assert!(
-                        anim_file.is_file(),
-                        "ultimate animation must be generated for {name}"
-                    );
-                    let anim_bytes = std::fs::read(&anim_file).expect("read anim");
-                    let prop = parse_prop_file(&anim_bytes).expect("parse anim prop");
-                    let expected_key =
-                        prop_key_hash(&format!("Characters/{champ}/Animations/Skin0"));
-                    assert_eq!(
-                        prop.entries[0].key_hash, expected_key,
-                        "anim slot 0 re-key for {name}"
+                        links.contains(&link),
+                        "{name} keeps the source dependency {link}, where its animation graph lives"
                     );
                 }
                 eprintln!("  -> Successfully built and verified {}!", folder);
@@ -638,4 +670,230 @@ fn test_classic_champion_retargets_animation_bin() {
     );
 
     let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+fn companion_bin(character: &str, skin: u32) -> Vec<u8> {
+    let prefix = format!("Characters/{character}/Skins/Skin{skin}");
+    serialize_prop_file(&PropFile {
+        version: 3,
+        links: vec![format!("DATA/Characters/{character}/{character}.bin")],
+        entries: vec![PropEntry {
+            class_hash: 1,
+            key_hash: prop_key_hash(&prefix),
+            body: vec![0xAA; 8],
+        }],
+    })
+    .expect("fixture")
+}
+
+fn standard_game(name: &str, entries: &[(u64, Vec<u8>)]) -> PathBuf {
+    let game = std::env::temp_dir().join(format!("bullet_std_{name}_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture may not exist yet
+    let champions = game.join("DATA").join("FINAL").join("Champions");
+    std::fs::create_dir_all(&champions).expect("fixture dir");
+    std::fs::write(champions.join("Zed.wad.client"), raw_wad(entries)).expect("write wad");
+    game
+}
+
+fn generated_skin0(mods_dir: &Path, folder: &str, character: &str) -> Option<PropFile> {
+    let path = mods_dir
+        .join(folder)
+        .join("WAD")
+        .join("Zed.wad.client")
+        .join("data")
+        .join("characters")
+        .join(character)
+        .join("skins")
+        .join("skin0.bin");
+    std::fs::read(path)
+        .ok()
+        .map(|bytes| parse_prop_file(&bytes).expect("valid PROP"))
+}
+
+#[test]
+fn test_a_companion_outside_the_registry_is_found_in_the_bins_and_retargeted() {
+    let game = standard_game(
+        "shadow",
+        &[
+            (
+                wad_path_hash(&skin_bin("zed", 10)),
+                companion_bin("Zed", 10),
+            ),
+            (
+                wad_path_hash(&skin_bin("zedshadow", 10)),
+                companion_bin("ZedShadow", 10),
+            ),
+            (
+                wad_path_hash(&skin_bin("jade_zed", 10)),
+                companion_bin("Jade_Zed", 10),
+            ),
+        ],
+    );
+    let mods_dir = game.join("mods");
+    let champion = StandardChampion::open(&game, "Zed")
+        .expect("open")
+        .with_cache_dir(&game);
+    assert!(champion.companions().contains("zedshadow"));
+    assert!(
+        !champion.companions().iter().any(|c| c.starts_with("jade_")),
+        "Rift Classic characters belong to the Classic generator"
+    );
+
+    let folder = champion.build_mod(10, None, &mods_dir).expect("build");
+    let shadow = generated_skin0(&mods_dir, &folder, "zedshadow").expect("shadow skin0.bin");
+    assert_eq!(
+        shadow.entries[0].key_hash,
+        prop_key_hash("Characters/zedshadow/Skins/Skin0")
+    );
+    assert!(generated_skin0(&mods_dir, &folder, "jade_zed").is_none());
+    assert!(game.join("companion_names_zed.json").is_file());
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn test_a_chroma_without_its_own_companion_bin_uses_the_base_skin_one() {
+    let game = standard_game(
+        "chroma",
+        &[
+            (
+                wad_path_hash(&skin_bin("zed", 12)),
+                companion_bin("Zed", 12),
+            ),
+            (
+                wad_path_hash(&skin_bin("zedshadow", 10)),
+                companion_bin("ZedShadow", 10),
+            ),
+        ],
+    );
+    let mods_dir = game.join("mods");
+    let champion = StandardChampion::open(&game, "Zed").expect("open");
+
+    let without_base = champion.build_mod(12, None, &mods_dir).expect("build");
+    assert!(generated_skin0(&mods_dir, &without_base, "zedshadow").is_none());
+
+    let with_base = champion.build_mod(12, Some(10), &mods_dir).expect("build");
+    let shadow = generated_skin0(&mods_dir, &with_base, "zedshadow").expect("shadow skin0.bin");
+    assert_eq!(
+        shadow.links.first().map(String::as_str),
+        Some("DATA/Characters/zedshadow/Skins/Skin10.bin")
+    );
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn test_the_client_names_the_classic_character_when_the_alias_does_not() {
+    let game = std::env::temp_dir().join(format!("bullet_classic_wukong_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture may not exist yet
+    let champions = game.join("DATA").join("FINAL").join("Champions");
+    std::fs::create_dir_all(&champions).expect("fixture dir");
+    let wad = raw_wad(&[
+        (
+            wad_path_hash(&character_bin("jade_wukong")),
+            b"PROP".to_vec(),
+        ),
+        (
+            wad_path_hash(&skin_bin("jade_wukong", 3)),
+            skin_bin_fixture("Jade_Wukong", 3),
+        ),
+    ]);
+    std::fs::write(champions.join("MonkeyKing.wad.client"), wad).expect("write wad");
+    let mods_dir = game.join("mods");
+    let known = BTreeSet::new();
+
+    let derived = ClassicChampion::open(&game, "MonkeyKing").expect("open");
+    assert_eq!(derived.main_character(), "jade_monkeyking");
+    assert!(
+        derived
+            .skin_numbers(derived.main_character(), 50)
+            .is_empty()
+    );
+    assert!(
+        derived.build_mod(3, &[0], &known, &mods_dir).is_err(),
+        "the name derived from the archive does not exist in the game"
+    );
+
+    let named = ClassicChampion::open(&game, "MonkeyKing")
+        .expect("open")
+        .with_client_character(Some("Jade_Wukong"));
+    assert_eq!(named.main_character(), "jade_wukong");
+    assert_eq!(named.skin_numbers(named.main_character(), 50), vec![3]);
+    let folder = named
+        .build_mod(3, &[0], &known, &mods_dir)
+        .expect("builds under the client's name");
+    assert!(
+        mods_dir
+            .join(&folder)
+            .join("WAD")
+            .join("MonkeyKing.wad.client")
+            .join("data")
+            .join("characters")
+            .join("jade_wukong")
+            .join("skins")
+            .join("skin0.bin")
+            .is_file()
+    );
+
+    let unknown = ClassicChampion::open(&game, "MonkeyKing")
+        .expect("open")
+        .with_client_character(Some("Jade_Nobody"));
+    assert_eq!(
+        unknown.main_character(),
+        "jade_monkeyking",
+        "a client name absent from the archive is not trusted"
+    );
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn test_the_companion_falls_back_only_to_a_real_other_base() {
+    let game = standard_game(
+        "fallback",
+        &[
+            (
+                wad_path_hash(&skin_bin("zed", 12)),
+                companion_bin("Zed", 12),
+            ),
+            (
+                wad_path_hash(&skin_bin("zedshadow", 0)),
+                companion_bin("ZedShadow", 0),
+            ),
+            (
+                wad_path_hash(&skin_bin("zedshadow", 10)),
+                companion_bin("ZedShadow", 10),
+            ),
+        ],
+    );
+    let champion = StandardChampion::open(&game, "Zed").expect("open");
+    assert_eq!(
+        champion.companion_source_skin("zedshadow", 12, Some(10)),
+        Some(10)
+    );
+    assert_eq!(
+        champion.companion_source_skin("zedshadow", 12, Some(0)),
+        None,
+        "the default skin is never a fallback"
+    );
+    assert_eq!(
+        champion.companion_source_skin("zedshadow", 12, Some(12)),
+        None
+    );
+    assert_eq!(
+        champion.companion_source_skin("zedshadow", 10, None),
+        Some(10)
+    );
+    assert_eq!(champion.companion_source_skin("zedshadow", 12, None), None);
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn test_generated_bin_facts_report_what_changed() {
+    let chroma = classified_skin_bin("Zed", 70, 2);
+    let out = retarget_skin_bin(&chroma, "Zed", 70, 0).expect("retarget");
+    let before = skin_bin_facts(&chroma).expect("source facts");
+    let after = skin_bin_facts(&out).expect("generated facts");
+    assert_eq!(before.classification, Some(2));
+    assert_eq!(after.classification, Some(1));
+    assert_eq!(after.links[0], "DATA/Characters/Zed/Skins/Skin70.bin");
+    assert_eq!(after.objects, 1);
+    assert_eq!(skin_bin_facts(b"not a bin"), None);
 }
