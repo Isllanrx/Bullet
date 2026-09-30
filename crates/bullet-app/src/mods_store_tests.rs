@@ -103,7 +103,6 @@ fn test_selected_mods_are_staged_in_merge_order_and_stale_ones_removed() {
         staging.0.join("238_238001").exists(),
         "library skins are never touched by the custom mod cleanup"
     );
-    // The map was a folder: the original is intact after staging.
     assert!(
         root.0
             .join("maps")
@@ -113,7 +112,6 @@ fn test_selected_mods_are_staged_in_merge_order_and_stale_ones_removed() {
             .is_file()
     );
 
-    // A second run reuses the extracted archive and re-mirrors the folder.
     let again = stage_selected(&catalog, &selection, Some(238), &staging.0);
     assert_eq!(again, staged);
 }

@@ -98,6 +98,8 @@ Bullet was inspired by [Rose](https://github.com/Alban1911/Rose), a Python proje
 - **Always up to date.** Skins are generated from the game you have installed, so a patch never leaves you with
   outdated skin files.
 - **In your language.** The interface is available in English, Portuguese and Spanish.
+- **New version notice.** When a new release is published, Bullet tells you once in a Windows notification and
+  keeps a download link in the control panel. It never downloads or installs anything by itself.
 - **Free and open source.** Bullet costs nothing. If you paid for it, you were scammed.
 
 ## Why Bullet
@@ -116,7 +118,7 @@ What that means in practice:
 | | How Bullet gets there |
 | --- | --- |
 | **Security** | Runs without administrator rights. Never writes to the game folder. Loads its injector only after checking its SHA-256 against an audited build. No telemetry. Party mode data is end-to-end encrypted, so the relay cannot read it. |
-| **Robustness** | The overlay keeps every untouched byte exactly as the game shipped it, which is what patch 16.19 requires. Mods broken by a patch are dropped before they can crash the loading screen. A suspended game is always resumed, even after a crash. Every error is logged with its cause. |
+| **Robustness** | The overlay keeps every untouched byte exactly as the game shipped it, which is what patch 16.19 requires. Mods broken by a patch are dropped before they can crash the loading screen. Bullet never suspends or touches the game process; it only prepares files the game reads. Every error is logged with its cause. |
 | **Performance** | Written in Rust with no garbage collector or interpreter. The index of the game's archives is built in the background at startup. Built overlays are reused while the game build is unchanged, and entries identical to the game's are left out. |
 | **Dynamic** | Finds the game on any drive or region, follows the client's language, re-reads your champion right before building (ARAM swaps, trades, last-second locks), and rebuilds itself after every patch with no manual update of skin packages. |
 | **Independence** | One self-contained program. No client plugin loader, no Python runtime, no files read from other tools. The only external piece is the injector, loaded from Bullet's own folder. |
@@ -162,13 +164,13 @@ build.
 
 > [!IMPORTANT]
 > Bullet only accepts the **exact build** it has audited. Today that is the build shipped with
-> **LTK Manager 1.21.0 and 1.22.0**. Older versions contain a different build, which Bullet refuses. When a
+> **LTK Manager 1.21.0 through 1.24.0** (the same two files in every one of them). Older versions contain a different build, which Bullet refuses. When a
 > future LTK Manager changes these files, use the version named in the latest Bullet release notes.
 
 #### A. Get LTK Manager
 
 1. Open the [LTK Manager releases](https://github.com/LeagueToolkit/ltk-manager/releases) and download
-   `LTK.Manager_1.22.0_x64-setup.exe` (or 1.21.0).
+   `LTK.Manager_1.24.0_x64-setup.exe` (or any version from 1.21.0 to 1.24.0).
 2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
 3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
    Bullet is running: two injectors at once will conflict.
@@ -274,6 +276,7 @@ champion they are not playing.
 | `BULLET_RELAY_URL` | Party relay to use instead of the default one |
 | `BULLET_SKIN_SYNC` | A GitHub repository as `owner/repo` to download a skin library from in the background; off when unset |
 | `BULLET_PATCHER_FLAGS` | Advanced: numeric hook flags passed to the injector host |
+| `BULLET_UPDATE_CHECK` | `0` turns off the check for a new Bullet release; on when unset |
 
 All of them are optional. [`.env.example`](.env.example) documents each one and how to set it on Windows.
 Bullet reads them from the environment; it does not load a `.env` file.
@@ -353,8 +356,10 @@ C:\Program Files\Bullet\              installed program (read-only for users)
   checks the file's SHA-256 hash against the one built into Bullet. A file that has been swapped is refused
   and logged.
 - It never writes to the game folder. Everything it generates lives in `%LOCALAPPDATA%\Bullet`.
-- It collects no telemetry. It only talks to the League client on your own machine and, in party mode, to the
-  relay. The relay only receives encrypted data.
+- It collects no telemetry. It only talks to the League client on your own machine, to GitHub to read the
+  latest release number (off with `BULLET_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only
+  receives encrypted data.
+- It never downloads or runs an update. A new release is only announced; you install it yourself.
 - Every failure is logged with its cause in `%LOCALAPPDATA%\Bullet\logs`.
 
 ### What you should know

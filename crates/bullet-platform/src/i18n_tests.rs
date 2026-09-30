@@ -30,6 +30,10 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.import_io_error, "error"),
             (text.party_invalid_code, "error"),
             (text.party_join_clipboard_error, "error"),
+            (text.update_available_title, "version"),
+            (text.panel_update_line, "version"),
+            (text.panel_update_line, "current"),
+            (text.detail_dll_days_left, "n"),
         ] {
             assert!(
                 template.contains(&format!("{{{key}}}")),
