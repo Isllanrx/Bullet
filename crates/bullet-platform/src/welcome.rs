@@ -46,7 +46,7 @@ fn list_item(value: &str) -> String {
     }
 }
 
-fn welcome_html(text: &crate::i18n::Text) -> String {
+pub(crate) fn welcome_html(text: &crate::i18n::Text) -> String {
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{version}}", crate::version::display_version())
@@ -64,7 +64,7 @@ fn welcome_html(text: &crate::i18n::Text) -> String {
         .replace("{{welcome_quote_item}}", &list_item(text.welcome_quote))
 }
 
-fn about_html(text: &crate::i18n::Text) -> String {
+pub(crate) fn about_html(text: &crate::i18n::Text) -> String {
     WELCOME_HTML
         .replace("{{lang}}", text.html_lang)
         .replace("{{version}}", crate::version::display_version())
