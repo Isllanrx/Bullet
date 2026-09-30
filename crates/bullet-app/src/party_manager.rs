@@ -110,7 +110,6 @@ impl PartyManager {
         }
     }
 
-    /// The OS random generator failed: nothing secret can be made, so the party is not started.
     fn explain_no_randomness(&self, e: &bullet_party::error::PartyError) {
         error!(error = %e, "Party not started: no secure randomness for the room key or member id");
         set_party_status(

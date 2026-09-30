@@ -1,4 +1,11 @@
+mod client_audit;
+mod comment_lexers;
+mod comments;
+mod fuzz;
+mod harness;
 mod install_audit;
+mod skin_audit;
+mod smoke;
 
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
@@ -12,8 +19,9 @@ fn main() {
     match command {
         "check" => run_check(),
         "adr008" => run_adr008_check(),
+        "comments" => comments::run(&args[2..]),
         "package" => run_package(),
-        "installer" => run_installer(),
+        "installer" => run_installer(&args[2..]),
         "client-probe" => run_client_probe(),
         "overlay-demo" => run_overlay_demo(),
         "library-probe" => run_library_probe(args.get(2).and_then(|a| a.parse().ok())),
@@ -24,6 +32,12 @@ fn main() {
         "wad-writer-probe" => run_wad_writer_probe(&args[2..]),
         "wad-types" => run_wad_types(&args[2..]),
         "install-audit" => run_install_audit(&args[2..]),
+        "skin-audit" => run_skin_audit(&args[2..]),
+        "client-dump" => run_client_dump(&args[2..]),
+        "client-audit" => run_client_audit(&args[2..]),
+        "harness" => run_harness(&args[2..]),
+        "smoke" => run_smoke(&args[2..]),
+        "fuzz" => run_fuzz(&args[2..]),
         _ => print_help(),
     }
 }
@@ -52,15 +66,44 @@ fn print_help() {
     eprintln!(
         "  install-audit    - After (un)install: files, hashes and registry as bullet.iss promises (installed | uninstalled [--kept-user-content])"
     );
+    eprintln!(
+        "  skin-audit       - Generate every skin of every champion from the installed game and report defects ([--root <game>] [--out <file>] [Alias...])"
+    );
+    eprintln!(
+        "  client-audit     - Compare the installed client's skin data with the game and with Bullet's catalog ([--client <dir>] [--root <game>] [--out <file>])"
+    );
+    eprintln!(
+        "  client-dump      - Print files of the client's game data (<client dir> <relative path...>)"
+    );
+    eprintln!(
+        "  harness          - Generate skins, build real overlays and check them against the installed game ([--root <game>] [--out <file>])"
+    );
+    eprintln!(
+        "  smoke            - Run a release bullet.exe without tools, with wrong tools and with the audited injector (<bullet.exe> <tools dir>)"
+    );
+    eprintln!(
+        "  fuzz             - Mutate real game WADs and bins into the parsers; checks no panic and PROP round trips ([iterations] [seed])"
+    );
     eprintln!("  adr008           - Fail if any discarded Result lacks a `// ignore-ok: <reason>`");
-    eprintln!("  check            - Validate workspace with fmt, clippy (-D warnings), and test");
+    eprintln!(
+        "  comments         - Fail on comments in code files; [--strip] removes them, proves the code is unchanged and lists the removed text ([--report <file>])"
+    );
+    eprintln!(
+        "  check            - Validate workspace: error-handling sweep, no comments, fmt, clippy (-D warnings), test"
+    );
     eprintln!("  package          - Build release profile and package binary into dist/");
+    eprintln!(
+        "  installer        - Build the Windows installer ([--prebuilt] keeps the already built and possibly signed dist/bullet.exe)"
+    );
     eprintln!("  help             - Show this help message");
 }
 
 fn run_check() {
-    println!("==> Step 0/4: Error-handling sweep (every discarded Result justified)...");
+    println!(
+        "==> Step 0/4: Error-handling sweep (every discarded Result justified) and no comments in code..."
+    );
     run_adr008_check();
+    comments::run(&[]);
 
     println!("==> Step 1/4: Checking formatting (cargo fmt)...");
     let status = Command::new("cargo")
@@ -167,9 +210,6 @@ fn run_package() {
     println!("  SHA-256:  {hash_hex}");
 }
 
-// The LTK patcher license forbids redistributing League Toolkit's signed binaries outside an official LTK
-// Manager release, so the installer ships neither: the user copies both from an LTK Manager release into
-// tools\. Bullet still refuses any copy whose hash is not the audited one.
 const USER_SUPPLIED_TOOLS: [(&str, &[&str]); 2] = [
     ("ltk_patcher_host.exe", &["AUDITED_LTK_HOST_HASH"]),
     ("ltk_patcher_dll.dll", &["AUDITED_LTK_DLL_HASH"]),
@@ -220,13 +260,25 @@ fn clean_dist(dist_dir: &std::path::Path) {
     }
 }
 
-fn run_installer() {
-    run_package();
-
+fn run_installer(args: &[String]) {
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("workspace root")
         .to_path_buf();
+
+    if args.iter().any(|a| a == "--prebuilt") {
+        for file in ["bullet.exe", "party.json"] {
+            if !workspace_root.join("dist").join(file).is_file() {
+                eprintln!(
+                    "[ERROR] --prebuilt: dist/{file} ausente; rode `cargo xtask package` antes."
+                );
+                std::process::exit(1);
+            }
+        }
+        println!("==> Using the prebuilt dist/bullet.exe");
+    } else {
+        run_package();
+    }
 
     let iscc_candidates: Vec<PathBuf> = std::env::var_os("ISCC")
         .map(PathBuf::from)
@@ -371,6 +423,330 @@ fn bullet_tools_dir() -> PathBuf {
         .or_else(|| candidates.first())
         .cloned()
         .unwrap_or_default()
+}
+
+fn run_fuzz(args: &[String]) {
+    let iterations = args
+        .first()
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(200_000usize);
+    let seed = args
+        .get(1)
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(0x5eed_b011e7u64);
+    let Some(game) = game_dir() else {
+        return;
+    };
+    let corpus = fuzz::corpus(
+        &game,
+        &[
+            ("Zed", 10),
+            ("Orianna", 1),
+            ("Annie", 5),
+            ("Lux", 7),
+            ("Garen", 44),
+            ("Seraphine", 2),
+            ("Kaisa", 71),
+            ("MonkeyKing", 3),
+            ("Yasuo", 87),
+            ("Sona", 6),
+        ],
+    );
+    println!(
+        "corpus: {} WADs reais reduzidos, {} bins reais | iteracoes: {iterations} | semente: {seed}",
+        corpus.wads.len(),
+        corpus.bins.len()
+    );
+    let started = std::time::Instant::now();
+    let report = fuzz::run(&corpus, iterations, seed);
+    println!(
+        "{} iteracoes em {} s: {} aceitas, {} recusadas com erro tipado, {} panicos",
+        report.iterations,
+        started.elapsed().as_secs(),
+        report.accepted,
+        report.rejected,
+        report.panics.len()
+    );
+    println!(
+        "propriedades em bins reais: {} verificacoes, {} falhas",
+        report.property_checks,
+        report.property_failures.len()
+    );
+    for failure in report
+        .property_failures
+        .iter()
+        .chain(report.panics.iter())
+        .take(20)
+    {
+        println!("  FALHA {failure}");
+    }
+    if !report.panics.is_empty() || !report.property_failures.is_empty() {
+        std::process::exit(1);
+    }
+}
+
+fn run_smoke(args: &[String]) {
+    let exe = args
+        .first()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("dist").join("bullet.exe"));
+    let Some(tools) = args.get(1).map(PathBuf::from) else {
+        println!("uso: smoke <bullet.exe> <pasta com o injetor auditado>");
+        return;
+    };
+    if !exe.is_file() {
+        println!("binario nao encontrado: {}", exe.display());
+        std::process::exit(1);
+    }
+    let checks = smoke::run(&exe, &tools);
+    let failed = checks.iter().filter(|c| !c.ok).count();
+    println!(
+        "
+smoke: {} verificacoes, {failed} falhas",
+        checks.len()
+    );
+    for c in checks.iter().filter(|c| !c.ok) {
+        println!("  FALHA {}: {}", c.scenario, c.expectation);
+    }
+    if failed > 0 {
+        std::process::exit(1);
+    }
+}
+
+fn run_harness(args: &[String]) {
+    let mut root = None;
+    let mut out = std::env::temp_dir().join("bullet_harness.md");
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--root" => root = iter.next().map(PathBuf::from),
+            "--out" => {
+                if let Some(path) = iter.next() {
+                    out = PathBuf::from(path);
+                }
+            }
+            other => println!("argumento ignorado: {other}"),
+        }
+    }
+    let Some(game) = root.or_else(game_dir) else {
+        return;
+    };
+    let data = match bullet_classic::client_data::ClientGameData::for_game(&game) {
+        Ok(data) => data,
+        Err(e) => {
+            println!("dados do cliente indisponiveis: {e}");
+            return;
+        }
+    };
+    let cases = match harness::sample(&data, &game) {
+        Ok(cases) => cases,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
+    let scratch = std::env::temp_dir().join("bullet_harness_run");
+    let cache = std::env::temp_dir().join("bullet_harness_cache");
+    if let Err(e) = std::fs::create_dir_all(&cache) {
+        println!("pasta temporaria indisponivel: {e}");
+        return;
+    }
+    println!("jogo: {} | casos: {}", game.display(), cases.len());
+    let mut outcomes = Vec::with_capacity(cases.len());
+    for (n, case) in cases.iter().enumerate() {
+        let outcome = harness::run_case(case, &game, &scratch, &cache);
+        println!(
+            "[{}/{}] {} {} ({} ms)",
+            n + 1,
+            cases.len(),
+            if outcome.failures.is_empty() {
+                "ok"
+            } else {
+                "FALHA"
+            },
+            outcome.label,
+            outcome.build_ms
+        );
+        outcomes.push(outcome);
+    }
+    match std::fs::write(&out, harness::render(&outcomes)) {
+        Ok(()) => println!("relatorio: {}", out.display()),
+        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+    }
+    if outcomes.iter().any(|o| !o.failures.is_empty()) {
+        std::process::exit(1);
+    }
+}
+
+fn run_client_audit(args: &[String]) {
+    let mut client_dir = None;
+    let mut root = None;
+    let mut out = std::env::temp_dir().join("bullet_client_audit.md");
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--client" => client_dir = iter.next().map(PathBuf::from),
+            "--root" => root = iter.next().map(PathBuf::from),
+            "--out" => {
+                if let Some(path) = iter.next() {
+                    out = PathBuf::from(path);
+                }
+            }
+            other => println!("argumento ignorado: {other}"),
+        }
+    }
+    let Some(game) = root.or_else(game_dir) else {
+        return;
+    };
+    let client_dir = client_dir
+        .or_else(|| game.parent().map(std::path::Path::to_path_buf))
+        .unwrap_or_default();
+    let data = match client_audit::ClientData::open(&client_dir) {
+        Ok(data) => data,
+        Err(e) => {
+            println!("dados do cliente indisponiveis: {e}");
+            return;
+        }
+    };
+    let champions = match client_audit::champion_ids(&data) {
+        Ok(champions) => champions,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
+    let regular: Vec<&(i64, String)> = champions
+        .iter()
+        .filter(|(id, _)| !client_audit::is_classic(*id))
+        .collect();
+    println!(
+        "cliente: {} | jogo: {} | campeoes: {} (+{} classicos)",
+        client_dir.display(),
+        game.display(),
+        regular.len(),
+        champions.len() - regular.len()
+    );
+    let findings: Vec<client_audit::ChampionFindings> = regular
+        .iter()
+        .map(|(id, alias)| client_audit::audit_champion(&data, &game, *id, alias))
+        .collect();
+    let staging = std::env::temp_dir().join("bullet_client_audit_classic");
+    if let Err(e) = std::fs::create_dir_all(&staging) {
+        println!("pasta temporaria indisponivel: {e}");
+        return;
+    }
+    let classic: Vec<client_audit::ClassicFindings> = champions
+        .iter()
+        .filter(|(id, _)| client_audit::is_classic(*id))
+        .map(|(id, alias)| client_audit::audit_classic(&data, &game, *id, alias, &staging))
+        .collect();
+    let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
+    let report = format!(
+        "{}
+{}",
+        client_audit::render(&findings),
+        client_audit::render_classic(&classic)
+    );
+    match std::fs::write(&out, report) {
+        Ok(()) => println!("relatorio: {}", out.display()),
+        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+    }
+}
+
+fn run_client_dump(args: &[String]) {
+    let Some(client_dir) = args.first().map(PathBuf::from) else {
+        println!("uso: client-dump <pasta do cliente> <caminho relativo>");
+        return;
+    };
+    let data = match client_audit::ClientData::open(&client_dir) {
+        Ok(data) => data,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
+    for relative in &args[1..] {
+        match data.read(relative) {
+            Some(bytes) => println!("{}", String::from_utf8_lossy(&bytes)),
+            None => println!("ausente: {relative}"),
+        }
+    }
+}
+
+fn run_skin_audit(args: &[String]) {
+    let mut root = None;
+    let mut out = skin_audit::default_report_path();
+    let mut filters = Vec::new();
+    let mut keep: Option<PathBuf> = None;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--root" => root = iter.next().map(PathBuf::from),
+            "--out" => {
+                if let Some(path) = iter.next() {
+                    out = PathBuf::from(path);
+                }
+            }
+            "--keep" => keep = iter.next().map(PathBuf::from),
+            other => filters.push(other.to_owned()),
+        }
+    }
+    let Some(game) = root.or_else(game_dir) else {
+        return;
+    };
+    let aliases = skin_audit::champion_aliases(&game, &filters);
+    println!("jogo: {} | campeoes: {}", game.display(), aliases.len());
+
+    let maps = skin_audit::map_hashes(&game);
+    println!(
+        "WADs de mapa: {:?}",
+        maps.iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+    );
+    let cache_dir = std::env::temp_dir().join("bullet_skin_audit_cache");
+    let staging = keep
+        .clone()
+        .unwrap_or_else(|| std::env::temp_dir().join("bullet_skin_audit_mods"));
+    let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder may not exist
+    if let Err(e) = std::fs::create_dir_all(&staging).and(std::fs::create_dir_all(&cache_dir)) {
+        println!("pasta temporaria indisponivel: {e}");
+        return;
+    }
+
+    let started = std::time::Instant::now();
+    let mut reports = Vec::with_capacity(aliases.len());
+    for alias in &aliases {
+        let report =
+            skin_audit::audit_champion(&game, alias, &maps, &cache_dir, &staging, keep.is_some());
+        let findings = report.skins.values().filter(|f| !f.is_clean()).count();
+        println!(
+            "{alias}: skins={} companheiros={:?} achados={findings} varredura_ms={}{}",
+            report.skins.len(),
+            report.companion_skins.keys().collect::<Vec<_>>(),
+            report.scan_ms,
+            report
+                .open_error
+                .as_deref()
+                .map(|e| format!(" ERRO={e}"))
+                .unwrap_or_default()
+        );
+        reports.push(report);
+    }
+    let missed = skin_audit::missed_companions(&reports, &game);
+    let rendered = skin_audit::render(&reports, &missed);
+    match std::fs::write(&out, rendered) {
+        Ok(()) => println!(
+            "
+relatorio: {} ({} s)",
+            out.display(),
+            started.elapsed().as_secs()
+        ),
+        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+    }
+    if keep.is_none() {
+        let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
+    }
 }
 
 fn run_install_audit(args: &[String]) {
@@ -1179,7 +1555,7 @@ fn run_wad_writer_probe(args: &[String]) {
                 continue;
             }
         };
-        let mut writer = WadWriter::new(*source.signature());
+        let mut writer = WadWriter::rebased_on(&source);
         let index = writer.add_source(file);
         for entry in source.toc() {
             writer.insert(entry.path_hash, WriterEntry::from_wad(index, entry));

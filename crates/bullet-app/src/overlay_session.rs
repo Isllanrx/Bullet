@@ -34,6 +34,28 @@ fn wanted_for_phase(phase: &GamePhase) -> bool {
     matches!(phase, GamePhase::ChampSelect | GamePhase::Finalization)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RandomFallback {
+    pub enabled: bool,
+    pub finalization: bool,
+    pub target_chosen: bool,
+    pub already_rolled: bool,
+    pub declined: bool,
+    pub lcu_skin: Option<bullet_core::selection::SkinId>,
+}
+
+#[must_use]
+pub fn should_roll_random(champion_id: ChampionId, fallback: RandomFallback) -> bool {
+    fallback.enabled
+        && fallback.finalization
+        && !fallback.target_chosen
+        && !fallback.already_rolled
+        && !fallback.declined
+        && fallback.lcu_skin.is_none_or(|skin| {
+            bullet_core::selection::SelectionMode::is_base_skin(skin, champion_id)
+        })
+}
+
 pub struct OverlaySession {
     controller: OverlayController,
     commands: UnboundedReceiver<OverlayCommand>,
@@ -52,7 +74,10 @@ pub struct OverlaySession {
 
     historic_recorded: Option<OverlayTarget>,
 
-    /// Chroma previews already fetched for the current champion, as `data:` URIs.
+    random_rolled: Option<ChampionId>,
+
+    random_declined: Option<ChampionId>,
+
     chroma_previews: std::collections::HashMap<u32, String>,
 }
 
@@ -64,6 +89,8 @@ pub struct ModsConfig {
     pub state_dir: PathBuf,
 
     pub game_dir: PathBuf,
+
+    pub overlay_dir: PathBuf,
 
     pub injection_tools: Vec<PathBuf>,
 }
@@ -90,6 +117,8 @@ impl OverlaySession {
             historic_restored: None,
             historic_consulted: None,
             historic_recorded: None,
+            random_rolled: None,
+            random_declined: None,
             chroma_previews: std::collections::HashMap::new(),
         }
     }
@@ -110,6 +139,7 @@ impl OverlaySession {
                         Some(OverlayCommand::OpenModsFolder) => self.open_mods_folder(),
                         Some(OverlayCommand::Clear) => {
                             self.dismiss_historic();
+                            self.random_declined = catalog_champion;
                             handle_command(&self.state_tx, OverlayCommand::Clear, catalog.as_ref());
                         }
                         Some(OverlayCommand::Random) => self.roll_random(catalog.as_ref()),
@@ -131,10 +161,11 @@ impl OverlaySession {
                     }
                 }
                 () = tokio::time::sleep(TRACK_INTERVAL) => {
-                    let (wanted, champion, target_stale, target, lcu_skin, confirmed) = {
+                    let (wanted, finalization, champion, target_stale, target, lcu_skin, confirmed) = {
                         let state = self.state_rx.borrow_and_update();
                         (
                             wanted_for_phase(&state.phase),
+                            state.phase == GamePhase::Finalization,
                             state.champion_id,
                             target_is_stale(state.overlay_target.as_ref(), state.champion_id),
                             state.overlay_target.clone(),
@@ -165,14 +196,16 @@ impl OverlaySession {
                         self.chroma_previews.clear();
                         catalog = self.refresh_catalog(champion).await;
                         if champion.is_none() {
-
                             self.historic_consulted = None;
                             self.historic_restored = None;
+                            self.random_rolled = None;
+                            self.random_declined = None;
                         }
                     }
                     if let (Some(champion_id), Some(built)) = (champion, catalog.as_ref()) {
                         let target = if target_stale { None } else { target };
                         self.track_historic(champion_id, built, target.as_ref(), lcu_skin);
+                        self.random_when_nothing_chosen(champion_id, built, finalization, lcu_skin);
                     }
                 }
             }
@@ -214,6 +247,9 @@ impl OverlaySession {
                     "Skin catalog sent to the overlay"
                 );
                 self.controller.set_catalog(json);
+                if !classic {
+                    self.warm_companions(built.alias.clone()).await;
+                }
                 Some(built)
             }
             Err(e) => {
@@ -225,6 +261,48 @@ impl OverlaySession {
 }
 
 impl OverlaySession {
+    async fn warm_companions(&self, alias: Option<String>) {
+        let Some(alias) = alias else {
+            return;
+        };
+        let Some(game_dir) = bullet_platform::paths::normalize_game_dir(&self.mods.game_dir)
+            .or_else(bullet_platform::paths::discover_game_dir)
+        else {
+            return;
+        };
+        let cache_dir = self.mods.state_dir.clone();
+        let overlay_dir = self.mods.overlay_dir.clone();
+        let warmed = tokio::task::spawn_blocking(move || {
+            let companions = bullet_classic::generator::StandardChampion::open(&game_dir, &alias)
+                .map(|champion| champion.with_cache_dir(&cache_dir).companions())?;
+            let skin_bins: Vec<u64> = std::iter::once(alias.to_ascii_lowercase())
+                .chain(companions.iter().cloned())
+                .map(|character| {
+                    bullet_wad::hash::wad_path_hash(&format!(
+                        "data/characters/{character}/skins/skin0.bin"
+                    ))
+                })
+                .collect();
+            if let Err(e) = bullet_inject::overlay_builder::prewarm_shared_copies(
+                &game_dir,
+                &overlay_dir,
+                &skin_bins,
+            ) {
+                warn!(error = %e, "Map WAD not copied ahead; the first build of this skin copies it");
+            }
+            Ok::<_, bullet_classic::error::ClassicError>(companions)
+        })
+        .await;
+        match warmed {
+            Ok(Ok(companions)) => debug!(
+                companions = ?companions,
+                "Companion characters indexed and shared map WADs prepared before the skin is chosen"
+            ),
+            Ok(Err(e)) => debug!(error = %e, "Companion characters not indexed ahead of the build"),
+            Err(e) => warn!(error = %e, "Companion indexing task failed"),
+        }
+    }
+
     async fn refresh_mods(&mut self, champion_id: ChampionId, alias: Option<String>) -> ModsPanel {
         if alias.is_none() {
             debug!(
@@ -385,6 +463,32 @@ impl OverlaySession {
             );
             historic_store::save(&self.mods.state_dir, &self.historic);
         }
+    }
+
+    fn random_when_nothing_chosen(
+        &mut self,
+        champion_id: ChampionId,
+        catalog: &Catalog,
+        finalization: bool,
+        lcu_skin: Option<bullet_core::selection::SkinId>,
+    ) {
+        let fallback = RandomFallback {
+            enabled: bullet_platform::preferences::RANDOM_SKIN.is_enabled(),
+            finalization,
+            target_chosen: self.state_rx.borrow().overlay_target.is_some(),
+            already_rolled: self.random_rolled == Some(champion_id),
+            declined: self.random_declined == Some(champion_id),
+            lcu_skin,
+        };
+        if !should_roll_random(champion_id, fallback) {
+            return;
+        }
+        self.random_rolled = Some(champion_id);
+        info!(
+            champion_id,
+            "Champion locked with no skin chosen; rolling a random one so the match does not start without a skin"
+        );
+        self.roll_random(Some(catalog));
     }
 
     fn roll_random(&self, catalog: Option<&Catalog>) {

@@ -6,7 +6,9 @@ pub const PATCHER_FLAGS: &str = "BULLET_PATCHER_FLAGS";
 
 pub const SKIN_SYNC: &str = "BULLET_SKIN_SYNC";
 
-pub const ALL: [&str; 4] = [LOG, RELAY_URL, PATCHER_FLAGS, SKIN_SYNC];
+pub const UPDATE_CHECK: &str = "BULLET_UPDATE_CHECK";
+
+pub const ALL: [&str; 5] = [LOG, RELAY_URL, PATCHER_FLAGS, SKIN_SYNC, UPDATE_CHECK];
 
 #[cfg(test)]
 mod tests {

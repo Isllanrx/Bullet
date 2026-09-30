@@ -4,8 +4,6 @@ use thiserror::Error;
 pub enum InjectError {
     #[error("DLL hash mismatch: expected {expected}, got {actual}")]
     DllHashMismatch { expected: String, actual: String },
-    #[error("suspension failed: {0}")]
-    Suspend(String),
     #[error("overlay build failed: {0}")]
     Overlay(String),
 

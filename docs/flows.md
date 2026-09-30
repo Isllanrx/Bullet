@@ -6,13 +6,19 @@
 Client enters champion select
   └─ bullet-lcu publishes the phase and the team roster
      └─ the selection window opens next to the client; the player picks a skin
+        · the last skin used on that champion is restored when nothing else is chosen
+        · when the champion locks in (finalization) with no skin chosen, no skin picked in the client and
+          no explicit "Clear", a random skin is rolled (control panel option, on by default)
         └─ the trigger settles the choice (100 ms for the first pick, 900 ms after a change)
            └─ the champion and selection are read again from the client
               └─ bullet-classic opens DATA/FINAL/Champions/<Name>.wad.client and turns the chosen skin
-                 into the default one (SkinN → Skin0), companions included
+                 into the default one (SkinN → Skin0), companions included (found by scanning the
+                 champion's property files; a chroma without its own companion file uses its base skin's)
               └─ bullet-inject builds the overlay
                  · entries identical to the game's are dropped
-                 · paths shared with map archives are left as the game has them
+                 · paths shared with map archives change in the map archive too
+                 · a game archive is copied once per patch and reused (maps are copied when the
+                   champion is locked in)
            └─ the injector host is armed while champion select is still running
            └─ the skin is registered with the client (an owned skin as itself, an unowned one as the default)
 Game starts
@@ -45,7 +51,10 @@ build cost when the mod is selected is still open work.
 
 ```text
 A classic champion is detected (champion ids offset by 60000, skin ids by 60000000)
-  └─ bullet-classic builds the mod from the installed game
+  └─ the catalog lists the client's own Classic skins for that champion (Classic-only skins included), keeping
+     those the game has a Classic skin file for
+  └─ bullet-classic builds the mod from the installed game, under the Classic character the client names
+     (Wukong's is jade_wukong, not a name derived from the archive)
      · classic characters are matched by name in the archive's table of contents
      · without a hash table, the champion's data files are scanned to find them
 ```
@@ -80,8 +89,8 @@ Bullet starts → finds the game → reads the game build
 
 ## 6. Shutdown and recovery
 
-- When the game has to be suspended (a rare fallback), a guard resumes it on `Drop`, even during a panic.
-- If Bullet dies while the game is suspended, a marker file records the process. On the next start, Bullet
-  resumes it after checking that the process id still belongs to the game.
+- Bullet never suspends or opens the game's threads. When the game starts before the injector is armed, the
+  late path builds the overlay and arms the injector within a fixed time budget; the hook may then land too
+  late, and the log says so.
 - Uninstalling removes logs, state, overlays and generated mods, and asks before deleting the user's own
   skins. `cargo xtask install-audit` checks the result.

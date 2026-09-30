@@ -16,6 +16,7 @@ bullet-app = { path = "../crates/bullet-app" }
 bullet-core = { path = "../crates/bullet-core" }
 bullet-classic = { path = "../crates/bullet-classic" }
 bullet-inject = { path = "../crates/bullet-inject" }
+bullet-lcu = { path = "../crates/bullet-lcu" }
 bullet-party = { path = "../crates/bullet-party" }
 bullet-platform = { path = "../crates/bullet-platform" }
 bullet-wad = { path = "../crates/bullet-wad" }
