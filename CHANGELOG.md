@@ -4,6 +4,35 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 versions follow [Semantic Versioning](https://semver.org/). Detailed notes for each build are on the
 [Releases](https://github.com/Isllanrx/Bullet/releases) page.
 
+## [1.2] — 2026-09-30
+
+### Added
+
+- Control panel: click the tray icon for options, party, folders and a diagnostics list (injector, game,
+  client, injector DLL deadline).
+- A random skin is rolled when your champion locks in with none chosen (can be turned off in the panel).
+- New version notice: a Windows notification and a download link in the panel when a new release is out.
+  Nothing is downloaded or installed automatically; `BULLET_UPDATE_CHECK=0` turns the check off.
+
+### Fixed
+
+- Zed's shadow and the companions of 895 other skins (Shaco, Syndra, Taliyah, Yorick and more) now take the
+  skin's look: files a map also holds are changed in the map too.
+- Skins keep their own animations; the default skin's animation graph is no longer replaced.
+- Chromas are loaded as the game loads its default skin.
+- Orianna's ball and every other companion character follow the chosen skin.
+- Every skin tier the client lists can be chosen (such as Immortalized Legend), and Rift Classic offers every
+  Classic skin, including Wukong's.
+- Champion names, forms and companions are read from your installed client instead of fixed tables.
+- Opening Bullet a second time shows the control panel instead of a blocking message.
+
+### Security
+
+- Bullet no longer suspends the game or asks for the debug privilege.
+- Bullet refuses to start without the audited injector and says where to put it.
+- Hardened the game file parsers against malformed data found by fuzzing.
+- The installer's version details are complete, and releases are code-signed once signing is enabled.
+
 ## [1.1] — 2026-09-28
 
 ### Added
@@ -58,5 +87,6 @@ First public release.
 - Proven in live matches for Draft and Ranked; other modes are still being validated.
 - The injector DLL refuses game builds made after 2026-10-04 07:00 UTC; a refreshed DLL is needed then.
 
+[1.2]: https://github.com/Isllanrx/Bullet/releases/tag/v1.2
 [1.1]: https://github.com/Isllanrx/Bullet/releases/tag/v1.1
 [1.0.0]: https://github.com/Isllanrx/Bullet/releases/tag/v1.0.0
