@@ -9,16 +9,18 @@ crate inherits its version from `[workspace.package]` in the root `Cargo.toml`.
 ## Local checks
 
 ```powershell
-cargo xtask check    # error-handling sweep, rustfmt, clippy -D warnings, all tests
+cargo xtask check    # error-handling sweep, no comments in code, rustfmt, clippy -D warnings, all tests
 cargo deny check     # advisories, licenses, banned crates, sources
 ```
 
 `cargo xtask check` runs, in order:
 
 1. the error-handling sweep (every discarded `Result` must carry a written justification),
-2. `cargo fmt --all -- --check`,
-3. `cargo clippy --workspace --all-targets -- -D warnings`,
-4. `cargo test --workspace`.
+2. the comment check (`cargo xtask comments`: no comment in a tracked code file other than a one-line tool
+   directive),
+3. `cargo fmt --all -- --check`,
+4. `cargo clippy --workspace --all-targets -- -D warnings`,
+5. `cargo test --workspace`.
 
 ## Running the tests without Windows
 

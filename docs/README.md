@@ -42,6 +42,8 @@ Each crate also has its own README with its files and responsibilities: [bullet-
 4. **Nothing is hardcoded to one machine.** The game path is discovered, the language follows the client,
    and servers can be configured. All configuration lives in `bullet_core::env`.
 5. **Logs record changes.** A line repeated inside a polling loop is treated as a bug.
+6. **Code carries no comments.** Names, types and tests say what the code does; why it does it lives in these
+   docs and the crate READMEs. Only one-line tool directives remain, and `cargo xtask check` enforces it.
 
 ## Checking a change
 
