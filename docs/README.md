@@ -37,7 +37,7 @@ Each crate also has its own README with its files and responsibilities: [bullet-
 2. **No panics at runtime.** `unwrap()` and `expect()` only appear in tests. Every discarded `Result` carries
    a comment that explains why it is safe to ignore, and a check enforces this.
 3. **Least privilege.** Bullet never asks for administrator rights and never writes to the game folder.
-   External resources (a suspended process, a child process, a temporary file) are released by `Drop`, even
+   External resources (a child process, a temporary file) are released by `Drop`, even
    during a panic.
 4. **Nothing is hardcoded to one machine.** The game path is discovered, the language follows the client,
    and servers can be configured. All configuration lives in `bullet_core::env`.

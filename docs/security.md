@@ -51,6 +51,9 @@ to the workflow and the commit that produced it.
 - Bullet never runs elevated. External resources are released by owning guards.
 - State files are written atomically, and a file handle is closed before its file is replaced (Windows keeps
   open files locked).
+- Updates are announced, never applied: Bullet reads the tag of the latest published release from the GitHub
+  API, compares it with its own version and shows a notice. It downloads no file and runs nothing; the notice
+  opens the release page in the browser, and only `https://` pages can be opened.
 - Party mode never sends account ids or names. The relay sees a room id derived from the invite key and
   encrypted blobs, nothing else.
 
