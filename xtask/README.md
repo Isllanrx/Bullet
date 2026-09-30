@@ -27,6 +27,12 @@ rather than an assumption.
 | `overlay-demo` | Shows the selection window attached to the client for 30 seconds |
 | `ipc-probe` | A scripted click in the real selection window reaches the Rust side |
 | `library-probe`, `catalog-demo` | What the skin catalog contains for a champion |
+| `client-audit [--client <dir>] [--root <game>] [--out <file>]` | Reads the skin data from the installed client, builds Bullet's catalog with Bullet's own code and reports entries not offered, wrong parent skins, entries without a skin file, champions Bullet cannot name without the client running, and for Rift Classic the entries offered versus listed, with every offered Classic mod generated |
+| `harness [--root <game>] [--out <file>]` | For every champion (latest skin and one chroma), the reported cases and Rift Classic: generates the skin, builds the real overlay, and checks that every overlay entry decodes, unchanged entries keep the game's exact bytes and no changed path disagrees with another mounted archive |
+| `smoke <bullet.exe> <tools dir>` | Runs a release binary without tools, with wrong tools and with the audited injector; checks the real log (refusal, every supervised task up, no error) and that a second launch opens the first one's control panel and exits. The first two scenarios are skipped when `%ProgramFiles%/Bullet/tools` holds an injector, because discovery prefers it |
+| `fuzz [iterations] [seed]` | Mutates real game WADs and property files into the parsers; fails on any panic or on a broken round trip of a real skin bin |
+| `client-dump <client dir> <path…>` | Prints files of the installed client's game data, such as `v1/champions/99.json` |
+| `skin-audit [--root <game>] [--out <file>] [Name…]` | Generates every skin and chroma of every champion from the installed game and reports, per skin: build errors, companion characters and whether each got its `skin0.bin`, skins whose `skin0.bin` dropped a link of the original, and generated paths that a map archive also holds (the overlay builder writes those into the map too). `--keep <dir>` keeps every generated mod for inspection |
 
 `cargo xtask help` prints the full list.
 
