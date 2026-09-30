@@ -425,11 +425,6 @@ pub fn set_u32_field(body: &mut [u8], field_hash: u32, value: u32) -> Result<boo
     Ok(true)
 }
 
-/// Parse a PROP binary completely.
-///
-/// Every length is checked against the buffer, a version below 2 is refused, and trailing bytes
-/// after the last object are an error — a file that does not end where its own table says it
-/// should is not one this parser understands.
 pub fn parse_prop_file(data: &[u8]) -> Result<PropFile, WadError> {
     let mut cursor = Cursor { data, at: 0 };
     if data.get(0..4) == Some(PTCH_SIGNATURE.as_slice()) {
@@ -494,10 +489,6 @@ pub fn parse_prop_file(data: &[u8]) -> Result<PropFile, WadError> {
     })
 }
 
-/// Serialize a PROP binary (no `PTCH` prefix), the inverse of [`parse_prop_file`].
-///
-/// Fails only when a value does not fit its on-disk width (a link over 65 535 bytes, an object
-/// body near 4 GiB) — never silently truncates.
 pub fn serialize_prop_file(file: &PropFile) -> Result<Vec<u8>, WadError> {
     let too_big = |what: &str| WadError::InvalidProp(format!("{what} does not fit its field"));
     let mut out = Vec::new();
@@ -556,11 +547,10 @@ mod tests {
         let links = vec!["DATA/Characters/Alistar/Skins/Skin0.bin".to_string()];
         let base_prop = serialize_prop_links(&links, 2);
 
-        // Prepend 12-byte PTCH header
         let mut ptch_data = Vec::new();
         ptch_data.extend_from_slice(PTCH_SIGNATURE);
-        ptch_data.extend_from_slice(&1u32.to_le_bytes()); // unk1
-        ptch_data.extend_from_slice(&2u32.to_le_bytes()); // unk2
+        ptch_data.extend_from_slice(&1u32.to_le_bytes());
+        ptch_data.extend_from_slice(&2u32.to_le_bytes());
         ptch_data.extend_from_slice(&base_prop);
 
         let header = parse_prop_header(&ptch_data).expect("parse ptch prop");
@@ -601,7 +591,6 @@ mod tests {
         let file = sample_file();
         let bytes = serialize_prop_file(&file).expect("serialize");
         assert_eq!(parse_prop_file(&bytes).expect("parse"), file);
-        // The header parser used elsewhere sees the same links and count.
         let header = parse_prop_header(&bytes).expect("header");
         assert_eq!(header.linked_files, file.links);
         assert_eq!(header.entry_count, 2);
@@ -633,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_prop_truncated_error() {
-        let data = b"PROP\x03\x00\x00\x00\x01\x00\x00\x00\x10\x00".to_vec(); // link length 16, but no payload
+        let data = b"PROP\x03\x00\x00\x00\x01\x00\x00\x00\x10\x00".to_vec();
         let err = parse_prop_links(&data).unwrap_err();
         assert!(matches!(err, WadError::InvalidProp(_)));
     }

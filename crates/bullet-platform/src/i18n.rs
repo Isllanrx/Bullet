@@ -55,7 +55,6 @@ impl Language {
 
 static ACTIVE_LANGUAGE: std::sync::RwLock<Option<Language>> = std::sync::RwLock::new(None);
 
-/// Set the active language from a client locale (e.g. `pt_BR`, `es_ES`, `en_US`).
 pub fn set_active_locale(locale: &str) {
     if let Some(lang) = Language::from_locale(locale) {
         if let Ok(mut lock) = ACTIVE_LANGUAGE.write() {
@@ -64,14 +63,12 @@ pub fn set_active_locale(locale: &str) {
     }
 }
 
-/// Reset the active language back to Windows default.
 pub fn reset_active_language() {
     if let Ok(mut lock) = ACTIVE_LANGUAGE.write() {
         *lock = None;
     }
 }
 
-/// The active language: client locale if detected, otherwise Windows display language.
 #[must_use]
 pub fn active_language() -> Language {
     if let Ok(lock) = ACTIVE_LANGUAGE.read() {
@@ -82,13 +79,11 @@ pub fn active_language() -> Language {
     Language::of_windows()
 }
 
-/// The active dictionary for Bullet.
 #[must_use]
 pub fn text() -> &'static Text {
     active_language().text()
 }
 
-/// Every string, one field each. `{n}`, `{code}`, `{reason}` and `{error}` are filled by [`fill`].
 #[derive(Debug)]
 pub struct Text {
     pub status_tools_missing: &'static str,
@@ -202,7 +197,6 @@ pub struct Text {
     pub welcome_dismiss: &'static str,
 
     pub welcome_quote: &'static str,
-    /// The relay refused us because the room already holds its maximum of members.
     pub party_room_full: &'static str,
 
     pub about_title: &'static str,

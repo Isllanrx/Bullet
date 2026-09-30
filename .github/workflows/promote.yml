@@ -1,8 +1,5 @@
 name: Promote release
 
-# The one step that stays manual: turning a pre-release into the release users are pointed at. It
-# requires the `production` environment, whose required reviewers are configured in the repository
-# settings, and it refuses an installer that this repository's release workflow did not build.
 on:
   workflow_dispatch:
     inputs:

@@ -193,7 +193,6 @@ impl WadWriter {
         entry.stored_len()
     }
 
-    /// The 272-byte header this WAD will have.
     pub fn header(&self) -> Result<[u8; WAD_HEADER_SIZE], WadError> {
         let count = u32::try_from(self.entries.len()).map_err(|_| WadError::TooLarge {
             what: "entry count",
@@ -216,13 +215,6 @@ impl WadWriter {
         Ok(header)
     }
 
-    /// Where each distinct payload lands. Payloads from files come first, in file and offset
-    /// order (ordering by source address keeps reads sequential); in-memory ones
-    /// follow, in name order.
-    ///
-    /// Two entries share one stored copy only when they are provably the same bytes, never on a
-    /// checksum this writer did not compute: a game entry carries whatever checksum the game wrote
-    /// (it can be 0 or collide), so trusting it could point one entry at another's bytes. A file
     fn layout(&self) -> Result<Layout, WadError> {
         let data_start = WAD_HEADER_SIZE + WAD_ENTRY_SIZE * self.entries.len();
         let mut order: Vec<(&u64, &WriterEntry)> = self.entries.iter().collect();
@@ -688,14 +680,12 @@ impl<'a> RunCopier<'a> {
     }
 }
 
-/// Offsets and write order of a layout.
 struct Layout {
     offsets: HashMap<u64, u64>,
     writes: Vec<u64>,
     total: u64,
 }
 
-/// `X.wad.client` is written as `X.wad.client.partial` first.
 #[must_use]
 pub fn partial_path(path: &Path) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
@@ -726,7 +716,6 @@ fn toc_entry(
     raw[12..16].copy_from_slice(&stored.to_le_bytes());
     raw[16..20].copy_from_slice(&decoded.to_le_bytes());
     raw[20] = ((entry.subchunk_count & 0x0F) << 4) | (entry.kind & 0x0F);
-    // `UInt24ME`: [bits 16-23, bits 0-7, bits 8-15].
     let index = entry.first_subchunk;
     raw[21] = (index >> 16) as u8;
     raw[22] = index as u8;
@@ -735,9 +724,6 @@ fn toc_entry(
     Ok(raw)
 }
 
-/// Whether decoded content is a Wwise bank (`.bnk`) or package (`.wpk`) — the two kinds
-/// the overlay stores uncompressed (first match wins: `r3d2` followed by `Mesh`, `aims`, `anmd`,
-/// `canm`, `sklt`, `blnd` or `wght` is a model or animation, not audio).
 #[must_use]
 pub fn is_audio_bank(head: &[u8]) -> bool {
     const NOT_AUDIO: [&[u8]; 7] = [
@@ -753,7 +739,6 @@ pub fn is_audio_bank(head: &[u8]) -> bool {
         || (head.starts_with(b"r3d2") && !NOT_AUDIO.iter().any(|m| head.starts_with(m)))
 }
 
-/// A file's decoded bytes, in the form the overlay stores them: zstd, or raw for audio banks.
 pub fn optimal_raw(decoded: Vec<u8>) -> Result<WriterEntry, WadError> {
     let uncompressed_size = decoded.len() as u64;
     let (kind, stored) = if is_audio_bank(&decoded) {

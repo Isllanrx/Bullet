@@ -163,12 +163,8 @@ impl InjectionTrigger {
         let mut armed: Option<ArmedPatcher> = None;
 
         let mut arming: Option<Arming<'_>> = None;
-        // A selection waiting out the debounce window before the overlay is rebuilt for it.
         let mut pending_arm: Option<ArmRequest> = None;
-        // Last client skin that diverged from the registered one and was already answered, so a
-        // divergence is re-registered once per value the player causes, never once per tick.
         let mut lcu_divergence_seen: Option<u32> = None;
-        // Missing tools are reported once per match, not once per selection change.
         let mut tools_missing_reported = false;
 
         info!(
@@ -184,7 +180,6 @@ impl InjectionTrigger {
             tokio::select! {
                 _ = token.cancelled() => break,
 
-                // Fires only while an arming request is waiting out its debounce window.
                 () = async {
                     match arm_at {
                         Some(due) => tokio::time::sleep_until(due).await,
@@ -192,8 +187,6 @@ impl InjectionTrigger {
                     }
                 } => {
                     if let Some(request) = pending_arm.take() {
-                        // Without the tools nothing can be built or injected, and registering the
-                        // base skin in the client would take the player's own skin away for
 
                         if !self.tools_ready() {
                             if !tools_missing_reported {
@@ -1447,8 +1440,6 @@ async fn next_armed(arming: &mut Option<Arming<'_>>) -> Option<ArmedPatcher> {
     }
 }
 
-/// Resolve once the published state says no match is running (the between-matches predicate the
-/// session reset uses); never resolve if the state channel closes, which the caller's own receiver
 async fn match_ended(state_rx: &mut StateReceiver) {
     loop {
         if state_rx.borrow_and_update().phase.is_between_matches() {

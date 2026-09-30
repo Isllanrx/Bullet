@@ -18,8 +18,6 @@ pub struct CatalogChroma {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub form: bool,
 
-    /// LCU asset path of the chroma's preview image. Kept on the Rust side: the page only
-    /// learns whether a preview exists and asks for it by id.
     #[serde(skip)]
     pub preview_path: Option<String>,
 
@@ -292,15 +290,11 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
 
 fn champion_quote(champion_id: u32) -> Option<&'static str> {
     match champion_id {
-        21 => Some("Eu sempre atiro primeiro!"), // Miss Fortune
+        21 => Some("Eu sempre atiro primeiro!"),
         _ => None,
     }
 }
 
-/// Load the catalog for a champion: index the library, then decorate it with client metadata.
-///
-/// Indexing touches the filesystem and runs on the blocking pool. The client lookup is
-/// best-effort by design — a silent client costs names, never the catalog itself.
 pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
     let library = match tokio::task::spawn_blocking(move || {
         scan_champion(&library_root, champion_id)
@@ -373,10 +367,6 @@ pub async fn load_catalog(library_root: PathBuf, champion_id: u32) -> Catalog {
     catalog
 }
 
-/// Catalog for a Rift Classic champion (id `60000 + id`, E12).
-///
-/// Classic does not load the library packages at all — the mod is generated from the installed
-/// game's `jade_*` tree — so what can be offered is decided by the **game**, not the library: the
 #[must_use]
 pub fn build_classic_catalog(
     classic_champion_id: u32,
@@ -565,7 +555,6 @@ async fn lcu_client() -> Option<bullet_lcu::client::LcuClient> {
     bullet_lcu::client::LcuClient::new(&lockfile, bullet_lcu::client::DEFAULT_LCU_TIMEOUT).ok()
 }
 
-/// Fetch one chroma preview from the client and return it as a `data:` URI the page can show.
 pub async fn fetch_chroma_preview(path: &str) -> Option<String> {
     let client = lcu_client().await?;
     match client.get_asset_bytes(path).await {

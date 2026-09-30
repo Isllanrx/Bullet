@@ -35,7 +35,6 @@ impl HasWindowHandle for DialogWindowHandle {
         let non_zero = NonZeroIsize::new(self.0.0 as isize).ok_or(HandleError::Unavailable)?;
         let handle = Win32WindowHandle::new(non_zero);
         let raw = RawWindowHandle::Win32(handle);
-        // SAFETY: self.0 is a valid Win32 HWND owned by this thread for the lifetime of the borrow.
         unsafe { Ok(WindowHandle::borrow_raw(raw)) }
     }
 }
@@ -48,7 +47,6 @@ fn escape_html(value: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// Show the modal dialog displaying the newly created party room code.
 pub fn show_party_created_dialog(code: &str) -> Result<(), PlatformError> {
     let text = crate::i18n::text();
     run_dialog_modal(text.party_dialog_create_title, created_html(text, code)).map(|_| ())

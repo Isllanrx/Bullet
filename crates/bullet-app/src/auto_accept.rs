@@ -1,5 +1,3 @@
-//! Accepts the ready check when the user turned "Accept matches automatically" on in the tray.
-
 use std::time::Duration;
 
 use bullet_core::phase::GamePhase;
@@ -7,8 +5,6 @@ use bullet_core::state::StateReceiver;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-/// The ready-check popup needs a moment before the client takes an accept; answering on the
-/// very first phase event is refused as often as not.
 const ACCEPT_DELAY: Duration = Duration::from_millis(1200);
 
 const ATTEMPTS: u32 = 3;
@@ -39,7 +35,6 @@ async fn accept(state_rx: &StateReceiver, token: &CancellationToken) {
             _ = token.cancelled() => return,
             () = tokio::time::sleep(ACCEPT_DELAY) => {}
         }
-        // The user may have accepted, declined or dodged by hand meanwhile.
         if state_rx.borrow().phase != GamePhase::ReadyCheck
             || !bullet_platform::preferences::AUTO_ACCEPT.is_enabled()
         {

@@ -50,6 +50,25 @@ trusted.
 | `logging.rs` | Log setup and level handling (`BULLET_LOG`, `RUST_LOG`) |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Bullet running without administrator rights |
 
+## Design notes
+
+- **Without the injector nothing is built, and the base skin is not registered in the client**: registering it
+  would take the player's own skin away for nothing. Missing tools are reported once per match, and a client
+  skin that diverges from the registered one is answered once per value the player causes, never once per tick.
+- **The catalog never waits on the client.** The client lookup is best effort: a silent client costs names,
+  never the catalog. For Rift Classic, what can be offered is decided by the installed game's `jade_*` tree,
+  not by the library. A chroma preview's asset path stays on the Rust side; the page only learns that a
+  preview exists and asks for it by id.
+- **Auto-accept waits a moment** after the ready check appears: the client refuses an accept sent on the very
+  first phase event about as often as it takes it. If the user accepted, declined or dodged meanwhile, nothing
+  is sent.
+- **Party mode does not start without randomness**: when the operating system's random generator fails,
+  nothing secret can be made.
+- **The game build is read from the executable's PE headers only** (a few hundred bytes) and compared with the
+  last run; an unknown game folder is not an error.
+- **`build.rs` fails the build** when the resources cannot be embedded: an executable without the icon, the
+  version details (shown with two numbers, `1.2`) and the `asInvoker` manifest must never ship.
+
 ## Logging
 
 The default level is `info`. `error` means something was aborted, `warn` means something was degraded or

@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  # Every branch push and every pull request, not only main: a build handed to testers must pass the
-  # same gate before it reaches them, not only once it lands on main.
   push:
     branches: ['**']
   pull_request:
@@ -30,8 +28,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # The toolchain comes from rust-toolchain.toml, the same file every local build reads, so CI
-      # and a developer machine cannot drift apart. rustup is preinstalled on the runner.
       - name: Install the pinned toolchain
         run: rustup toolchain install
 
@@ -45,17 +41,12 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      # A PR that changes Cargo.toml without updating Cargo.lock would build with versions nobody
-      # reviewed.
       - name: Cargo.lock is up to date
         run: cargo metadata --locked --format-version 1 > $null
 
-      # Error-handling sweep, rustfmt, clippy -D warnings, the whole test suite.
       - name: Quality gate (cargo xtask check)
         run: cargo xtask check
 
-  # The release profile (LTO, static CRT, embedded resources) is what users run. A debug-only gate
-  # would miss a broken build script or a missing manifest.
   release-build:
     name: Release build
     runs-on: windows-latest
@@ -81,8 +72,6 @@ jobs:
       - name: cargo build --release --locked
         run: cargo build --release --locked -p bullet-app
 
-      # The file details and the asInvoker manifest come from build.rs; an exe without them would
-      # look anonymous in Explorer and could prompt for elevation.
       - name: Executable metadata and manifest
         shell: pwsh
         run: |
@@ -115,8 +104,6 @@ jobs:
       - name: cargo deny check
         run: cargo deny check
 
-  # The public party relay is TypeScript on Cloudflare Workers; a type error there breaks party mode
-  # for every user without touching a single Rust line.
   relay-worker:
     name: Relay worker typecheck
     runs-on: ubuntu-latest
@@ -137,9 +124,6 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run check
 
-  # Workflows run with repository permissions, so they get the same review as code: syntax and
-  # expression errors (actionlint) and security mistakes such as template injection, unpinned
-  # actions or leaked credentials (zizmor).
   workflow-lint:
     name: Workflow lint and audit
     runs-on: ubuntu-latest
@@ -157,7 +141,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  # One stable name for branch protection to require, whatever jobs are added above.
   ci-ok:
     name: CI OK
     if: always()

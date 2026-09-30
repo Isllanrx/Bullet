@@ -51,6 +51,9 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
   The copy is kept until the game file changes (outside the served folder when a build does not need it), and
   the map archives a champion shares are copied as soon as the champion is locked in. A 2.5 GB map is copied
   once per patch; switching skins afterwards takes milliseconds.
+- **A cached overlay is reused only for the same inputs and the same builder.** Its fingerprint records every
+  mod file, base game archive and output archive, plus the builder and its revision; an unknown builder or
+  another revision rebuilds it.
 - **Every third-party binary is verified first.** If the injector's hash does not match, it is refused. If a
   file is missing, the user is told where it was expected. The injector never falls back to anything silently.
 
