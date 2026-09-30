@@ -532,6 +532,7 @@ pub struct WadFile {
     subchunk_toc: Option<SubchunkToc>,
 
     signature: [u8; WAD_SIGNATURE_SIZE],
+    checksum: u64,
     minor: u8,
 }
 
@@ -628,11 +629,14 @@ impl WadFile {
         );
         let mut signature = [0u8; WAD_SIGNATURE_SIZE];
         signature.copy_from_slice(&header[4..4 + WAD_SIGNATURE_SIZE]);
+        let mut checksum = [0u8; 8];
+        checksum.copy_from_slice(&header[260..268]);
         Ok(Self {
             path: path.to_path_buf(),
             entries,
             subchunk_toc: None,
             signature,
+            checksum: u64::from_le_bytes(checksum),
             minor: header[3],
         })
     }
@@ -640,6 +644,11 @@ impl WadFile {
     #[must_use]
     pub fn signature(&self) -> &[u8; WAD_SIGNATURE_SIZE] {
         &self.signature
+    }
+
+    #[must_use]
+    pub fn checksum(&self) -> u64 {
+        self.checksum
     }
 
     #[must_use]
@@ -696,6 +705,46 @@ impl WadFile {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    pub fn read_prefix(&self, path_hash: u64, len: usize) -> Result<Option<Vec<u8>>, WadError> {
+        use std::io::Seek;
+
+        let Some(entry) = self.entries.get(&path_hash) else {
+            return Ok(None);
+        };
+        let io = |source: std::io::Error| WadError::FileIo {
+            path: self.path.display().to_string(),
+            source,
+        };
+        let mut file = std::fs::File::open(&self.path).map_err(io)?;
+        file.seek(std::io::SeekFrom::Start(entry.offset as u64))
+            .map_err(io)?;
+        let payload = std::io::BufReader::new(file.take(entry.compressed_size as u64));
+        let wanted = len.min(entry.uncompressed_size) as u64;
+        let mut prefix = Vec::with_capacity(len.min(MAX_PREALLOCATION));
+        let read = match entry.compression {
+            CompressionType::Redirection | CompressionType::Raw => {
+                payload.take(wanted).read_to_end(&mut prefix)
+            }
+            CompressionType::Gzip => GzDecoder::new(payload)
+                .take(wanted)
+                .read_to_end(&mut prefix),
+            CompressionType::Zstd | CompressionType::ZstdChunked => {
+                let mut payload = payload;
+                let starts_compressed = std::io::BufRead::fill_buf(&mut payload)
+                    .map(|head| head.starts_with(&ZSTD_MAGIC))
+                    .map_err(io)?;
+                if starts_compressed {
+                    zstd::Decoder::with_buffer(payload)
+                        .and_then(|decoder| decoder.take(wanted).read_to_end(&mut prefix))
+                } else {
+                    payload.take(wanted).read_to_end(&mut prefix)
+                }
+            }
+        };
+        read.map_err(WadError::Decompression)?;
+        Ok(Some(prefix))
     }
 
     pub fn read(&self, path_hash: u64) -> Result<Option<Vec<u8>>, WadError> {

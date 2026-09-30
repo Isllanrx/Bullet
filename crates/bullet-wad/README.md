@@ -33,7 +33,7 @@ patch.
 | --- | --- |
 | `wad.rs` | WAD reader: open a whole archive or just its table of contents, read an entry decompressed or as stored |
 | `writer.rs` | WAD writer used to build overlays |
-| `prop.rs` | BIN/PROP parser and serializer, including the list of linked files |
+| `prop.rs` | BIN/PROP parser and serializer, including the list of linked files; walks every field of an object (`flatten_fields`, `diff_fields`, `field_value`) with bounded depth for the byte-level records |
 | `hash.rs` | Path hashing (xxHash64) and content checksums (XXH3) |
 | `fantome.rs` | Reading `.fantome` packages |
 | `hash_index.rs` | Hash-to-path lookup table |
