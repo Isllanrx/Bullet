@@ -25,6 +25,10 @@ use wry::{Rect, WebViewBuilder};
 
 const OVERLAY_HTML: &str = include_str!("overlay_ui.html");
 
+pub(crate) fn overlay_html() -> String {
+    OVERLAY_HTML.replace("{{version}}", crate::version::display_version())
+}
+
 use crate::client_window::{
     ClientWindowState, WindowRect, client_window_state, overlay_placement, overlay_placement_on,
 };
@@ -370,7 +374,7 @@ fn run_overlay_message_loop(
     crate::paths::ensure_webview2_data_dir();
 
     let hwnd_raw = hwnd.0 as isize;
-    let html = OVERLAY_HTML.replace("{{version}}", crate::version::display_version());
+    let html = overlay_html();
     let webview = match WebViewBuilder::new()
         .with_html(html)
         .with_ipc_handler(move |request| {
