@@ -43,6 +43,21 @@ Large test modules live in sibling files named `<module>_tests.rs`, included wit
 `#[cfg(test)] #[path = "..."] mod tests;`. They are still the module's own `tests` module with
 `use super::*`, so they see private items. The split only makes files easier to navigate.
 
+## Test layers
+
+What a test can prove depends on what it runs. Bullet keeps three layers apart and never lets a lower one
+claim what only a higher one can show.
+
+| Layer | What it runs | What it proves | Where |
+| --- | --- | --- | --- |
+| Assets and runtime | Bullet's own generator, mod import and staging, compatibility check and overlay builder, on a synthetic game install built by the test | The chosen skin, its companions and a custom mod end up in the archives the game would open: slot 0 holds the skin's own definition, every link resolves, the animation graph the skin names is reachable, archives that share a path agree, headers and untouched bytes are the game's, output is deterministic | `crates/bullet-app/tests/skin_pipeline.rs` (runs everywhere, including CI) |
+| Same, on the installed game | The same production code against a real install | The above for every champion, skin and chroma of the current patch | `cargo xtask harness`, `cargo xtask skin-audit`, `native_overlay_faithful` (ignored; needs the game) |
+| Interface | Bullet's windows and pages in Edge, and the real WebView2 window | Pages render, react and pass accessibility checks; a release changes only what it meant to | `cargo xtask ipc-probe` and the page dumps (`BULLET_UI_DUMP`) used by the visual tests |
+| Real match | The game engine | How the skin looks and animates in game: models, animations, shaders, particles | Manual, with the log; the only layer that can show it |
+
+The first two layers show that Bullet loads and applies the skin files correctly. They do not render
+anything: no test here can show how a skin looks or animates in the game, because that needs the game engine.
+
 ## Pipeline
 
 All workflows live in `.github/workflows`. Every third-party action is pinned to a commit SHA, every job
@@ -73,7 +88,8 @@ maintainer approves a pull request
      └─ automerge.yml re-checks everything through the API and enables auto-merge (squash)
         └─ GitHub merges only when "CI OK" and "Security OK" pass on that exact commit
            └─ release.yml: if the workspace version has no release yet, full gate without cache,
-              installer, checksums,
+              bullet.exe signed, installer built around it and signed (when signing is configured),
+              checksums,
               build provenance attestation → published as a PRE-RELEASE
               └─ after testing it in a real match, a maintainer runs promote.yml, which checks
                  the checksums and the attestation and marks the release as latest
@@ -87,7 +103,7 @@ maintainer approves a pull request
 - the `no-automerge` label,
 - any change to paths that decide trust, permissions or what ships: `.github/`, `installer/`, `xtask/`,
   `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger, the
-  injector host, DLL validation and suspension code, the party cipher and token, and the relay's deploy
+  injector host and DLL validation, the party cipher and token, and the relay's deploy
   config. These are merged by hand.
 
 The `main` branch ruleset (`.github/rulesets/main.json`) enforces the rest: pull requests only, squash merges,
@@ -103,6 +119,7 @@ pushes or deletions.
 | The ruleset, applied with `gh api -X POST repos/<owner>/<repo>/rulesets --input .github/rulesets/main.json` | Makes the checks and reviews mandatory |
 | `production` environment with a required reviewer | Gates promotion to latest |
 | Approval required for workflows from outside collaborators | First-time contributors cannot run workflows unreviewed |
+| SignPath project; `SIGNPATH_API_TOKEN` secret; `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_SIGNING_POLICY_SLUG`, `SIGNPATH_EXE_CONFIGURATION_SLUG` and `SIGNPATH_SETUP_CONFIGURATION_SLUG` variables | Authenticode signing of `bullet.exe` and the installer. Without the secret the signing steps are skipped and the release ships unsigned, which Windows SmartScreen and antivirus reputation treat as an unknown program |
 
 ## Packaging
 
@@ -112,7 +129,11 @@ pushes or deletions.
   LTK Manager release into `Program Files\Bullet\tools`. Bullet only accepts them if their SHA-256 matches the
   audited hashes in `bullet_app::trigger`. `xtask` reads the same constants for the install audit.
 - `cargo xtask installer` passes the workspace version to Inno Setup (`installer/bullet.iss`) and produces
-  `Bullet-Setup-<version>-x64.exe`.
+  `Bullet-Setup-<version>-x64.exe`. With `--prebuilt` it packages the `distullet.exe` already there instead
+  of rebuilding it, so the release can sign the binary before it goes into the installer.
+- The release signs with Authenticode through SignPath. The Sigstore attestation proves where a build came from
+  to anyone who checks it with `gh`, but Windows does not read it: only an Authenticode signature counts for
+  SmartScreen and antivirus reputation.
 - The skin library is not shipped. Store skins are generated from the installed game on each patch, and the
   installer only creates an empty `library` folder.
 - Files are listed one by one in the installer, never with a wildcard.
