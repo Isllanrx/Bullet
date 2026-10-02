@@ -1165,7 +1165,9 @@ impl InjectionTrigger {
             .ok_or_else(|| bullet_classic::error::ClassicError::ChampionNotFound {
                 alias: format!("no WAD alias found for champion {champ_id}"),
             })?;
-            let champion = StandardChampion::open(&game_dir, &alias)?.with_cache_dir(&cache_dir);
+            let champion = StandardChampion::open(&game_dir, &alias)?
+                .with_cache_dir(&cache_dir)
+                .with_options(generation_options());
             champion.build_mod(skin, base_skin, &mods_dir)
         })
         .await;
@@ -1331,6 +1333,20 @@ impl ArmRequest {
     fn key(&self) -> ArmKey {
         self.key
     }
+}
+
+fn generation_options() -> bullet_classic::generator::GenerationOptions {
+    let set_to = |name: &str, value: &str| {
+        std::env::var(name).is_ok_and(|v| v.trim().eq_ignore_ascii_case(value))
+    };
+    let options = bullet_classic::generator::GenerationOptions {
+        graph_in_slot0: set_to(bullet_core::env::SKIN_GRAPH, "slot0"),
+        chroma_keeps_classification: set_to(bullet_core::env::CHROMA_CLASSIFICATION, "source"),
+    };
+    if options != bullet_classic::generator::GenerationOptions::default() {
+        info!(?options, "Skin generation test variant active");
+    }
+    options
 }
 
 fn is_classic(champ_id: u32) -> bool {
