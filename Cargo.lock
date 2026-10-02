@@ -110,7 +110,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-app"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -137,7 +137,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-classic"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bullet-core",
  "bullet-wad",
@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-core"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "futures-util",
  "serde",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-inject"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bullet-core",
  "bullet-platform",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-lcu"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "base64 0.23.1",
  "bullet-core",
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-party"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "base64 0.23.1",
  "bullet-core",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-platform"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bullet-core",
  "raw-window-handle",
@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-relay"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bullet-core",
  "bullet-party",
@@ -253,7 +253,7 @@ dependencies = [
 
 [[package]]
 name = "bullet-wad"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "flate2",
  "memmap2",
@@ -3044,7 +3044,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bullet-app",
  "bullet-classic",
