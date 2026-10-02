@@ -38,7 +38,7 @@ find the characters.
 | --- | --- |
 | `generator.rs` | `StandardChampion` and `ClassicChampion`: open a champion from the installed game and build the mod for a skin |
 | `builder.rs` | `ClassicIdMapper`: converts between classic and regular champion and skin ids |
-| `forms.rs` | Bakes one form of a skin with gears (a sword, an outfit) into the slot-0 skin |
+| `forms.rs` | Bakes one form of a skin with gears into the slot-0 skin and strips HUD gear indicators |
 | `gear_toggle.rs` | Adds the in-game form cycle (`Ctrl+5`) to the animation graph of a skin with gears |
 | `clip_alias.rs` | Gives a skin's graph the spell clip the default skin's animations ask for, when the skin only has its own variants |
 | `error.rs` | Error type |
@@ -68,7 +68,8 @@ find the characters.
   skin and in the skin's own bin, so they follow `Ctrl+5` too; this happens only when every such driver names a
   form the skin has (an omitted index is the first form), otherwise the drivers stay as the game wrote them.
   Bins shared by several skins are never rewritten. Effects that a form swaps through its resolver stay those of
-  the first form.
+  the first form. The game's built-in HUD indicators for gear forms (icons above the champion portrait) are
+  stripped from the generated skin data when the toggle is handled by the animation graph.
 - **A spell clip the skin renamed is aliased, only on proof.** The match runs the skin under the default id, so
   the game asks the skin's graph for the default clip names (`Spell3` for the third spell). A few skins replace a
   spell clip with variants of their own and have no clip under the default name (Fallen God-King Garen's E: three

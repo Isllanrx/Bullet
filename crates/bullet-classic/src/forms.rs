@@ -361,9 +361,6 @@ pub fn bake_form(file: &mut PropFile, form: &GearForm<'_>) -> Result<(), Classic
     Ok(())
 }
 
-/// Remove `mGearSkinUpgrades` from the skin bin so the game does not render
-/// the built-in gear-form HUD indicators (icons above the champion portrait).
-/// Call this when the form toggle is handled by the animation graph instead.
 pub fn strip_gear_indicators(skin_bin: &[u8]) -> Result<Vec<u8>, ClassicError> {
     let mut file = parse_prop_file(skin_bin).map_err(bin_error)?;
     let Some(at) = file
@@ -374,12 +371,11 @@ pub fn strip_gear_indicators(skin_bin: &[u8]) -> Result<Vec<u8>, ClassicError> {
         return Ok(skin_bin.to_vec());
     };
     let mut skin = skin_fields(&file.entries[at].body)?;
-    let stripped = match tree::field_mut(&mut skin, h("skinUpgradeData"))
-        .and_then(Value::fields_mut)
-    {
-        Some(upgrade) => tree::remove_field(upgrade, h("mGearSkinUpgrades")).is_some(),
-        None => false,
-    };
+    let stripped =
+        match tree::field_mut(&mut skin, h("skinUpgradeData")).and_then(Value::fields_mut) {
+            Some(upgrade) => tree::remove_field(upgrade, h("mGearSkinUpgrades")).is_some(),
+            None => false,
+        };
     if !stripped {
         return Ok(skin_bin.to_vec());
     }
