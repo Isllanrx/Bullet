@@ -318,4 +318,12 @@ fn test_the_chroma_preview_path_is_the_one_the_client_gave() {
         "no path from the client, no preview"
     );
     assert_eq!(catalog.chroma_preview_path(999_999), None);
+    assert_eq!(
+        catalog.chroma_preview_paths(),
+        vec![(
+            238_004,
+            "/lol-game-data/assets/v1/champion-chroma-images/238/238004.png".to_owned()
+        )],
+        "every chroma with a client path is fetched ahead, the rest are skipped"
+    );
 }

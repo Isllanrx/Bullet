@@ -43,6 +43,9 @@ fn main() {
 
         let profile = std::env::var("PROFILE").unwrap_or_default();
         if profile == "release" {
+            if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+                println!("cargo:rustc-link-arg-bins=/RELEASE");
+            }
             res.set_manifest(
                 r#"
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
