@@ -14,6 +14,8 @@ Client enters champion select
               └─ bullet-classic opens DATA/FINAL/Champions/<Name>.wad.client and turns the chosen skin
                  into the default one (SkinN → Skin0), companions included (found by scanning the
                  champion's property files; a chroma without its own companion file uses its base skin's)
+                 · a skin with several forms gets the Ctrl+5 form cycle in its own animation graph
+                 · a spell clip the skin only has as its own variants gets the default name back
               └─ bullet-inject builds the overlay
                  · entries identical to the game's are dropped
                  · paths shared with map archives change in the map archive too
@@ -25,6 +27,20 @@ Game starts
   └─ the injector DLL attaches and confirms its hook
      └─ the game opens the rebuilt archives from the overlay; the skin loads
 ```
+
+**Why Ctrl+5 works through the animation graph.** `Ctrl+5` makes the game play the champion's `Toggle` clip.
+A skin with forms normally switches them through the gear the server tracks for its owner; under the default
+skin's id there is no gear to switch, so the generated graph cycles the forms itself by which form part is
+visible. Only what you see on your own screen changes.
+
+**Why some skins lose a special behaviour.** The game runs a script of its own for some skins, keyed by the
+skin id the server received (for example a skin that changes its music or reacts to the match). The generated
+skin loads under the default id, so those scripts do not start. They are game logic and are left untouched.
+
+**Why a game that is already loading is never hooked.** When the patcher is ready only after the game process has
+been running for more than two seconds, the game is already reading its archives. Hooking it then mixes files from
+the game and from the overlay, and the game can crash. The patcher waits for that process to close and hooks the
+next one (a reconnect) instead; the late path leaves the match with the default skin.
 
 **Why the loading screen shows the default name for an unowned skin.** The name on the loading card comes
 from the skin id the server received. The client refuses to register a skin you do not own, so the card
@@ -64,7 +80,7 @@ The classic ids are kept as they are. They are never forced back to the regular 
 ## 4. Party mode
 
 ```text
-A player creates or joins a room from the tray
+A player creates or joins a room from the control panel
   └─ bullet-party connects to the relay with a room id derived from the invite key
      └─ each member announces champion and skin, encrypted on their own machine
         └─ the trigger keeps only announcements whose champion matches the real roster
@@ -72,6 +88,8 @@ A player creates or joins a room from the tray
            └─ each teammate's skin is generated like your own and merged into the same overlay
               └─ you see your friends' skins in the match
 ```
+
+The control panel shows the room state; a room you created reads "Party created" until you leave it.
 
 Open work: the selection window does not yet show who is in the room or which skins were applied, and the
 mode has not been proven with several players in one real match.
