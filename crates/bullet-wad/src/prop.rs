@@ -122,6 +122,9 @@ impl<'a> Cursor<'a> {
     }
 }
 
+#[path = "prop_tree.rs"]
+pub mod tree;
+
 const FIELD_U32: u8 = 7;
 const FIELD_STRING: u8 = 16;
 const FIELD_LIST: u8 = 0x80;
@@ -235,7 +238,7 @@ fn find_in_fields<'a>(
     Ok(None)
 }
 
-const MAX_FIELD_DEPTH: usize = 32;
+const MAX_FIELD_DEPTH: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FlatField {
@@ -395,11 +398,136 @@ pub fn diff_fields(before: &[u8], after: &[u8]) -> Result<Vec<FieldChange>, WadE
         .collect())
 }
 
+const FIELD_HASH: u8 = 17;
+const FIELD_LINK: u8 = 0x84;
+
+fn reference_offsets_in_value(
+    cursor: &mut Cursor<'_>,
+    kind: u8,
+    depth: usize,
+    out: &mut Vec<usize>,
+) -> Result<(), WadError> {
+    if depth > MAX_FIELD_DEPTH {
+        return Err(WadError::InvalidProp(format!(
+            "fields nested deeper than {MAX_FIELD_DEPTH}"
+        )));
+    }
+    match kind {
+        FIELD_HASH | FIELD_LINK => {
+            let at = cursor.at;
+            cursor.take(4, "reference")?;
+            out.push(at);
+        }
+        FIELD_LIST | FIELD_LIST2 => {
+            let element = cursor.take(1, "list element type")?[0];
+            cursor.u32("list size")?;
+            let count = cursor.u32("list count")?;
+            for _ in 0..count {
+                reference_offsets_in_value(cursor, element, depth + 1, out)?;
+            }
+        }
+        FIELD_POINTER | FIELD_EMBED => {
+            if cursor.u32("class")? != 0 {
+                cursor.u32("struct size")?;
+                reference_offsets_in_fields(cursor, depth + 1, out)?;
+            }
+        }
+        FIELD_OPTION => {
+            let inner = cursor.take(1, "option type")?[0];
+            if cursor.take(1, "option count")?[0] != 0 {
+                reference_offsets_in_value(cursor, inner, depth + 1, out)?;
+            }
+        }
+        FIELD_MAP => {
+            let key_kind = cursor.take(1, "map key type")?[0];
+            let value_kind = cursor.take(1, "map value type")?[0];
+            cursor.u32("map size")?;
+            let count = cursor.u32("map count")?;
+            for _ in 0..count {
+                if key_kind == FIELD_LINK {
+                    out.push(cursor.at);
+                }
+                skip_field_value(cursor, key_kind)?;
+                reference_offsets_in_value(cursor, value_kind, depth + 1, out)?;
+            }
+        }
+        _ => skip_field_value(cursor, kind)?,
+    }
+    Ok(())
+}
+
+fn reference_offsets_in_fields(
+    cursor: &mut Cursor<'_>,
+    depth: usize,
+    out: &mut Vec<usize>,
+) -> Result<(), WadError> {
+    let count = cursor.u16("field count")?;
+    for _ in 0..count {
+        cursor.u32("field name")?;
+        let kind = cursor.take(1, "field type")?[0];
+        reference_offsets_in_value(cursor, kind, depth, out)?;
+    }
+    Ok(())
+}
+
+fn reference_offsets(body: &[u8]) -> Result<Vec<usize>, WadError> {
+    let mut out = Vec::new();
+    reference_offsets_in_fields(&mut Cursor { data: body, at: 0 }, 0, &mut out)?;
+    Ok(out)
+}
+
+fn u32_at(body: &[u8], at: usize) -> Result<u32, WadError> {
+    body.get(at..at + 4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .ok_or_else(|| WadError::InvalidProp(format!("truncated reference at offset {at}")))
+}
+
+pub fn reference_values(body: &[u8]) -> Result<Vec<u32>, WadError> {
+    reference_offsets(body)?
+        .into_iter()
+        .map(|at| u32_at(body, at))
+        .collect()
+}
+
+pub fn remap_references(
+    body: &mut [u8],
+    map: &std::collections::BTreeMap<u32, u32>,
+) -> Result<usize, WadError> {
+    let offsets = reference_offsets(body)?;
+    let mut changed = 0;
+    for at in offsets {
+        let Some(&target) = map.get(&u32_at(body, at)?) else {
+            continue;
+        };
+        let slot = body
+            .get_mut(at..at + 4)
+            .ok_or_else(|| WadError::InvalidProp(format!("truncated reference at offset {at}")))?;
+        slot.copy_from_slice(&target.to_le_bytes());
+        changed += 1;
+    }
+    Ok(changed)
+}
+
 pub fn field_value<'a>(body: &'a [u8], path: &[u32]) -> Result<Option<FieldValue<'a>>, WadError> {
     find_in_fields(&mut Cursor { data: body, at: 0 }, path)
 }
 
 pub fn set_u32_field(body: &mut [u8], field_hash: u32, value: u32) -> Result<bool, WadError> {
+    set_top_level_int(body, field_hash, value, &[FIELD_U32])
+}
+
+pub fn set_int_field(body: &mut [u8], field_hash: u32, value: u32) -> Result<bool, WadError> {
+    set_top_level_int(body, field_hash, value, &[FIELD_I32, FIELD_U32])
+}
+
+const FIELD_I32: u8 = 6;
+
+fn set_top_level_int(
+    body: &mut [u8],
+    field_hash: u32,
+    value: u32,
+    kinds: &[u8],
+) -> Result<bool, WadError> {
     let found = {
         let mut cursor = Cursor { data: body, at: 0 };
         let count = cursor.u16("field count")?;
@@ -407,7 +535,7 @@ pub fn set_u32_field(body: &mut [u8], field_hash: u32, value: u32) -> Result<boo
         for _ in 0..count {
             let name = cursor.u32("field name")?;
             let kind = cursor.take(1, "field type")?[0];
-            if name == field_hash && kind == FIELD_U32 {
+            if name == field_hash && kinds.contains(&kind) {
                 found = Some(cursor.at);
                 break;
             }
@@ -858,11 +986,125 @@ mod tests {
         let mut deep = 1u16.to_le_bytes().to_vec();
         deep.extend_from_slice(&1u32.to_le_bytes());
         deep.push(FIELD_OPTION);
-        for _ in 0..40 {
+        for _ in 0..80 {
             deep.extend_from_slice(&[FIELD_OPTION, 1]);
         }
         deep.extend_from_slice(&[FIELD_U32, 1, 7, 0, 0, 0]);
         assert!(flatten_fields(&deep).is_err(), "nesting is bounded");
+    }
+
+    const OLD: u32 = 0x50aa_299e;
+    const NEW: u32 = 0x51aa_2b31;
+
+    fn body_with_references_in_every_container() -> Vec<u8> {
+        let mut body = 7u16.to_le_bytes().to_vec();
+        field(&mut body, 1, FIELD_HASH, &OLD.to_le_bytes());
+        field(&mut body, 2, FIELD_U32, &OLD.to_le_bytes());
+        let mut list = vec![FIELD_LINK];
+        list.extend_from_slice(&12u32.to_le_bytes());
+        list.extend_from_slice(&2u32.to_le_bytes());
+        list.extend_from_slice(&0x1234_5678u32.to_le_bytes());
+        list.extend_from_slice(&OLD.to_le_bytes());
+        field(&mut body, 3, FIELD_LIST, &list);
+        let mut embed = 0xAAAA_AAAAu32.to_le_bytes().to_vec();
+        embed.extend_from_slice(&11u32.to_le_bytes());
+        embed.extend_from_slice(&1u16.to_le_bytes());
+        embed.extend_from_slice(&9u32.to_le_bytes());
+        embed.push(FIELD_LINK);
+        embed.extend_from_slice(&OLD.to_le_bytes());
+        field(&mut body, 4, FIELD_EMBED, &embed);
+        let mut option = vec![FIELD_HASH, 1];
+        option.extend_from_slice(&OLD.to_le_bytes());
+        field(&mut body, 5, FIELD_OPTION, &option);
+        let mut map = vec![FIELD_LINK, FIELD_LINK];
+        map.extend_from_slice(&12u32.to_le_bytes());
+        map.extend_from_slice(&1u32.to_le_bytes());
+        map.extend_from_slice(&OLD.to_le_bytes());
+        map.extend_from_slice(&OLD.to_le_bytes());
+        field(&mut body, 6, FIELD_MAP, &map);
+        field(&mut body, 7, FIELD_STRING, &[2, 0, b'o', b'k']);
+        body
+    }
+
+    #[test]
+    fn test_every_reference_to_a_moved_key_follows_it_and_nothing_else_moves() {
+        let mut body = body_with_references_in_every_container();
+        let original = body.clone();
+        let map = std::collections::BTreeMap::from([(OLD, NEW)]);
+        assert_eq!(remap_references(&mut body, &map).expect("remap"), 6);
+        assert_eq!(body.len(), original.len());
+        let values = reference_values(&body).expect("references");
+        assert!(
+            !values.contains(&OLD),
+            "no reference is left on the old key"
+        );
+        assert_eq!(values.iter().filter(|v| **v == NEW).count(), 6);
+        assert!(
+            values.contains(&0x1234_5678),
+            "unrelated references are kept"
+        );
+        let plain = field_value(&body, &[2]).expect("walk").expect("u32");
+        assert_eq!(
+            plain.as_u32(),
+            Some(OLD),
+            "a plain u32 is data, not a reference"
+        );
+        assert_eq!(
+            remap_references(&mut body, &map).expect("again"),
+            0,
+            "a second pass finds nothing"
+        );
+    }
+
+    #[test]
+    fn test_remapping_a_hostile_body_is_an_error_that_changes_nothing() {
+        let full = body_with_references_in_every_container();
+        let map = std::collections::BTreeMap::from([(OLD, NEW)]);
+        for cut in 0..full.len() {
+            let mut body = full[..cut].to_vec();
+            let before = body.clone();
+            if remap_references(&mut body, &map).is_err() {
+                assert_eq!(body, before, "cut {cut}");
+            }
+        }
+        let mut deep = 1u16.to_le_bytes().to_vec();
+        deep.extend_from_slice(&1u32.to_le_bytes());
+        deep.push(FIELD_OPTION);
+        for _ in 0..80 {
+            deep.extend_from_slice(&[FIELD_OPTION, 1]);
+        }
+        deep.extend_from_slice(&[FIELD_LINK, 1]);
+        deep.extend_from_slice(&OLD.to_le_bytes());
+        assert!(reference_values(&deep).is_err(), "nesting is bounded");
+    }
+
+    #[test]
+    fn test_a_signed_int_field_is_set_only_by_the_int_setter() {
+        let mut body = 2u16.to_le_bytes().to_vec();
+        field(&mut body, 1, FIELD_I32, &5i32.to_le_bytes());
+        field(&mut body, 2, FIELD_U32, &7u32.to_le_bytes());
+        let original = body.clone();
+        assert!(
+            !set_u32_field(&mut body, 1, 0).expect("walk"),
+            "u32 setter skips an i32"
+        );
+        assert_eq!(body, original);
+        assert!(set_int_field(&mut body, 1, 0).expect("set i32"));
+        assert!(set_int_field(&mut body, 2, 9).expect("set u32"));
+        assert_eq!(
+            field_value(&body, &[1])
+                .expect("walk")
+                .expect("i32")
+                .as_u32(),
+            Some(0)
+        );
+        assert_eq!(
+            field_value(&body, &[2])
+                .expect("walk")
+                .expect("u32")
+                .as_u32(),
+            Some(9)
+        );
     }
 
     #[test]
