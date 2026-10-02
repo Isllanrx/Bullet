@@ -69,6 +69,14 @@ and the crate READMEs, in English, without internal references.
   archives the game opened, live match data (`127.0.0.1:2999`), the game's own log after the match, "Mark a
   problem" and "Export diagnostics" (`docs/observability.md`). Across all 8,984 skins the only field that differs
   from the game is `skinClassification` on chromas.
+- 2026-10-01, proven in a match (Practice Tool): Zed chroma 70 with its shadow, Orianna 39 with her ball. Chroma
+  previews are fetched ahead without holding the selection; queued party clicks are dropped. Skins with forms of
+  their own cycle them with `Ctrl+5` through a `Toggle` clip added to the skin's own graph (ADR-032; proven in a
+  match with Revenant Reign Viego). 91 skins have a script the game runs only for the owner's skin id; it never runs for a generated
+  skin. Garen 13/44 E: the A/B with the graph in slot 0 changed nothing in a match, so the skin's graph now gets the
+  missing `Spell3` as a copy of its normal-speed variant, only on sound proof (ADR-033, not yet proven). A game
+  process older than two seconds is never hooked (a mid-load hook crashed Diana); companions are indexed once per
+  champion and patch, ahead of champion select.
 
 ## Architecture
 
@@ -134,9 +142,11 @@ inject→core+platform+wad, party→core, app→all.
 13. **Overlay keyboard focus goes to the WebView, never to the host window.** The UI asks for focus over
     IPC; Rust takes the foreground (thread-input attach) and then calls `webview.focus()`. `SetFocus` on the
     host HWND pulls focus out of the WebView2 child and the search box stops receiving keys.
-14. **A retargeted skin bin is the source bin re-keyed, nothing more.** `retarget_skin_bin` keeps only the
-    skin object and its Resources, re-keyed to slot 0, with the object bytes unchanged except
-    `skinClassification = 1`; `skin0.bin` links `SkinN.bin` **and** every link `SkinN.bin` had, because the
+14. **A retargeted skin bin is the source bin relocated, nothing more.** `retarget_skin_bin` keeps only the
+    skin object and its Resources, re-keyed to slot 0; every `link`/`hash` value that pointed at the old keys is
+    rewritten to the new ones (`remap_references`), and `skinClassification`/`skinParent` take the values of
+    the game's own bin for the target slot (`slot_identity`, never a constant); a chroma's parent comes from its
+    `skinParent`, the client is only a fallback (ADR-031). `skin0.bin` links `SkinN.bin` **and** every link `SkinN.bin` had, because the
     animation graph, VFX and shared bins the object references live there (dropping them froze God-King
     Garen's sword). Never write `animations/skin0.bin`: the skin keeps pointing at `Animations/SkinN`, and a
     slot-0 graph only replaces the base graph other players and companions use. Not yet proven in a match.

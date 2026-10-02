@@ -122,7 +122,9 @@ pushes or deletions.
 - **The release build is its own job** because the release profile (LTO, static CRT, embedded resources) is
   what users run; a debug-only gate misses a broken build script or a missing manifest. It then checks the
   file details and the `asInvoker` manifest that `build.rs` embeds: without them the executable looks
-  anonymous in Explorer and could prompt for elevation.
+  anonymous in Explorer and could prompt for elevation. It builds with `cargo xtask package`, like the release,
+  and refuses an executable that needs the Visual C++ runtime, carries the build machine's paths or has no PE
+  checksum.
 - **The relay worker is type-checked** because a type error there breaks party mode for every user without a
   single Rust change.
 - **Workflows are linted like code** because they run with repository permissions.
@@ -178,7 +180,12 @@ The second form works offline with the Sigstore bundle published next to the ins
 
 ## Packaging
 
-- `cargo xtask package` builds the release, copies it to `dist\` and writes `SHA256SUMS`.
+- `cargo xtask package` builds the release, copies it to `dist\` and writes `SHA256SUMS`. It owns the release
+  compiler flags: the C runtime is linked statically and the build machine's paths (Cargo home, toolchain,
+  workspace) are rewritten, whatever `RUSTFLAGS` holds. A set `RUSTFLAGS` (CI uses `-D warnings`) otherwise
+  replaces the flags in `.cargo/config.toml`, which silently dropped the static runtime: the executable then
+  needed the Visual C++ runtime and carried the builder's user folder in its panic messages. `build.rs`
+  also asks the linker for the PE checksum.
 - The LTK injector is **not** packaged. Its license does not allow other projects to redistribute League
   Toolkit's signed binaries, so users copy `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` from an official
   LTK Manager release into `Program Files\Bullet\tools`. Bullet only accepts them if their SHA-256 matches the
