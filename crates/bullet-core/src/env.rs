@@ -8,7 +8,19 @@ pub const SKIN_SYNC: &str = "BULLET_SKIN_SYNC";
 
 pub const UPDATE_CHECK: &str = "BULLET_UPDATE_CHECK";
 
-pub const ALL: [&str; 5] = [LOG, RELAY_URL, PATCHER_FLAGS, SKIN_SYNC, UPDATE_CHECK];
+pub const SKIN_GRAPH: &str = "BULLET_SKIN_GRAPH";
+
+pub const CHROMA_CLASSIFICATION: &str = "BULLET_CHROMA_CLASSIFICATION";
+
+pub const ALL: [&str; 7] = [
+    LOG,
+    RELAY_URL,
+    PATCHER_FLAGS,
+    SKIN_SYNC,
+    UPDATE_CHECK,
+    SKIN_GRAPH,
+    CHROMA_CLASSIFICATION,
+];
 
 #[cfg(test)]
 mod tests {

@@ -164,13 +164,13 @@ pub fn is_end_of_life(message: &str) -> bool {
 }
 
 #[must_use]
-pub fn is_antihack_bypassed(message: &str) -> bool {
+pub fn is_expected_status(message: &str) -> bool {
     message.contains("c0000229")
 }
 
 #[must_use]
 pub fn is_dll_failure(level: &str, message: &str) -> bool {
-    if is_antihack_bypassed(message) {
+    if is_expected_status(message) {
         return false;
     }
     if level.eq_ignore_ascii_case("error") {
@@ -356,7 +356,7 @@ mod tests {
             HostEvent::DllLog { level, message } => {
                 assert_eq!(level, "ERROR");
                 assert!(message.contains("WAD scan failed status with c0000229"));
-                assert!(is_antihack_bypassed(&message));
+                assert!(is_expected_status(&message));
 
                 assert!(!is_dll_failure(&level, &message));
             }

@@ -106,6 +106,8 @@ pub struct Text {
     pub party_connecting: &'static str,
     pub party_in_room: &'static str,
     pub party_reconnecting: &'static str,
+    pub party_created_connecting: &'static str,
+    pub party_created_in_room: &'static str,
 
     pub menu_party_create: &'static str,
     pub menu_party_join: &'static str,
@@ -231,6 +233,8 @@ static PORTUGUESE: Text = Text {
     party_connecting: "Party: conectando…",
     party_in_room: "Party: na sala ({n} no total)",
     party_reconnecting: "Party: reconectando…",
+    party_created_connecting: "Party criada: conectando…",
+    party_created_in_room: "Party criada: na sala ({n} no total)",
 
     menu_party_create: "Criar sala de party...",
     menu_party_join: "Entrar na sala de party...",
@@ -353,6 +357,8 @@ static SPANISH: Text = Text {
     party_connecting: "Party: conectando…",
     party_in_room: "Party: en la sala ({n} en total)",
     party_reconnecting: "Party: reconectando…",
+    party_created_connecting: "Party creada: conectando…",
+    party_created_in_room: "Party creada: en la sala ({n} en total)",
 
     menu_party_create: "Crear sala de party...",
     menu_party_join: "Unirse a la sala de party...",
@@ -475,6 +481,8 @@ static ENGLISH: Text = Text {
     party_connecting: "Party: connecting…",
     party_in_room: "Party: in the room ({n} in total)",
     party_reconnecting: "Party: reconnecting…",
+    party_created_connecting: "Party created: connecting…",
+    party_created_in_room: "Party created: in the room ({n} in total)",
 
     menu_party_create: "Create party room...",
     menu_party_join: "Join party room...",
