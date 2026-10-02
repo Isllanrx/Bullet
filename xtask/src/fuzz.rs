@@ -168,7 +168,7 @@ fn exercise_bin(bytes: &[u8], alias: &str, skin: u32) -> bool {
         .ok()
         .and_then(|file| serialize_prop_file(&file).ok())
         .is_some();
-    let retargeted = retarget_skin_bin(bytes, alias, skin, 0).is_ok();
+    let retargeted = retarget_skin_bin(bytes, alias, skin, 0, None).is_ok();
     links || parsed || retargeted
 }
 
@@ -215,7 +215,7 @@ pub fn run(corpus: &Corpus, iterations: usize, seed: u64) -> Report {
         }
         report.property_checks += 1;
         let target = format!("Characters/{alias}/Skins/Skin0");
-        let ok = retarget_skin_bin(bytes, alias, *skin, 0)
+        let ok = retarget_skin_bin(bytes, alias, *skin, 0, None)
             .ok()
             .and_then(|out| parse_prop_file(&out).ok())
             .is_some_and(|file| {
