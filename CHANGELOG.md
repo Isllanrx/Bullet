@@ -17,9 +17,17 @@ versions follow [Semantic Versioning](https://semver.org/). Detailed notes for e
   followed through the game's local live data, and when a match ends the logs, records and the screenshots taken
   in that match (F12) are zipped into the logs folder. `Ctrl+Shift+B` marks a problem during a match without
   leaving the game. Nothing reads or writes the game's memory, and other players' names are never written.
+- Skins with several forms (a sword per class, an outfit per stage) cycle them in game with `Ctrl+5`, when each
+  form has a part of its own; the form's materials and lasting effects follow it.
 
 ### Fixed
 
+- Every generated skin is consistent with the slot it takes: the skin names itself and its resources by the
+  slot's keys, and a chroma loaded as the default skin no longer claims to be a chroma of another skin.
+- Chromas keep their companions (Zoe's orbs, Syndra's spheres, Nasus's ultimate, Ivern's totem, Fizz's
+  bait, Anivia's wall) even when the League client does not answer: the parent skin is read from the game.
+- After creating a party, the control panel says "Party created" with the room count instead of the same
+  line a joined room shows, so the disabled Create and Join buttons no longer look like a frozen window.
 - Zed's shadow and the companions of 895 other skins (Shaco, Syndra, Taliyah, Yorick and more) now take the
   skin's look: files a map also holds are changed in the map too.
 - Skins keep their own animations; the default skin's animation graph is no longer replaced.
@@ -29,9 +37,21 @@ versions follow [Semantic Versioning](https://semver.org/). Detailed notes for e
   Classic skin, including Wukong's.
 - Champion names, forms and companions are read from your installed client instead of fixed tables.
 - Opening Bullet a second time shows the control panel instead of a blocking message.
+- Fallen God-King and God-King Garen spin with their own animation on E instead of standing still.
+- The game is never hooked while it is already loading (that could crash it); the skin loads on the reconnect
+  instead.
+- The first champion select after a patch no longer waits for the champion's files to be scanned: every champion
+  is indexed in the background once per patch, and simultaneous builds share one scan.
+- Chroma previews no longer hold the selection: they are fetched together as soon as the champion's list opens,
+  and a click on a skin is taken at once even while previews are still arriving.
+- Clicking Create several times while a party window was open no longer opens several rooms and windows.
+- The first champion select after a patch no longer freezes the selection window while a map archive is
+  prepared.
 
 ### Security
 
+- The released `bullet.exe` links the C runtime statically again (it needed the Visual C++ runtime installed)
+  and no longer carries paths of the machine that built it; its PE checksum is set.
 - Bullet no longer suspends the game or asks for the debug privilege.
 - Bullet refuses to start without the audited injector and says where to put it.
 - Hardened the game file parsers against malformed data found by fuzzing.

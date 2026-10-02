@@ -14,7 +14,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-use crate::catalog::{self, Catalog, ModsPanel};
+use crate::catalog::{self, Catalog, ModsPanel, PreviewFetches};
 use crate::{historic_store, mods_store};
 
 const TRACK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
@@ -32,6 +32,13 @@ fn target_is_stale(target: Option<&OverlayTarget>, champion: Option<ChampionId>)
 #[must_use]
 fn wanted_for_phase(phase: &GamePhase) -> bool {
     matches!(phase, GamePhase::ChampSelect | GamePhase::Finalization)
+}
+
+async fn next_preview(fetches: &mut Option<PreviewFetches>) -> Option<(u32, Option<String>)> {
+    match fetches {
+        Some(stream) => futures_util::StreamExt::next(stream).await,
+        None => std::future::pending().await,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +86,8 @@ pub struct OverlaySession {
     random_declined: Option<ChampionId>,
 
     chroma_previews: std::collections::HashMap<u32, String>,
+
+    preview_fetches: Option<PreviewFetches>,
 }
 
 #[derive(Debug, Clone)]
@@ -120,6 +129,7 @@ impl OverlaySession {
             random_rolled: None,
             random_declined: None,
             chroma_previews: std::collections::HashMap::new(),
+            preview_fetches: None,
         }
     }
 
@@ -144,7 +154,7 @@ impl OverlaySession {
                         }
                         Some(OverlayCommand::Random) => self.roll_random(catalog.as_ref()),
                         Some(OverlayCommand::ChromaPreview { id }) => {
-                            self.send_chroma_preview(id, catalog.as_ref()).await;
+                            self.send_chroma_preview(id, catalog.as_ref());
                         }
                         Some(OverlayCommand::ImportMod { category }) => {
                             let locale = catalog.as_ref().and_then(|c| c.locale.clone());
@@ -160,6 +170,11 @@ impl OverlaySession {
                         }
                     }
                 }
+                fetched = next_preview(&mut self.preview_fetches) => match fetched {
+                    Some((id, Some(uri))) => self.deliver_chroma_preview(id, uri),
+                    Some((id, None)) => debug!(chroma_id = id, "Chroma preview not fetched"),
+                    None => self.preview_fetches = None,
+                },
                 () = tokio::time::sleep(TRACK_INTERVAL) => {
                     let (wanted, finalization, champion, target_stale, target, lcu_skin, confirmed) = {
                         let state = self.state_rx.borrow_and_update();
@@ -195,6 +210,9 @@ impl OverlaySession {
                         catalog_champion = champion;
                         self.chroma_previews.clear();
                         catalog = self.refresh_catalog(champion).await;
+                        self.preview_fetches = catalog
+                            .as_ref()
+                            .map(|built| catalog::chroma_preview_fetches(built.chroma_preview_paths()));
                         if champion.is_none() {
                             self.historic_consulted = None;
                             self.historic_restored = None;
@@ -248,7 +266,7 @@ impl OverlaySession {
                 );
                 self.controller.set_catalog(json);
                 if !classic {
-                    self.warm_companions(built.alias.clone()).await;
+                    self.warm_companions(built.alias.clone());
                 }
                 Some(built)
             }
@@ -261,7 +279,7 @@ impl OverlaySession {
 }
 
 impl OverlaySession {
-    async fn warm_companions(&self, alias: Option<String>) {
+    fn warm_companions(&self, alias: Option<String>) {
         let Some(alias) = alias else {
             return;
         };
@@ -272,9 +290,18 @@ impl OverlaySession {
         };
         let cache_dir = self.mods.state_dir.clone();
         let overlay_dir = self.mods.overlay_dir.clone();
-        let warmed = tokio::task::spawn_blocking(move || {
-            let companions = bullet_classic::generator::StandardChampion::open(&game_dir, &alias)
-                .map(|champion| champion.with_cache_dir(&cache_dir).companions())?;
+        drop(tokio::task::spawn_blocking(move || {
+            let started = std::time::Instant::now();
+            let companions =
+                match bullet_classic::generator::StandardChampion::open(&game_dir, &alias)
+                    .map(|champion| champion.with_cache_dir(&cache_dir).companions())
+                {
+                    Ok(companions) => companions,
+                    Err(e) => {
+                        debug!(error = %e, "Companion characters not indexed ahead of the build");
+                        return;
+                    }
+                };
             let skin_bins: Vec<u64> = std::iter::once(alias.to_ascii_lowercase())
                 .chain(companions.iter().cloned())
                 .map(|character| {
@@ -283,24 +310,22 @@ impl OverlaySession {
                     ))
                 })
                 .collect();
-            if let Err(e) = bullet_inject::overlay_builder::prewarm_shared_copies(
+            match bullet_inject::overlay_builder::prewarm_shared_copies(
                 &game_dir,
                 &overlay_dir,
                 &skin_bins,
             ) {
-                warn!(error = %e, "Map WAD not copied ahead; the first build of this skin copies it");
+                Ok(copied) => info!(
+                    companions = ?companions,
+                    copied,
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "Shared map WADs prepared in the background; the selection window stayed responsive"
+                ),
+                Err(e) => {
+                    warn!(error = %e, "Map WAD not copied ahead; the first build of this skin copies it")
+                }
             }
-            Ok::<_, bullet_classic::error::ClassicError>(companions)
-        })
-        .await;
-        match warmed {
-            Ok(Ok(companions)) => debug!(
-                companions = ?companions,
-                "Companion characters indexed and shared map WADs prepared before the skin is chosen"
-            ),
-            Ok(Err(e)) => debug!(error = %e, "Companion characters not indexed ahead of the build"),
-            Err(e) => warn!(error = %e, "Companion indexing task failed"),
-        }
+        }));
     }
 
     async fn refresh_mods(&mut self, champion_id: ChampionId, alias: Option<String>) -> ModsPanel {
@@ -514,20 +539,30 @@ impl OverlaySession {
         }
     }
 
-    async fn send_chroma_preview(&mut self, chroma_id: u32, catalog: Option<&Catalog>) {
-        let uri = match self.chroma_previews.entry(chroma_id) {
-            std::collections::hash_map::Entry::Occupied(cached) => cached.into_mut(),
-            std::collections::hash_map::Entry::Vacant(slot) => {
-                let Some(path) = catalog.and_then(|c| c.chroma_preview_path(chroma_id)) else {
-                    debug!(chroma_id, "Chroma preview asked for an entry without one");
-                    return;
-                };
-                let Some(fetched) = catalog::fetch_chroma_preview(path).await else {
-                    return;
-                };
-                slot.insert(fetched)
-            }
+    fn send_chroma_preview(&mut self, chroma_id: u32, catalog: Option<&Catalog>) {
+        if let Some(uri) = self.chroma_previews.get(&chroma_id) {
+            self.push_chroma_preview(chroma_id, uri);
+            return;
+        }
+        if self.preview_fetches.is_some() {
+            return;
+        }
+        let Some(path) = catalog.and_then(|c| c.chroma_preview_path(chroma_id)) else {
+            debug!(chroma_id, "Chroma preview asked for an entry without one");
+            return;
         };
+        self.preview_fetches = Some(catalog::chroma_preview_fetches(vec![(
+            chroma_id,
+            path.to_owned(),
+        )]));
+    }
+
+    fn deliver_chroma_preview(&mut self, chroma_id: u32, uri: String) {
+        self.push_chroma_preview(chroma_id, &uri);
+        self.chroma_previews.insert(chroma_id, uri);
+    }
+
+    fn push_chroma_preview(&self, chroma_id: u32, uri: &str) {
         match serde_json::to_string(uri) {
             Ok(json) => self.controller.eval_script(format!(
                 "window.bulletOverlay.setChromaPreview({chroma_id}, {json});"

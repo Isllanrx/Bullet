@@ -132,6 +132,15 @@ impl Catalog {
     }
 
     #[must_use]
+    pub fn chroma_preview_paths(&self) -> Vec<(u32, String)> {
+        self.skins
+            .iter()
+            .flat_map(|s| s.chromas.iter())
+            .filter_map(|c| c.preview_path.clone().map(|path| (c.id, path)))
+            .collect()
+    }
+
+    #[must_use]
     pub fn chroma_preview_path(&self, chroma_id: u32) -> Option<&str> {
         self.skins
             .iter()
@@ -555,8 +564,35 @@ async fn lcu_client() -> Option<bullet_lcu::client::LcuClient> {
     bullet_lcu::client::LcuClient::new(&lockfile, bullet_lcu::client::DEFAULT_LCU_TIMEOUT).ok()
 }
 
-pub async fn fetch_chroma_preview(path: &str) -> Option<String> {
-    let client = lcu_client().await?;
+const PREVIEW_FETCHES: usize = 4;
+
+pub type PreviewFetches = futures_util::stream::BoxStream<'static, (u32, Option<String>)>;
+
+#[must_use]
+pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
+    use futures_util::StreamExt;
+    futures_util::stream::once(lcu_client())
+        .flat_map(move |client| {
+            futures_util::stream::iter(previews.clone())
+                .map(move |(id, path)| {
+                    let client = client.clone();
+                    async move {
+                        let uri = match client {
+                            Some(client) => fetch_chroma_preview(&client, &path).await,
+                            None => None,
+                        };
+                        (id, uri)
+                    }
+                })
+                .buffer_unordered(PREVIEW_FETCHES)
+        })
+        .boxed()
+}
+
+async fn fetch_chroma_preview(
+    client: &bullet_lcu::client::LcuClient,
+    path: &str,
+) -> Option<String> {
     match client.get_asset_bytes(path).await {
         Ok(bytes) if !bytes.is_empty() => Some(tile_data_uri(path, &bytes)),
         Ok(_) => None,

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use bullet_core::party::PartyStatus;
 use bullet_inject::ltk_host::{DllSupport, dll_support};
 use bullet_platform::i18n::{Text, fill};
 use bullet_platform::panel::{PanelCheck, PanelSnapshot};
@@ -19,6 +20,25 @@ pub struct Facts {
     pub now_secs: u64,
     pub elevated: bool,
     pub update: Option<String>,
+}
+
+#[must_use]
+pub fn party_line(status: &PartyStatus, hosting: bool, text: &Text) -> (String, bool) {
+    match status {
+        PartyStatus::Off => (text.party_off.to_owned(), false),
+        PartyStatus::Unavailable { .. } => (text.party_unavailable.to_owned(), false),
+        PartyStatus::Connecting if hosting => (text.party_created_connecting.to_owned(), true),
+        PartyStatus::Connecting => (text.party_connecting.to_owned(), true),
+        PartyStatus::Connected { members } => {
+            let line = if hosting {
+                text.party_created_in_room
+            } else {
+                text.party_in_room
+            };
+            (fill(line, "n", &members.to_string()), true)
+        }
+        PartyStatus::Error { .. } => (text.party_reconnecting.to_owned(), true),
+    }
 }
 
 #[must_use]
@@ -328,6 +348,29 @@ mod tests {
         std::fs::write(&dll, b"dll").expect("dll");
         assert!(tools_present(&[host, dll]));
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
+    }
+
+    #[test]
+    fn test_a_room_you_created_says_so_until_you_leave() {
+        for language in [Language::Portuguese, Language::Spanish, Language::English] {
+            let text = language.text();
+            let connected = PartyStatus::Connected { members: 1 };
+
+            let (created, in_room) = party_line(&connected, true, text);
+            assert_eq!(created, fill(text.party_created_in_room, "n", "1"));
+            assert!(in_room);
+            assert_ne!(created, fill(text.party_in_room, "n", "1"));
+
+            let (joined, _) = party_line(&connected, false, text);
+            assert_eq!(joined, fill(text.party_in_room, "n", "1"));
+
+            let (connecting, _) = party_line(&PartyStatus::Connecting, true, text);
+            assert_eq!(connecting, text.party_created_connecting);
+
+            let (left, in_room) = party_line(&PartyStatus::Off, true, text);
+            assert_eq!(left, text.party_off);
+            assert!(!in_room);
+        }
     }
 
     #[test]

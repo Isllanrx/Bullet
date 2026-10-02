@@ -9,6 +9,8 @@ pub enum InjectError {
 
     #[error("cancelled")]
     Cancelled,
+    #[error("the game was already loading for {age_ms}ms; it is not hooked mid-load")]
+    GameAlreadyLoading { age_ms: u64 },
     #[error("hook not confirmed after {timeout_ms}ms")]
     HookUnconfirmed { timeout_ms: u64 },
     #[error("process error: {0}")]

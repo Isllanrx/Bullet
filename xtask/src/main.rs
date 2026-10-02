@@ -33,6 +33,7 @@ fn main() {
         "wad-types" => run_wad_types(&args[2..]),
         "install-audit" => run_install_audit(&args[2..]),
         "skin-audit" => run_skin_audit(&args[2..]),
+        "prop-roundtrip" => run_prop_roundtrip(&args[2..]),
         "client-dump" => run_client_dump(&args[2..]),
         "client-audit" => run_client_audit(&args[2..]),
         "harness" => run_harness(&args[2..]),
@@ -83,6 +84,9 @@ fn print_help() {
     );
     eprintln!(
         "  fuzz             - Mutate real game WADs and bins into the parsers; checks no panic and PROP round trips ([iterations] [seed])"
+    );
+    eprintln!(
+        "  prop-roundtrip   - Read every object of every champion and map bin into the PROP tree and write it back; fails on any byte that differs ([--root <game>])"
     );
     eprintln!("  adr008           - Fail if any discarded Result lacks a `// ignore-ok: <reason>`");
     eprintln!(
@@ -136,6 +140,36 @@ fn run_check() {
     println!("\n[OK] All workspace checks passed with 100% success!");
 }
 
+fn release_rustflags(workspace_root: &std::path::Path) -> String {
+    let mut flags: Vec<String> = vec!["-C".into(), "target-feature=+crt-static".into()];
+    if let Ok(extra) = std::env::var("RUSTFLAGS") {
+        flags.extend(extra.split_whitespace().map(str::to_owned));
+    }
+    let cargo_home = std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".cargo")));
+    if let Some(home) = cargo_home {
+        flags.push(format!("--remap-path-prefix={}=cargo", home.display()));
+    }
+    let sysroot = Command::new("rustc")
+        .args(["--print", "sysroot"])
+        .current_dir(workspace_root)
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .map(|text| text.trim().to_owned())
+        .filter(|text| !text.is_empty());
+    if let Some(sysroot) = sysroot {
+        flags.push(format!("--remap-path-prefix={sysroot}=rust"));
+    }
+    flags.push(format!(
+        "--remap-path-prefix={}=bullet",
+        workspace_root.display()
+    ));
+    flags.join("\u{1f}")
+}
+
 fn run_package() {
     let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -144,7 +178,12 @@ fn run_package() {
 
     println!("==> Compiling optimized release binary...");
     let status = Command::new("cargo")
-        .args(["build", "--release"])
+        .args(["build", "--release", "--locked"])
+        .env(
+            "CARGO_ENCODED_RUSTFLAGS",
+            release_rustflags(&workspace_root),
+        )
+        .env_remove("RUSTFLAGS")
         .status()
         .expect("failed to compile release");
     check_status("cargo build --release", status);
@@ -673,11 +712,81 @@ fn run_client_dump(args: &[String]) {
     }
 }
 
+fn run_prop_roundtrip(args: &[String]) {
+    let root = args
+        .iter()
+        .position(|a| a == "--root")
+        .and_then(|p| args.get(p + 1))
+        .map(PathBuf::from);
+    let Some(game) = root.or_else(game_dir) else {
+        return;
+    };
+    let final_dir = game.join("DATA").join("FINAL");
+    let mut wads: Vec<PathBuf> = ["Champions", "Maps/Shipping"]
+        .iter()
+        .filter_map(|dir| std::fs::read_dir(final_dir.join(dir)).ok())
+        .flat_map(|entries| entries.flatten().map(|e| e.path()))
+        .filter(|p| p.to_string_lossy().ends_with(".wad.client"))
+        .collect();
+    wads.sort();
+    let (mut bins, mut objects, mut differs, mut unreadable) = (0usize, 0usize, 0usize, 0usize);
+    let mut examples = Vec::new();
+    for path in &wads {
+        let Ok(wad) = bullet_wad::wad::WadFile::open(path) else {
+            unreadable += 1;
+            continue;
+        };
+        let hashes: Vec<u64> = wad.entries().map(|(hash, _)| hash).collect();
+        for hash in hashes {
+            let Ok(Some(bytes)) = wad.read(hash) else {
+                continue;
+            };
+            if !(bytes.starts_with(b"PROP") || bytes.starts_with(b"PTCH")) {
+                continue;
+            }
+            let Ok(bin) = bullet_wad::prop::parse_prop_file(&bytes) else {
+                continue;
+            };
+            bins += 1;
+            for entry in &bin.entries {
+                objects += 1;
+                let same = bullet_wad::prop::tree::parse_fields(&entry.body)
+                    .and_then(|fields| bullet_wad::prop::tree::write_fields(&fields))
+                    .is_ok_and(|written| written == entry.body);
+                if !same {
+                    differs += 1;
+                    if examples.len() < 10 {
+                        examples.push(format!(
+                            "{} entry {hash:016x} object {:08x}",
+                            path.file_name()
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .unwrap_or_default(),
+                            entry.key_hash
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    println!(
+        "wads: {} ({unreadable} unreadable) | bins: {bins} | objects: {objects} | not identical: {differs}",
+        wads.len()
+    );
+    for example in &examples {
+        println!("  {example}");
+    }
+    if differs > 0 {
+        std::process::exit(1);
+    }
+}
+
 fn run_skin_audit(args: &[String]) {
     let mut root = None;
     let mut out = skin_audit::default_report_path();
     let mut filters = Vec::new();
     let mut keep: Option<PathBuf> = None;
+    let mut options = bullet_classic::generator::GenerationOptions::default();
+    let mut forms = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -688,6 +797,14 @@ fn run_skin_audit(args: &[String]) {
                 }
             }
             "--keep" => keep = iter.next().map(PathBuf::from),
+            "--forms" => forms = true,
+            "--variant" => match iter.next().map(String::as_str) {
+                Some("graph-slot0") => options.graph_in_slot0 = true,
+                Some("chroma-classification") => options.chroma_keeps_classification = true,
+                other => eprintln!(
+                    "unknown variant {other:?}; expected graph-slot0 or chroma-classification"
+                ),
+            },
             other => filters.push(other.to_owned()),
         }
     }
@@ -717,12 +834,24 @@ fn run_skin_audit(args: &[String]) {
     let started = std::time::Instant::now();
     let mut reports = Vec::with_capacity(aliases.len());
     for alias in &aliases {
-        let report =
-            skin_audit::audit_champion(&game, alias, &maps, &cache_dir, &staging, keep.is_some());
-        let findings = report.skins.values().filter(|f| !f.is_clean()).count();
+        let report = skin_audit::audit_champion(
+            &game,
+            alias,
+            &maps,
+            &cache_dir,
+            &staging,
+            skin_audit::AuditSettings {
+                keep: keep.is_some(),
+                options,
+                forms,
+            },
+        );
+        let findings = report.skins.values().filter(|f| !f.is_clean()).count()
+            + report.forms.values().filter(|f| !f.is_clean()).count();
         println!(
-            "{alias}: skins={} companheiros={:?} achados={findings} varredura_ms={}{}",
+            "{alias}: skins={} formas={} companheiros={:?} achados={findings} varredura_ms={}{}",
             report.skins.len(),
+            report.forms.len(),
             report.companion_skins.keys().collect::<Vec<_>>(),
             report.scan_ms,
             report

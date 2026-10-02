@@ -2,13 +2,14 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 
-use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::Foundation::{CloseHandle, FILETIME};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
     TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
 use windows::Win32::System::Threading::{
-    OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    GetProcessTimes, OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
 };
 use windows::core::PWSTR;
 
@@ -16,9 +17,41 @@ use tracing::debug;
 
 use crate::error::PlatformError;
 
+const FILETIME_UNIX_OFFSET_SECS: u64 = 11_644_473_600;
+const FILETIME_TICKS_PER_SEC: u64 = 10_000_000;
+
+#[must_use]
+pub fn filetime_age(created_ticks: u64, now: std::time::SystemTime) -> Option<std::time::Duration> {
+    let since_unix = now.duration_since(std::time::UNIX_EPOCH).ok()?;
+    let now_ticks = since_unix
+        .as_secs()
+        .checked_add(FILETIME_UNIX_OFFSET_SECS)?
+        .checked_mul(FILETIME_TICKS_PER_SEC)?
+        .checked_add(u64::from(since_unix.subsec_nanos()) / 100)?;
+    let ticks = now_ticks.checked_sub(created_ticks)?;
+    Some(std::time::Duration::from_nanos(ticks.saturating_mul(100)))
+}
+
 pub struct ProcessFinder;
 
 impl ProcessFinder {
+    #[must_use]
+    pub fn process_age(pid: u32) -> Option<std::time::Duration> {
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
+        let mut created = FILETIME::default();
+        let mut exited = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        let times =
+            unsafe { GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user) };
+        unsafe {
+            let _ = CloseHandle(handle); // ignore-ok: handle released after the query; nothing to recover from
+        };
+        times.ok()?;
+        let ticks = (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
+        filetime_age(ticks, std::time::SystemTime::now())
+    }
+
     pub fn get_process_path(pid: u32) -> Result<Option<PathBuf>, PlatformError> {
         let handle = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
             Ok(h) => h,
@@ -154,5 +187,32 @@ mod tests {
         assert!(path.is_some(), "should resolve current process binary path");
         let path = path.unwrap();
         assert!(path.exists(), "process path must exist on disk");
+    }
+
+    #[test]
+    fn test_the_current_process_has_a_short_age() {
+        let age = ProcessFinder::process_age(std::process::id()).expect("own process age");
+        assert!(age < std::time::Duration::from_secs(600));
+    }
+
+    #[test]
+    fn test_filetime_age_counts_from_1601() {
+        let now = std::time::UNIX_EPOCH + std::time::Duration::from_secs(10);
+        let created =
+            FILETIME_UNIX_OFFSET_SECS * FILETIME_TICKS_PER_SEC + 4 * FILETIME_TICKS_PER_SEC;
+        assert_eq!(
+            filetime_age(created, now),
+            Some(std::time::Duration::from_secs(6))
+        );
+        assert_eq!(
+            filetime_age(u64::MAX, now),
+            None,
+            "a creation time in the future has no age"
+        );
+    }
+
+    #[test]
+    fn test_a_missing_process_has_no_age() {
+        assert_eq!(ProcessFinder::process_age(u32::MAX), None);
     }
 }
