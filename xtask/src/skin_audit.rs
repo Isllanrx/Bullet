@@ -13,12 +13,17 @@ pub struct SkinFinding {
     pub companions_written: Vec<String>,
     pub source_links_dropped: bool,
     pub shared_with_map: Vec<String>,
+    pub stale_references: Vec<String>,
+    pub missing_links: Vec<String>,
 }
 
 impl SkinFinding {
     #[must_use]
     pub fn is_clean(&self) -> bool {
-        self.build_error.is_none() && !self.source_links_dropped
+        self.build_error.is_none()
+            && !self.source_links_dropped
+            && self.stale_references.is_empty()
+            && self.missing_links.is_empty()
     }
 }
 
@@ -29,6 +34,7 @@ pub struct ChampionReport {
     pub companions: BTreeSet<String>,
     pub companion_skins: BTreeMap<String, BTreeSet<u32>>,
     pub skins: BTreeMap<u32, SkinFinding>,
+    pub forms: BTreeMap<(u32, u32), SkinFinding>,
     pub scan_ms: u128,
 }
 
@@ -114,6 +120,75 @@ fn keeps_source_links(
     }
 }
 
+fn source_keys(character: &str, links: &[String]) -> HashSet<u32> {
+    let source = links.first().and_then(|link| {
+        let lower = link.to_ascii_lowercase();
+        let number = lower
+            .strip_prefix(&format!(
+                "data/characters/{}/skins/skin",
+                character.to_ascii_lowercase()
+            ))?
+            .strip_suffix(".bin")?;
+        number.parse::<u32>().ok()
+    });
+    source
+        .into_iter()
+        .flat_map(|n| {
+            let object = format!("Characters/{character}/Skins/Skin{n}");
+            [
+                bullet_wad::hash::prop_key_hash(&object),
+                bullet_wad::hash::prop_key_hash(&format!("{object}/Resources")),
+            ]
+        })
+        .collect()
+}
+
+fn check_generated_bins(
+    champion: &StandardChampion,
+    maps: &MapIndex,
+    characters: &Path,
+    written: &HashSet<String>,
+    finding: &mut SkinFinding,
+) {
+    let Ok(entries) = std::fs::read_dir(characters) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let character = entry.file_name().to_string_lossy().into_owned();
+        let Ok(bytes) = std::fs::read(entry.path().join("skins").join("skin0.bin")) else {
+            continue;
+        };
+        let Ok(bin) = bullet_wad::prop::parse_prop_file(&bytes) else {
+            finding
+                .stale_references
+                .push(format!("{character}: generated bin unreadable"));
+            continue;
+        };
+        let stale = source_keys(&character, &bin.links);
+        let stuck = bin
+            .entries
+            .iter()
+            .filter_map(|e| bullet_wad::prop::reference_values(&e.body).ok())
+            .flatten()
+            .filter(|value| stale.contains(value))
+            .count();
+        if stuck > 0 {
+            finding
+                .stale_references
+                .push(format!("{character}: {stuck} reference(s) to a source key"));
+        }
+        for link in &bin.links {
+            let hash = wad_path_hash(&link.to_ascii_lowercase());
+            if !written.contains(&link.to_ascii_lowercase())
+                && !champion.contains_path(link)
+                && maps_holding(maps, hash).is_empty()
+            {
+                finding.missing_links.push(format!("{character}: {link}"));
+            }
+        }
+    }
+}
+
 fn generated_paths(wad_root: &Path) -> Vec<String> {
     let mut paths = Vec::new();
     let mut stack = vec![wad_root.to_path_buf()];
@@ -139,20 +214,29 @@ fn generated_paths(wad_root: &Path) -> Vec<String> {
     paths
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AuditSettings {
+    pub keep: bool,
+    pub options: bullet_classic::generator::GenerationOptions,
+    pub forms: bool,
+}
+
 pub fn audit_champion(
     game: &Path,
     alias: &str,
     maps: &MapIndex,
     cache_dir: &Path,
     staging: &Path,
-    keep: bool,
+    settings: AuditSettings,
 ) -> ChampionReport {
     let mut report = ChampionReport {
         alias: alias.to_owned(),
         ..ChampionReport::default()
     };
     let champion = match StandardChampion::open(game, alias) {
-        Ok(champion) => champion.with_cache_dir(cache_dir),
+        Ok(champion) => champion
+            .with_cache_dir(cache_dir)
+            .with_options(settings.options),
         Err(e) => {
             report.open_error = Some(e.to_string());
             return report;
@@ -198,6 +282,8 @@ pub fn audit_champion(
                 }
                 finding.source_links_dropped =
                     !keeps_source_links(&champion, &main, skin, &characters.join(&main));
+                let written: HashSet<String> = generated_paths(&wad_root).into_iter().collect();
+                check_generated_bins(&champion, maps, &characters, &written, &mut finding);
                 finding.shared_with_map = generated_paths(&wad_root)
                     .into_iter()
                     .filter_map(|path| {
@@ -205,13 +291,35 @@ pub fn audit_champion(
                         (!holders.is_empty()).then(|| format!("{path} ({})", holders.join("/")))
                     })
                     .collect();
-                if !keep {
+                if !settings.keep {
                     let _ = std::fs::remove_dir_all(staging.join(&folder)); // ignore-ok: probe scratch folder
                 }
             }
             Err(e) => finding.build_error = Some(e.to_string()),
         }
         report.skins.insert(skin, finding);
+        if settings.forms {
+            for form in 0..champion.gear_count(skin) as u32 {
+                let mut finding = SkinFinding::default();
+                match champion.build_mod_form(skin, None, form, staging) {
+                    Ok(folder) => {
+                        let wad_root = staging
+                            .join(&folder)
+                            .join("WAD")
+                            .join(format!("{alias}.wad.client"));
+                        let written: HashSet<String> =
+                            generated_paths(&wad_root).into_iter().collect();
+                        let characters = wad_root.join("data").join("characters");
+                        check_generated_bins(&champion, maps, &characters, &written, &mut finding);
+                        if !settings.keep {
+                            let _ = std::fs::remove_dir_all(staging.join(&folder)); // ignore-ok: probe scratch folder
+                        }
+                    }
+                    Err(e) => finding.build_error = Some(e.to_string()),
+                }
+                report.forms.insert((skin, form), finding);
+            }
+        }
     }
     report
 }
@@ -289,14 +397,14 @@ pub fn render(reports: &[ChampionReport], missed: &BTreeMap<String, BTreeSet<Str
         String::new(),
         "## Findings per skin".to_owned(),
         String::new(),
-        "| Champion | Skin | Build error | Source links dropped | Paths also written into a map WAD |"
+        "| Champion | Skin | Build error | Source links dropped | Stale references | Missing links | Paths also written into a map WAD |"
             .to_owned(),
-        "| --- | --- | --- | --- | --- |".to_owned(),
+        "| --- | --- | --- | --- | --- | --- | --- |".to_owned(),
     ]);
     for report in reports {
         if let Some(error) = &report.open_error {
             lines.push(format!(
-                "| {} | - | WAD not opened: {error} | | |",
+                "| {} | - | WAD not opened: {error} | | | | |",
                 report.alias
             ));
             continue;
@@ -307,7 +415,7 @@ pub fn render(reports: &[ChampionReport], missed: &BTreeMap<String, BTreeSet<Str
             .filter(|(_, f)| !f.is_clean() || !f.shared_with_map.is_empty())
         {
             lines.push(format!(
-                "| {} | {skin} | {} | {} | {} |",
+                "| {} | {skin} | {} | {} | {} | {} | {} |",
                 report.alias,
                 finding.build_error.as_deref().unwrap_or(""),
                 if finding.source_links_dropped {
@@ -315,8 +423,43 @@ pub fn render(reports: &[ChampionReport], missed: &BTreeMap<String, BTreeSet<Str
                 } else {
                     ""
                 },
+                finding.stale_references.join("; "),
+                finding.missing_links.join("; "),
                 finding.shared_with_map.join(", ")
             ));
+        }
+    }
+    let forms: Vec<String> = reports
+        .iter()
+        .flat_map(|report| {
+            report.forms.iter().filter(|(_, f)| !f.is_clean()).map(
+                move |((skin, form), finding)| {
+                    format!(
+                        "| {} | {skin} | {form} | {} | {} | {} |",
+                        report.alias,
+                        finding.build_error.as_deref().unwrap_or(""),
+                        finding.stale_references.join("; "),
+                        finding.missing_links.join("; ")
+                    )
+                },
+            )
+        })
+        .collect();
+    if reports.iter().any(|r| !r.forms.is_empty()) {
+        lines.extend([
+            String::new(),
+            "## Findings per form".to_owned(),
+            String::new(),
+        ]);
+        if forms.is_empty() {
+            lines.push("None.".to_owned());
+        } else {
+            lines.push(
+                "| Champion | Skin | Form | Build error | Stale references | Missing links |"
+                    .to_owned(),
+            );
+            lines.push("| --- | --- | --- | --- | --- | --- |".to_owned());
+            lines.extend(forms);
         }
     }
     lines.extend([

@@ -33,7 +33,7 @@ rather than an assumption.
 | `smoke <bullet.exe> <tools dir>` | Runs a release binary without tools, with wrong tools and with the audited injector; checks the real log (refusal, every supervised task up, no error) and that a second launch opens the first one's control panel and exits. The first two scenarios are skipped when `%ProgramFiles%/Bullet/tools` holds an injector, because discovery prefers it |
 | `fuzz [iterations] [seed]` | Mutates real game WADs and property files into the parsers; fails on any panic or on a broken round trip of a real skin bin |
 | `client-dump <client dir> <path…>` | Prints files of the installed client's game data, such as `v1/champions/99.json` |
-| `skin-audit [--root <game>] [--out <file>] [Name…]` | Generates every skin and chroma of every champion from the installed game and reports, per skin: build errors, companion characters and whether each got its `skin0.bin`, skins whose `skin0.bin` dropped a link of the original, and generated paths that a map archive also holds (the overlay builder writes those into the map too). `--keep <dir>` keeps every generated mod for inspection |
+| `skin-audit [--root <game>] [--out <file>] [Name…]` | Generates every skin and chroma of every champion from the installed game and reports, per skin: build errors, companion characters and whether each got its `skin0.bin`, skins whose `skin0.bin` dropped a link of the original, generated bins that still reference their source skin's keys, links that point at files the game does not have, and generated paths that a map archive also holds (the overlay builder writes those into the map too). `--keep <dir>` keeps every generated mod for inspection |
 
 `cargo xtask help` prints the full list.
 

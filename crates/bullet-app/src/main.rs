@@ -187,6 +187,21 @@ async fn main() -> Result<()> {
 
     if paths.game_dir.is_dir() {
         bullet_inject::overlay_builder::prewarm_game_index(&paths.game_dir);
+        let gate_state = state_rx.clone();
+        let gate_token = shutdown_token.clone();
+        bullet_classic::generator::prewarm_companions(
+            &paths.game_dir,
+            &state_dir_path,
+            move || {
+                if gate_token.is_cancelled() {
+                    bullet_classic::generator::PrewarmGate::Stop
+                } else if gate_state.borrow().phase.is_in_game() {
+                    bullet_classic::generator::PrewarmGate::Wait
+                } else {
+                    bullet_classic::generator::PrewarmGate::Go
+                }
+            },
+        );
     }
 
     if library_has_content {
@@ -472,7 +487,7 @@ async fn main() -> Result<()> {
                         let tools_missing = !tool_files.iter().all(|file| file.is_file());
                         let state = state_rx_tray.borrow();
                         tray_controller.update_status(tray_status(&state, tools_missing, text));
-                        let (party_line, in_room) = tray_party_line(&state.party_status, text);
+                        let (party_line, in_room) = bullet_app::control_panel::party_line(&state.party_status, state.party_hosting, text);
                         tray_controller.update_party(&party_line, in_room);
                     }
                 }
@@ -618,23 +633,6 @@ fn tray_status(
         | GamePhase::EndOfGame
         | GamePhase::FailedToLaunch
         | GamePhase::TerminatedInError => text.status_connected,
-    }
-}
-
-fn tray_party_line(
-    status: &bullet_core::party::PartyStatus,
-    text: &'static bullet_platform::i18n::Text,
-) -> (String, bool) {
-    use bullet_core::party::PartyStatus;
-    match status {
-        PartyStatus::Off => (text.party_off.to_owned(), false),
-        PartyStatus::Unavailable { .. } => (text.party_unavailable.to_owned(), false),
-        PartyStatus::Connecting => (text.party_connecting.to_owned(), true),
-        PartyStatus::Connected { members } => (
-            bullet_platform::i18n::fill(text.party_in_room, "n", &members.to_string()),
-            true,
-        ),
-        PartyStatus::Error { .. } => (text.party_reconnecting.to_owned(), true),
     }
 }
 

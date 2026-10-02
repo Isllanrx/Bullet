@@ -59,6 +59,10 @@ trusted.
   never the catalog. For Rift Classic, what can be offered is decided by the installed game's `jade_*` tree,
   not by the library. A chroma preview's asset path stays on the Rust side; the page only learns that a
   preview exists and asks for it by id.
+- **Chroma previews never hold the selection.** When a champion's catalog is sent, every preview it offers
+  is fetched from the client with one connection, four at a time, and pushed to the page as it arrives.
+  The session loop only polls that stream, so a `Select` is handled at once even while previews are still
+  coming; hovering a chroma whose preview is not there yet waits for the stream instead of fetching it again.
 - **Auto-accept waits a moment** after the ready check appears: the client refuses an accept sent on the very
   first phase event about as often as it takes it. If the user accepted, declined or dodged meanwhile, nothing
   is sent.

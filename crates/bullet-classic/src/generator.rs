@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 
 use bullet_wad::hash::{prop_key_hash, wad_path_hash};
 use bullet_wad::prop::{
-    PropEntry, PropFile, field_value, parse_prop_file, serialize_prop_file, set_u32_field,
+    PropEntry, PropFile, field_value, parse_prop_file, remap_references, serialize_prop_file,
+    set_int_field,
 };
 use bullet_wad::wad::WadFile;
 use tracing::{debug, info, warn};
@@ -14,7 +15,7 @@ use crate::error::ClassicError;
 pub const CLASSIC_MOD_PREFIX: &str = "classic_";
 
 const SKIN_CLASSIFICATION_FIELD: &str = "skinClassification";
-const BASE_SKIN_CLASSIFICATION: u32 = 1;
+const SKIN_PARENT_FIELD: &str = "skinParent";
 
 #[must_use]
 pub fn is_safe_alias(alias: &str) -> bool {
@@ -46,11 +47,38 @@ fn animation_bin(character: &str, skin: u32) -> String {
     format!("data/characters/{character}/animations/skin{skin}.bin")
 }
 
+const SKIN_DATA_CLASS: u32 = 0x9b67_e9f6;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SlotIdentity {
+    pub classification: Option<u32>,
+    pub parent: u32,
+}
+
+pub fn slot_identity(slot_bin: &[u8]) -> Result<SlotIdentity, ClassicError> {
+    let parsed = parse_prop_file(slot_bin).map_err(|e| ClassicError::Bin(e.to_string()))?;
+    let skin = parsed
+        .entries
+        .iter()
+        .find(|e| e.class_hash == SKIN_DATA_CLASS)
+        .ok_or_else(|| ClassicError::Bin("no skin object in the slot bin".into()))?;
+    let read = |name: &str| {
+        field_value(&skin.body, &[prop_key_hash(name)])
+            .map(|v| v.and_then(|v| v.as_u32()))
+            .map_err(|e| ClassicError::Bin(e.to_string()))
+    };
+    Ok(SlotIdentity {
+        classification: read(SKIN_CLASSIFICATION_FIELD)?,
+        parent: read(SKIN_PARENT_FIELD)?.unwrap_or(0),
+    })
+}
+
 pub fn retarget_skin_bin(
     source: &[u8],
     character: &str,
     source_skin: u32,
     target_skin: u32,
+    identity: Option<SlotIdentity>,
 ) -> Result<Vec<u8>, ClassicError> {
     let source_prefix = format!("Characters/{character}/Skins/Skin{source_skin}");
     let target_prefix = format!("Characters/{character}/Skins/Skin{target_skin}");
@@ -99,22 +127,32 @@ pub fn retarget_skin_bin(
         })
         .collect();
 
-    if target_skin == 0 {
+    let moved = std::collections::BTreeMap::from([
+        (skin_source_hash, skin_target_hash),
+        (resources_source_hash, resources_target_hash),
+    ]);
+    for entry in &mut selected {
+        remap_references(&mut entry.body, &moved).map_err(|e| {
+            ClassicError::Bin(format!(
+                "references in {source_prefix} could not be walked: {e}"
+            ))
+        })?;
+    }
+
+    if let Some(identity) = identity {
         for entry in selected
             .iter_mut()
             .filter(|e| e.key_hash == skin_target_hash)
         {
-            if let Err(e) = set_u32_field(
-                &mut entry.body,
-                prop_key_hash(SKIN_CLASSIFICATION_FIELD),
-                BASE_SKIN_CLASSIFICATION,
-            ) {
-                warn!(
-                    character,
-                    source_skin,
-                    error = %e,
-                    "Skin classification left as in the source bin; its fields could not be walked"
-                );
+            let fields = identity
+                .classification
+                .map(|value| (SKIN_CLASSIFICATION_FIELD, value))
+                .into_iter()
+                .chain(std::iter::once((SKIN_PARENT_FIELD, identity.parent)));
+            for (name, value) in fields {
+                set_int_field(&mut entry.body, prop_key_hash(name), value).map_err(|e| {
+                    ClassicError::Bin(format!("{name} in {source_prefix} could not be set: {e}"))
+                })?;
             }
         }
     }
@@ -141,8 +179,6 @@ pub fn retarget_skin_bin(
     })
     .map_err(|e| ClassicError::Bin(e.to_string()))
 }
-
-const SKIN_DATA_CLASS: u32 = 0x9b67_e9f6;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 struct SkinBinFacts {
@@ -272,6 +308,98 @@ fn generated_bin_record(
         "animation_graph": graph,
         "objects": objects,
     })
+}
+
+pub fn relocate_prop(
+    bytes: &[u8],
+    moves: &std::collections::BTreeMap<u32, u32>,
+    extra_link: Option<&str>,
+) -> Result<Vec<u8>, ClassicError> {
+    let mut parsed = parse_prop_file(bytes).map_err(|e| ClassicError::Bin(e.to_string()))?;
+    for entry in &mut parsed.entries {
+        if let Some(&target) = moves.get(&entry.key_hash) {
+            entry.key_hash = target;
+        }
+        remap_references(&mut entry.body, moves)
+            .map_err(|e| ClassicError::Bin(format!("references could not be walked: {e}")))?;
+    }
+    if let Some(link) = extra_link {
+        if !parsed.links.iter().any(|l| l.eq_ignore_ascii_case(link)) {
+            parsed.links.push(link.to_owned());
+        }
+    }
+    serialize_prop_file(&parsed).map_err(|e| ClassicError::Bin(e.to_string()))
+}
+
+struct FormCycle {
+    files: Vec<(String, Vec<u8>)>,
+    skin0: Vec<u8>,
+    forms: usize,
+    drivers: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GenerationOptions {
+    pub graph_in_slot0: bool,
+    pub chroma_keeps_classification: bool,
+}
+
+pub fn move_graph_to_slot0(
+    wad: &WadFile,
+    character: &str,
+    source_skin_bin: &[u8],
+    generated: Vec<u8>,
+) -> Result<(Vec<u8>, Option<Vec<u8>>), ClassicError> {
+    let parsed = parse_prop_file(source_skin_bin).map_err(|e| ClassicError::Bin(e.to_string()))?;
+    let Some(skin) = parsed
+        .entries
+        .iter()
+        .find(|e| e.class_hash == SKIN_DATA_CLASS)
+    else {
+        return Ok((generated, None));
+    };
+    let graph = field_value(
+        &skin.body,
+        &[
+            prop_key_hash("skinAnimationProperties"),
+            prop_key_hash("animationGraphData"),
+        ],
+    )
+    .map_err(|e| ClassicError::Bin(e.to_string()))?
+    .and_then(|v| v.as_u32());
+    let Some(graph) = graph else {
+        return Ok((generated, None));
+    };
+    let slot0_graph = prop_key_hash(&format!("Characters/{character}/Animations/Skin0"));
+    if graph == slot0_graph {
+        return Ok((generated, None));
+    }
+    for link in parsed
+        .links
+        .iter()
+        .filter(|l| l.to_ascii_lowercase().contains("/animations/"))
+    {
+        let Some(bytes) = wad.read(wad_path_hash(&link.to_ascii_lowercase()))? else {
+            continue;
+        };
+        let holds_graph = parse_prop_file(&bytes)
+            .map(|anim| anim.entries.iter().any(|e| e.key_hash == graph))
+            .unwrap_or(false);
+        if !holds_graph {
+            continue;
+        }
+        let moves = std::collections::BTreeMap::from([(graph, slot0_graph)]);
+        let anim = relocate_prop(&bytes, &moves, Some(link))?;
+        let slot0_link = format!("DATA/Characters/{character}/Animations/Skin0.bin");
+        let skin_bin = relocate_prop(&generated, &moves, Some(&slot0_link))?;
+        return Ok((skin_bin, Some(anim)));
+    }
+    warn!(
+        character,
+        graph = format!("{graph:08x}"),
+        "The skin's animation graph is not in any animation bin it links; it stays where the game has it"
+    );
+    Ok((generated, None))
 }
 
 pub fn retarget_animation_bin(
@@ -522,6 +650,7 @@ fn cached_names(
     cache_path: &Path,
     stamp: &str,
     alias: &str,
+    ahead_of_time: bool,
     scan: impl FnOnce() -> BTreeSet<String>,
 ) -> BTreeSet<String> {
     if !stamp.is_empty() {
@@ -541,12 +670,21 @@ fn cached_names(
 
     let started = std::time::Instant::now();
     let characters = scan();
-    info!(
-        alias,
-        names = ?characters,
-        elapsed_ms = started.elapsed().as_millis(),
-        "Character names recovered from the champion's bins"
-    );
+    if ahead_of_time {
+        debug!(
+            alias,
+            names = ?characters,
+            elapsed_ms = started.elapsed().as_millis(),
+            "Character names indexed ahead of champion select"
+        );
+    } else {
+        info!(
+            alias,
+            names = ?characters,
+            elapsed_ms = started.elapsed().as_millis(),
+            "Character names recovered from the champion's bins"
+        );
+    }
     if !stamp.is_empty() {
         let cache = CharacterCache {
             source: stamp.to_owned(),
@@ -650,7 +788,7 @@ impl ClassicChampion {
             "classic_bin_names_{}.json",
             self.alias.to_ascii_lowercase()
         ));
-        cached_names(&cache_path, &self.wad_stamp, &self.alias, || {
+        cached_names(&cache_path, &self.wad_stamp, &self.alias, false, || {
             self.jade_names_in_bins()
         })
     }
@@ -734,7 +872,8 @@ impl ClassicChampion {
                 .join("skins");
             std::fs::create_dir_all(&bins_dir)?;
             for slot in slots.iter().copied().filter(|slot| *slot != skin) {
-                let bin = retarget_skin_bin(&source, &display, skin, slot)?;
+                let identity = identity_at(&self.wad, character, slot);
+                let bin = retarget_skin_bin(&source, &display, skin, slot, identity)?;
                 std::fs::write(bins_dir.join(format!("skin{slot}.bin")), bin)?;
                 written += 1;
             }
@@ -791,6 +930,24 @@ impl ClassicChampion {
     }
 }
 
+fn identity_at(wad: &WadFile, character: &str, slot: u32) -> Option<SlotIdentity> {
+    let path = skin_bin(character, slot);
+    match wad.read(wad_path_hash(&path)) {
+        Ok(Some(bin)) => match slot_identity(&bin) {
+            Ok(identity) => Some(identity),
+            Err(e) => {
+                warn!(character, slot, error = %e, "Slot identity unreadable; the source skin keeps its own");
+                None
+            }
+        },
+        Ok(None) => None,
+        Err(e) => {
+            warn!(character, slot, error = %e, "Slot bin unreadable; the source skin keeps its own identity");
+            None
+        }
+    }
+}
+
 fn remove_if_present(dir: &Path) -> Result<(), ClassicError> {
     match std::fs::remove_dir_all(dir) {
         Ok(()) => Ok(()),
@@ -817,13 +974,107 @@ pub fn is_generated_folder(name: &str) -> bool {
     name.starts_with(CLASSIC_MOD_PREFIX) || name.starts_with(STANDARD_MOD_PREFIX)
 }
 
+type SharedScan = std::sync::Arc<std::sync::OnceLock<BTreeSet<String>>>;
+
+fn shared_scan(alias: &str, stamp: &str) -> SharedScan {
+    static SCANS: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, SharedScan>>,
+    > = std::sync::OnceLock::new();
+    if stamp.is_empty() {
+        return SharedScan::default();
+    }
+    let prefix = format!("{}|", alias.to_ascii_lowercase());
+    let key = format!("{prefix}{stamp}");
+    let scans = SCANS.get_or_init(Default::default);
+    let mut map = match scans.lock() {
+        Ok(map) => map,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    map.retain(|k, _| !k.starts_with(&prefix) || *k == key);
+    std::sync::Arc::clone(map.entry(key).or_default())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrewarmGate {
+    Go,
+    Wait,
+    Stop,
+}
+
+const PREWARM_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+#[must_use]
+pub fn champion_aliases(game_dir: &Path) -> Vec<String> {
+    let dir = game_dir.join("DATA").join("FINAL").join("Champions");
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut aliases: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let alias = name.strip_suffix(".wad.client")?;
+            (!alias.contains('.') && is_safe_alias(alias)).then(|| alias.to_owned())
+        })
+        .collect();
+    aliases.sort_unstable();
+    aliases
+}
+
+pub fn prewarm_companions<G>(game_dir: &Path, cache_dir: &Path, gate: G)
+where
+    G: Fn() -> PrewarmGate + Send + 'static,
+{
+    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if RUNNING.swap(true, std::sync::atomic::Ordering::AcqRel) {
+        return;
+    }
+    let game_dir = game_dir.to_path_buf();
+    let cache_dir = cache_dir.to_path_buf();
+    let spawned = std::thread::Builder::new()
+        .name("bullet-companion-prewarm".into())
+        .spawn(move || {
+            let started = std::time::Instant::now();
+            let aliases = champion_aliases(&game_dir);
+            let mut indexed = 0usize;
+            'champions: for alias in &aliases {
+                loop {
+                    match gate() {
+                        PrewarmGate::Go => break,
+                        PrewarmGate::Wait => std::thread::sleep(PREWARM_WAIT),
+                        PrewarmGate::Stop => break 'champions,
+                    }
+                }
+                match StandardChampion::open(&game_dir, alias) {
+                    Ok(champion) => {
+                        champion.with_cache_dir(&cache_dir).scanned_names(true);
+                        indexed += 1;
+                    }
+                    Err(e) => debug!(alias, error = %e, "Champion not indexed ahead of time"),
+                }
+            }
+            info!(
+                champions = aliases.len(),
+                indexed,
+                elapsed_s = started.elapsed().as_secs(),
+                "Companion characters indexed ahead of champion select"
+            );
+            RUNNING.store(false, std::sync::atomic::Ordering::Release);
+        });
+    if let Err(e) = spawned {
+        RUNNING.store(false, std::sync::atomic::Ordering::Release);
+        warn!(error = %e, "Companion prewarm not started; each champion is indexed when picked");
+    }
+}
+
 #[derive(Debug)]
 pub struct StandardChampion {
     pub alias: String,
     wad: WadFile,
     wad_stamp: String,
     cache_dir: Option<PathBuf>,
-    scanned: std::sync::OnceLock<BTreeSet<String>>,
+    scanned: SharedScan,
+    options: GenerationOptions,
 }
 
 impl StandardChampion {
@@ -837,13 +1088,51 @@ impl StandardChampion {
             .join("Champions")
             .join(format!("{alias}.wad.client"));
         let wad = WadFile::open(&wad_path).map_err(ClassicError::Wad)?;
+        let stamp = wad_stamp(&wad_path);
         Ok(Self {
             alias: alias.to_owned(),
             wad,
-            wad_stamp: wad_stamp(&wad_path),
+            scanned: shared_scan(alias, &stamp),
+            wad_stamp: stamp,
             cache_dir: None,
-            scanned: std::sync::OnceLock::new(),
+            options: GenerationOptions::default(),
         })
+    }
+
+    #[must_use]
+    pub fn with_options(mut self, options: GenerationOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    fn slot0_identity(&self, character: &str) -> Option<SlotIdentity> {
+        identity_at(&self.wad, character, 0).map(|identity| SlotIdentity {
+            classification: identity
+                .classification
+                .filter(|_| !self.options.chroma_keeps_classification),
+            ..identity
+        })
+    }
+
+    fn finish_slot0(
+        &self,
+        character: &str,
+        display: &str,
+        source: &[u8],
+        generated: Vec<u8>,
+        characters_dir: &Path,
+    ) -> Result<Vec<u8>, ClassicError> {
+        if !self.options.graph_in_slot0 {
+            return Ok(generated);
+        }
+        let (skin_bin, graph) = move_graph_to_slot0(&self.wad, display, source, generated)?;
+        if let Some(graph) = graph {
+            let dir = characters_dir.join(character).join("animations");
+            std::fs::create_dir_all(&dir)?;
+            std::fs::write(dir.join("skin0.bin"), graph)?;
+            info!(character, "Animation graph moved to slot 0 (test variant)");
+        }
+        Ok(skin_bin)
     }
 
     #[must_use]
@@ -863,19 +1152,24 @@ impl StandardChampion {
         (0..limit).filter(|n| self.has_skin(*n)).collect()
     }
 
-    #[must_use]
-    pub fn companions(&self) -> BTreeSet<String> {
+    fn scanned_names(&self, ahead_of_time: bool) -> &BTreeSet<String> {
         let main = self.alias.to_ascii_lowercase();
-        let scanned = self.scanned.get_or_init(|| match &self.cache_dir {
+        self.scanned.get_or_init(|| match &self.cache_dir {
             Some(dir) => cached_names(
                 &dir.join(format!("companion_names_{main}.json")),
                 &self.wad_stamp,
                 &self.alias,
+                ahead_of_time,
                 || character_names_in_bins(&self.wad, &self.alias),
             ),
             None => character_names_in_bins(&self.wad, &self.alias),
-        });
-        let mut names: BTreeSet<String> = scanned.clone();
+        })
+    }
+
+    #[must_use]
+    pub fn companions(&self) -> BTreeSet<String> {
+        let main = self.alias.to_ascii_lowercase();
+        let mut names: BTreeSet<String> = self.scanned_names(false).clone();
         names.remove(&main);
         names.retain(|name| is_safe_alias(name) && !name.starts_with("jade_"));
         names
@@ -893,6 +1187,19 @@ impl StandardChampion {
             .find(|n| self.wad.contains(wad_path_hash(&skin_bin(companion, *n))))
     }
 
+    #[must_use]
+    pub fn parent_skin(&self, skin: u32) -> Option<u32> {
+        let main = self.alias.to_ascii_lowercase();
+        let bin = self.read_skin_bin(&main, skin).ok().flatten()?;
+        let parent = slot_identity(&bin).ok()?.parent;
+        (parent != 0 && parent != skin).then_some(parent)
+    }
+
+    #[must_use]
+    pub fn contains_path(&self, path: &str) -> bool {
+        self.wad.contains(wad_path_hash(&path.to_ascii_lowercase()))
+    }
+
     pub fn read_skin_bin(
         &self,
         character: &str,
@@ -901,10 +1208,346 @@ impl StandardChampion {
         Ok(self.wad.read(wad_path_hash(&skin_bin(character, skin)))?)
     }
 
+    pub fn gear_count(&self, skin: u32) -> usize {
+        let main = self.alias.to_ascii_lowercase();
+        self.read_skin_bin(&main, skin)
+            .ok()
+            .flatten()
+            .and_then(|bin| crate::forms::gear_keys(&bin).ok())
+            .map_or(0, |keys| keys.len())
+    }
+
     pub fn build_mod(
         &self,
         skin: u32,
         base_skin: Option<u32>,
+        mods_dir: &Path,
+    ) -> Result<String, ClassicError> {
+        self.build(skin, base_skin, None, mods_dir)
+    }
+
+    pub fn build_mod_form(
+        &self,
+        skin: u32,
+        base_skin: Option<u32>,
+        form: u32,
+        mods_dir: &Path,
+    ) -> Result<String, ClassicError> {
+        self.build(skin, base_skin, Some(form), mods_dir)
+    }
+
+    fn bake_form(
+        &self,
+        source: &[u8],
+        generated: Vec<u8>,
+        form: u32,
+    ) -> Result<Vec<u8>, ClassicError> {
+        let keys = crate::forms::gear_keys(source)?;
+        let key = *keys.get(form as usize).ok_or_else(|| {
+            ClassicError::Bin(format!(
+                "form {form} does not exist; the skin has {} forms",
+                keys.len()
+            ))
+        })?;
+        let gear = self.gear_body(source, key)?;
+        let mut file = parse_prop_file(&generated).map_err(|e| ClassicError::Bin(e.to_string()))?;
+        let submeshes = self.submeshes_of(&file, &gear)?;
+        crate::forms::bake_form(
+            &mut file,
+            &crate::forms::GearForm {
+                index: form,
+                gear_body: &gear,
+                submeshes: &submeshes,
+            },
+        )?;
+        serialize_prop_file(&file).map_err(|e| ClassicError::Bin(e.to_string()))
+    }
+
+    fn gear_body(&self, source: &[u8], key: u32) -> Result<Vec<u8>, ClassicError> {
+        let parsed = parse_prop_file(source).map_err(|e| ClassicError::Bin(e.to_string()))?;
+        if let Some(entry) = parsed.entries.iter().find(|e| e.key_hash == key) {
+            return Ok(entry.body.clone());
+        }
+        crate::forms::find_linked_object(&self.wad, &parsed.links, key)?.ok_or_else(|| {
+            ClassicError::Bin(format!(
+                "gear {key:08x} is neither in the skin's bin nor in the bins it links"
+            ))
+        })
+    }
+
+    fn form_cycle(
+        &self,
+        source: &[u8],
+        source_path: &str,
+        generated: &[u8],
+    ) -> Result<Option<FormCycle>, ClassicError> {
+        let keys = crate::forms::gear_keys(source)?;
+        if keys.len() < 2 || self.gear_count(0) > 0 {
+            return Ok(None);
+        }
+        let swaps = keys
+            .iter()
+            .map(|key| {
+                self.gear_body(source, *key)
+                    .and_then(|body| crate::gear_toggle::gear_swap(&body))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let Some(markers) = crate::gear_toggle::markers(&swaps) else {
+            return Ok(None);
+        };
+        let parsed = parse_prop_file(source).map_err(|e| ClassicError::Bin(e.to_string()))?;
+        let Some(skin) = parsed
+            .entries
+            .iter()
+            .find(|e| e.class_hash == SKIN_DATA_CLASS)
+        else {
+            return Ok(None);
+        };
+        let graph = field_value(
+            &skin.body,
+            &[
+                prop_key_hash("skinAnimationProperties"),
+                prop_key_hash("animationGraphData"),
+            ],
+        )
+        .map_err(|e| ClassicError::Bin(e.to_string()))?
+        .and_then(|v| v.as_u32());
+        let Some(graph) = graph else {
+            return Ok(None);
+        };
+        if graph == prop_key_hash(&format!("Characters/{}/Animations/Skin0", self.alias)) {
+            return Ok(None);
+        }
+        let mut toggled = None;
+        for link in parsed
+            .links
+            .iter()
+            .filter(|l| l.to_ascii_lowercase().contains("/animations/"))
+        {
+            let path = link.to_ascii_lowercase();
+            let Some(bytes) = self.wad.read(wad_path_hash(&path))? else {
+                continue;
+            };
+            if let Some(bytes) = crate::gear_toggle::add_toggle(&bytes, graph, &swaps)? {
+                toggled = Some((path, bytes));
+                break;
+            }
+        }
+        let Some(graph_file) = toggled else {
+            return Ok(None);
+        };
+        let mut files = vec![graph_file];
+        let mut drivers = 0;
+        let skin0 = match crate::gear_toggle::drive_by_parts(generated, &markers)? {
+            Some((bytes, count)) => {
+                drivers += count;
+                bytes
+            }
+            None => generated.to_vec(),
+        };
+        let skin0 = crate::forms::strip_gear_indicators(&skin0)?;
+        if let Some((bytes, count)) = crate::gear_toggle::drive_by_parts(source, &markers)? {
+            drivers += count;
+            files.push((source_path.to_owned(), bytes));
+        }
+        Ok(Some(FormCycle {
+            files,
+            skin0,
+            forms: swaps.len(),
+            drivers,
+        }))
+    }
+
+    fn with_form_cycle(
+        &self,
+        source: &[u8],
+        source_path: &str,
+        skin: u32,
+        generated: Vec<u8>,
+        wad_root: &Path,
+    ) -> Result<Vec<u8>, ClassicError> {
+        match self.form_cycle(source, source_path, &generated) {
+            Ok(Some(plan)) => {
+                for (path, bytes) in &plan.files {
+                    let target = wad_root.join(path);
+                    if let Some(dir) = target.parent() {
+                        std::fs::create_dir_all(dir)?;
+                    }
+                    std::fs::write(&target, bytes)?;
+                }
+                info!(
+                    alias = %self.alias,
+                    skin,
+                    forms = plan.forms,
+                    drivers = plan.drivers,
+                    files = ?plan.files.iter().map(|(path, _)| path.as_str()).collect::<Vec<_>>(),
+                    "Ctrl+5 cycles the skin's forms in game"
+                );
+                Ok(plan.skin0)
+            }
+            Ok(None) => {
+                debug!(alias = %self.alias, skin, "No in-game form cycling for this skin");
+                Ok(generated)
+            }
+            Err(e) => {
+                warn!(
+                    alias = %self.alias,
+                    skin,
+                    error = %e,
+                    "In-game form cycling not added; the skin keeps its first form"
+                );
+                Ok(generated)
+            }
+        }
+    }
+
+    fn skin_graph(&self, source: &[u8]) -> Result<Option<(String, u32)>, ClassicError> {
+        let parsed = parse_prop_file(source).map_err(|e| ClassicError::Bin(e.to_string()))?;
+        let Some(skin) = parsed
+            .entries
+            .iter()
+            .find(|e| e.class_hash == SKIN_DATA_CLASS)
+        else {
+            return Ok(None);
+        };
+        let graph = field_value(
+            &skin.body,
+            &[
+                prop_key_hash("skinAnimationProperties"),
+                prop_key_hash("animationGraphData"),
+            ],
+        )
+        .map_err(|e| ClassicError::Bin(e.to_string()))?
+        .and_then(|v| v.as_u32());
+        let Some(graph) = graph else {
+            return Ok(None);
+        };
+        for link in parsed
+            .links
+            .iter()
+            .filter(|l| l.to_ascii_lowercase().contains("/animations/"))
+        {
+            let path = link.to_ascii_lowercase();
+            let holds = self
+                .wad
+                .read(wad_path_hash(&path))?
+                .and_then(|bytes| parse_prop_file(&bytes).ok())
+                .is_some_and(|bin| bin.entries.iter().any(|e| e.key_hash == graph));
+            if holds {
+                return Ok(Some((path, graph)));
+            }
+        }
+        Ok(None)
+    }
+
+    fn missing_clips(
+        &self,
+        source: &[u8],
+        wad_root: &Path,
+    ) -> Result<Option<(String, crate::clip_alias::AliasedGraph)>, ClassicError> {
+        let base_key = prop_key_hash(&format!("Characters/{}/Animations/Skin0", self.alias));
+        let Some((path, graph)) = self.skin_graph(source)? else {
+            return Ok(None);
+        };
+        if graph == base_key {
+            return Ok(None);
+        }
+        let main = self.alias.to_ascii_lowercase();
+        let Some(base) = self.wad.read(wad_path_hash(&format!(
+            "data/characters/{main}/animations/skin0.bin"
+        )))?
+        else {
+            return Ok(None);
+        };
+        let current = match std::fs::read(wad_root.join(&path)) {
+            Ok(bytes) => bytes,
+            Err(_) => match self.wad.read(wad_path_hash(&path))? {
+                Some(bytes) => bytes,
+                None => return Ok(None),
+            },
+        };
+        let spells = self
+            .wad
+            .read(wad_path_hash(&format!("data/characters/{main}/{main}.bin")))?
+            .map(|record| crate::clip_alias::spell_names(&record))
+            .unwrap_or_default();
+        if spells.is_empty() {
+            return Ok(None);
+        }
+        Ok(
+            crate::clip_alias::alias_missing_clips(&current, graph, &base, base_key, &spells)?
+                .map(|aliased| (path, aliased)),
+        )
+    }
+
+    fn with_missing_clips(
+        &self,
+        source: &[u8],
+        skin: u32,
+        wad_root: &Path,
+    ) -> Result<(), ClassicError> {
+        match self.missing_clips(source, wad_root) {
+            Ok(Some((path, (bytes, aliases)))) => {
+                let target = wad_root.join(&path);
+                if let Some(dir) = target.parent() {
+                    std::fs::create_dir_all(dir)?;
+                }
+                std::fs::write(&target, bytes)?;
+                info!(
+                    alias = %self.alias,
+                    skin,
+                    graph = %path,
+                    clips = ?aliases
+                        .iter()
+                        .map(|a| format!("{:08x}->{:08x} of {}", a.missing, a.variant, a.variants))
+                        .collect::<Vec<_>>(),
+                    "Clips the default skin's animations ask for now point at the skin's own version"
+                );
+                Ok(())
+            }
+            Ok(None) => Ok(()),
+            Err(e) => {
+                warn!(
+                    alias = %self.alias,
+                    skin,
+                    error = %e,
+                    "Missing animation clips not aliased; the skin keeps the game's graph"
+                );
+                Ok(())
+            }
+        }
+    }
+
+    fn submeshes_of(&self, file: &PropFile, gear: &[u8]) -> Result<Vec<String>, ClassicError> {
+        let mesh_path = |body: &[u8], path: &[&str]| {
+            let hashes: Vec<u32> = path.iter().map(|p| prop_key_hash(p)).collect();
+            field_value(body, &hashes).ok().flatten().and_then(|v| {
+                v.bytes
+                    .get(2..)
+                    .map(|b| String::from_utf8_lossy(b).into_owned())
+            })
+        };
+        let skn =
+            mesh_path(gear, &["mGearData", "skinMeshProperties", "simpleSkin"]).or_else(|| {
+                file.entries
+                    .iter()
+                    .find(|e| e.class_hash == SKIN_DATA_CLASS)
+                    .and_then(|skin| mesh_path(&skin.body, &["skinMeshProperties", "simpleSkin"]))
+            });
+        let Some(skn) = skn else {
+            return Ok(Vec::new());
+        };
+        match self.wad.read(wad_path_hash(&skn.to_ascii_lowercase()))? {
+            Some(bytes) => crate::forms::skn_submesh_names(&bytes),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn build(
+        &self,
+        skin: u32,
+        base_skin: Option<u32>,
+        form: Option<u32>,
         mods_dir: &Path,
     ) -> Result<String, ClassicError> {
         let main = self.alias.to_ascii_lowercase();
@@ -916,15 +1559,29 @@ impl StandardChampion {
             });
         }
 
-        let folder = format!("{STANDARD_MOD_PREFIX}{main}_{skin}");
+        let game_parent = self.parent_skin(skin);
+        if game_parent.is_some() && base_skin.is_some() && game_parent != base_skin {
+            debug!(
+                alias = %self.alias,
+                skin,
+                game_parent = ?game_parent,
+                client_base = ?base_skin,
+                "The game and the client name different parent skins; the game's is used"
+            );
+        }
+        let base_skin = game_parent.or(base_skin);
+
+        let folder = match form {
+            Some(form) => format!("{STANDARD_MOD_PREFIX}{main}_{skin}_form{form}"),
+            None => format!("{STANDARD_MOD_PREFIX}{main}_{skin}"),
+        };
         let final_dir = mods_dir.join(&folder);
         let partial = mods_dir.join(format!("{folder}.partial"));
         remove_if_present(&partial)?;
-        let characters_dir = partial
+        let wad_root = partial
             .join("WAD")
-            .join(format!("{}.wad.client", self.alias))
-            .join("data")
-            .join("characters");
+            .join(format!("{}.wad.client", self.alias));
+        let characters_dir = wad_root.join("data").join("characters");
 
         let source = self
             .wad
@@ -932,7 +1589,22 @@ impl StandardChampion {
             .ok_or_else(|| ClassicError::Bin(format!("{main} skin{skin}.bin not found in WAD")))?;
         let bins_dir = characters_dir.join(&main).join("skins");
         std::fs::create_dir_all(&bins_dir)?;
-        let retargeted = retarget_skin_bin(&source, &self.alias, skin, 0)?;
+        let retargeted =
+            retarget_skin_bin(&source, &self.alias, skin, 0, self.slot0_identity(&main))?;
+        let retargeted = match form {
+            Some(form) => self.bake_form(&source, retargeted, form)?,
+            None => retargeted,
+        };
+        let retargeted =
+            self.finish_slot0(&main, &self.alias, &source, retargeted, &characters_dir)?;
+        let retargeted = if form.is_none() && !self.options.graph_in_slot0 {
+            let retargeted =
+                self.with_form_cycle(&source, &target_bin, skin, retargeted, &wad_root)?;
+            self.with_missing_clips(&source, skin, &wad_root)?;
+            retargeted
+        } else {
+            retargeted
+        };
         let mut records = vec![generated_bin_record(
             &self.alias,
             &main,
@@ -955,7 +1627,20 @@ impl StandardChampion {
                     })
                 })
                 .and_then(|source| {
-                    let retargeted = retarget_skin_bin(&source, &companion, source_skin, 0)?;
+                    let retargeted = retarget_skin_bin(
+                        &source,
+                        &companion,
+                        source_skin,
+                        0,
+                        self.slot0_identity(&companion),
+                    )?;
+                    let retargeted = self.finish_slot0(
+                        &companion,
+                        &companion,
+                        &source,
+                        retargeted,
+                        &characters_dir,
+                    )?;
                     records.push(generated_bin_record(
                         &self.alias,
                         &companion,
@@ -997,6 +1682,7 @@ impl StandardChampion {
             "alias": self.alias,
             "skin": skin,
             "base_skin": base_skin,
+            "form": form,
             "game_wad": self.wad_stamp,
             "generated": records,
         });

@@ -121,6 +121,7 @@ dependencies = [
  "bullet-party",
  "bullet-platform",
  "bullet-wad",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",

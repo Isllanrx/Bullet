@@ -69,13 +69,13 @@ jobs:
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: ${{ runner.os }}-cargo-release-
 
-      - name: cargo build --release --locked
-        run: cargo build --release --locked -p bullet-app
+      - name: Release binary as shipped (cargo xtask package)
+        run: cargo xtask package
 
       - name: Executable metadata and manifest
         shell: pwsh
         run: |
-          $exe = 'target/x86_64-pc-windows-msvc/release/bullet.exe'
+          $exe = 'dist/bullet.exe'
           $info = (Get-Item $exe).VersionInfo
           $expected = @{ ProductName = 'Bullet'; CompanyName = 'Isllan Toso'; OriginalFilename = 'bullet.exe' }
           foreach ($key in $expected.Keys) {
@@ -85,6 +85,10 @@ jobs:
           $text = [System.Text.Encoding]::UTF8.GetString($bytes)
           if ($text -notmatch 'requestedExecutionLevel level="asInvoker"') { Write-Error 'asInvoker manifest missing'; exit 1 }
           if ($text -match 'requireAdministrator') { Write-Error 'the executable requests elevation'; exit 1 }
+          if ($text -match 'VCRUNTIME140') { Write-Error 'the C runtime is not linked statically'; exit 1 }
+          if ($text.Contains($env:USERPROFILE) -or $text.Contains($env:GITHUB_WORKSPACE)) { Write-Error 'build machine paths are embedded'; exit 1 }
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          if ([BitConverter]::ToUInt32($bytes, $pe + 24 + 64) -eq 0) { Write-Error 'the PE checksum is not set'; exit 1 }
           Write-Output "OK: $($info.ProductName) $($info.ProductVersion) by $($info.CompanyName), runs as invoker"
 
   deny:

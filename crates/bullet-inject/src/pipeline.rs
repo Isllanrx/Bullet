@@ -11,6 +11,36 @@ use crate::overlay_process::OverlayProcess;
 
 pub const DEFAULT_BUILD_TIMEOUT: Duration = Duration::from_secs(300);
 
+pub const GAME_PROCESS_NAME: &str = "League of Legends.exe";
+
+pub const SAFE_HOOK_WINDOW: Duration = Duration::from_secs(2);
+
+const LOADING_GAME_POLL: Duration = Duration::from_millis(500);
+
+#[must_use]
+pub fn game_already_loading() -> Option<(u32, Duration)> {
+    let pid = bullet_platform::process::ProcessFinder::find_process_by_name(GAME_PROCESS_NAME)
+        .ok()
+        .flatten()?;
+    let age = bullet_platform::process::ProcessFinder::process_age(pid)?;
+    (age > SAFE_HOOK_WINDOW).then_some((pid, age))
+}
+
+async fn wait_out_loading_game() {
+    let mut reported = false;
+    while let Some((pid, age)) = game_already_loading() {
+        if !reported {
+            reported = true;
+            warn!(
+                pid,
+                age_ms = age.as_millis(),
+                "The game was already loading when the patcher became ready; it is not hooked mid-load. The skin loads when the game starts again (reconnect)"
+            );
+        }
+        tokio::time::sleep(LOADING_GAME_POLL).await;
+    }
+}
+
 pub const HOOK_CONFIRMED_STATUS: &str = "Waiting for exit";
 
 pub const HOOK_PATCHING_STATUS: &str = "Patching";
@@ -174,6 +204,12 @@ impl InjectionPipeline {
         let build_timeout = self.config.build_timeout.min(remaining(&started));
         self.build_overlay(mods, build_timeout).await?;
 
+        if let Some((_, age)) = game_already_loading() {
+            return Err(InjectError::GameAlreadyLoading {
+                age_ms: u64::try_from(age.as_millis()).unwrap_or(u64::MAX),
+            });
+        }
+
         let mut overlay = self.spawn_patcher().await?;
 
         let hook_budget = self.config.hook_timeout.min(remaining(&started));
@@ -208,6 +244,8 @@ impl InjectionPipeline {
                 return Err(e);
             }
         };
+
+        wait_out_loading_game().await;
 
         let mut overlay = match self.spawn_patcher().await {
             Ok(overlay) => overlay,
