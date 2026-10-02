@@ -1,5 +1,13 @@
 use super::*;
 
+fn u32_body(value: u32) -> Vec<u8> {
+    let mut body = 1u16.to_le_bytes().to_vec();
+    body.extend_from_slice(&0x1234_5678u32.to_le_bytes());
+    body.push(7);
+    body.extend_from_slice(&value.to_le_bytes());
+    body
+}
+
 fn skin_bin_fixture(character: &str, skin: u32) -> Vec<u8> {
     let prefix = format!("Characters/{character}/Skins/Skin{skin}");
     serialize_prop_file(&PropFile {
@@ -9,17 +17,17 @@ fn skin_bin_fixture(character: &str, skin: u32) -> Vec<u8> {
             PropEntry {
                 class_hash: 1,
                 key_hash: prop_key_hash(&prefix),
-                body: vec![0xAA; 8],
+                body: u32_body(0xAAAA_AAAA),
             },
             PropEntry {
                 class_hash: 2,
                 key_hash: prop_key_hash(&format!("{prefix}/Resources")),
-                body: vec![0xBB; 4],
+                body: u32_body(0xBBBB_BBBB),
             },
             PropEntry {
                 class_hash: 3,
                 key_hash: prop_key_hash("Characters/Annie/Skins/Skin5/Particles/Fire"),
-                body: vec![0xCC; 16],
+                body: u32_body(0xCCCC_CCCC),
             },
         ],
     })
@@ -29,7 +37,7 @@ fn skin_bin_fixture(character: &str, skin: u32) -> Vec<u8> {
 #[test]
 fn test_retarget_keeps_only_the_skin_objects_rekeyed_and_links_the_original() {
     let source = skin_bin_fixture("Jade_Annie", 5);
-    let out = retarget_skin_bin(&source, "Jade_Annie", 5, 301).expect("retarget");
+    let out = retarget_skin_bin(&source, "Jade_Annie", 5, 301, None).expect("retarget");
     let parsed = parse_prop_file(&out).expect("parse output");
 
     assert_eq!(
@@ -55,60 +63,134 @@ fn test_retarget_keeps_only_the_skin_objects_rekeyed_and_links_the_original() {
     );
     assert_eq!(
         parsed.entries[0].body,
-        vec![0xAA; 8],
+        u32_body(0xAAAA_AAAA),
         "bodies are carried untouched"
     );
     assert_eq!(parsed.entries[0].class_hash, 1);
 }
 
-fn classified_skin_bin(character: &str, skin: u32, classification: u32) -> Vec<u8> {
-    let mut body = 1u16.to_le_bytes().to_vec();
-    body.extend_from_slice(&prop_key_hash("skinClassification").to_le_bytes());
-    body.push(7);
-    body.extend_from_slice(&classification.to_le_bytes());
+fn skin_object_body(
+    character: &str,
+    skin: u32,
+    classification: u32,
+    parent: Option<i32>,
+) -> Vec<u8> {
+    let prefix = format!("Characters/{character}/Skins/Skin{skin}");
+    let mut fields: Vec<(u32, u8, Vec<u8>)> = vec![
+        (
+            prop_key_hash("skinClassification"),
+            7,
+            classification.to_le_bytes().to_vec(),
+        ),
+        (
+            prop_key_hash("objectPath"),
+            17,
+            prop_key_hash(&prefix).to_le_bytes().to_vec(),
+        ),
+        (
+            prop_key_hash("mResourceResolver"),
+            0x84,
+            prop_key_hash(&format!("{prefix}/Resources"))
+                .to_le_bytes()
+                .to_vec(),
+        ),
+    ];
+    if let Some(parent) = parent {
+        fields.push((
+            prop_key_hash("skinParent"),
+            6,
+            parent.to_le_bytes().to_vec(),
+        ));
+    }
+    let mut body = (fields.len() as u16).to_le_bytes().to_vec();
+    for (name, kind, value) in fields {
+        body.extend_from_slice(&name.to_le_bytes());
+        body.push(kind);
+        body.extend_from_slice(&value);
+    }
+    body
+}
+
+fn skin_object_bin(
+    character: &str,
+    skin: u32,
+    classification: u32,
+    parent: Option<i32>,
+) -> Vec<u8> {
     serialize_prop_file(&PropFile {
         version: 3,
         links: Vec::new(),
         entries: vec![PropEntry {
             class_hash: 0x9b67_e9f6,
             key_hash: prop_key_hash(&format!("Characters/{character}/Skins/Skin{skin}")),
-            body,
+            body: skin_object_body(character, skin, classification, parent),
         }],
     })
     .expect("fixture")
 }
 
-fn classification_of(bin: &[u8]) -> u32 {
+fn classified_skin_bin(character: &str, skin: u32, classification: u32) -> Vec<u8> {
+    skin_object_bin(character, skin, classification, None)
+}
+
+fn skin_field(bin: &[u8], name: &str) -> Option<u32> {
     let body = &parse_prop_file(bin).expect("parse").entries[0].body;
-    u32::from_le_bytes([body[7], body[8], body[9], body[10]])
+    field_value(body, &[prop_key_hash(name)])
+        .expect("walk")
+        .and_then(|v| v.as_u32())
+}
+
+fn classification_of(bin: &[u8]) -> u32 {
+    skin_field(bin, "skinClassification").expect("classification")
 }
 
 #[test]
-fn test_a_chroma_retargeted_to_slot_0_is_classified_like_a_base_skin() {
-    let chroma = classified_skin_bin("Zed", 70, 2);
-    let out = retarget_skin_bin(&chroma, "Zed", 70, 0).expect("retarget");
+fn test_the_target_slot_takes_the_identity_the_game_gives_that_slot() {
+    let slot0 = slot_identity(&skin_object_bin("Zed", 0, 1, None)).expect("identity");
     assert_eq!(
-        classification_of(&out),
-        1,
-        "slot 0 is never a chroma in the game"
+        slot0,
+        SlotIdentity {
+            classification: Some(1),
+            parent: 0
+        },
+        "a base skin has no parent"
     );
-    let base = classified_skin_bin("Zed", 69, 1);
+    let chroma = skin_object_bin("Zed", 70, 2, Some(69));
+    let out = retarget_skin_bin(&chroma, "Zed", 70, 0, Some(slot0)).expect("retarget");
+    assert_eq!(classification_of(&out), 1);
+    assert_eq!(skin_field(&out, "skinParent"), Some(0));
+    let untouched = retarget_skin_bin(&chroma, "Zed", 70, 301, None).expect("classic slot");
+    assert_eq!(classification_of(&untouched), 2, "no identity, nothing set");
+    assert_eq!(skin_field(&untouched, "skinParent"), Some(69));
+}
+
+#[test]
+fn test_every_reference_to_a_moved_object_follows_it() {
+    let source = skin_object_bin("Viego", 1, 1, None);
+    let out = retarget_skin_bin(&source, "Viego", 1, 0, None).expect("retarget");
     assert_eq!(
-        classification_of(&retarget_skin_bin(&base, "Zed", 69, 0).expect("retarget")),
-        1
+        skin_field(&out, "objectPath"),
+        Some(prop_key_hash("Characters/Viego/Skins/Skin0")),
+        "the object names itself by its new key"
     );
-    let classic = retarget_skin_bin(&chroma, "Zed", 70, 301).expect("classic slot");
     assert_eq!(
-        classification_of(&classic),
-        2,
-        "only the slot 0 retarget changes it"
+        skin_field(&out, "mResourceResolver"),
+        Some(prop_key_hash("Characters/Viego/Skins/Skin0/Resources")),
+        "the resolver link follows the re-keyed resolver"
+    );
+    let body = &parse_prop_file(&out).expect("parse").entries[0].body;
+    assert!(
+        !bullet_wad::prop::reference_values(body)
+            .expect("references")
+            .contains(&prop_key_hash("Characters/Viego/Skins/Skin1")),
+        "nothing points at the source key any more"
     );
 }
 
 #[test]
 fn test_retarget_refuses_a_bin_without_the_skin_object() {
     let source = skin_bin_fixture("Jade_Annie", 5);
-    assert!(retarget_skin_bin(&source, "Jade_Annie", 6, 0).is_err());
+    assert!(retarget_skin_bin(&source, "Jade_Annie", 6, 0, None).is_err());
 }
 
 #[test]
@@ -680,7 +762,7 @@ fn companion_bin(character: &str, skin: u32) -> Vec<u8> {
         entries: vec![PropEntry {
             class_hash: 1,
             key_hash: prop_key_hash(&prefix),
-            body: vec![0xAA; 8],
+            body: u32_body(0xAAAA_AAAA),
         }],
     })
     .expect("fixture")
@@ -776,6 +858,36 @@ fn test_a_chroma_without_its_own_companion_bin_uses_the_base_skin_one() {
     assert_eq!(
         shadow.links.first().map(String::as_str),
         Some("DATA/Characters/zedshadow/Skins/Skin10.bin")
+    );
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn test_a_chroma_finds_its_parent_in_the_game_data_without_the_client() {
+    let game = standard_game(
+        "chroma_parent",
+        &[
+            (
+                wad_path_hash(&skin_bin("zed", 12)),
+                skin_object_bin("Zed", 12, 2, Some(10)),
+            ),
+            (
+                wad_path_hash(&skin_bin("zedshadow", 10)),
+                companion_bin("ZedShadow", 10),
+            ),
+        ],
+    );
+    let mods_dir = game.join("mods");
+    let champion = StandardChampion::open(&game, "Zed").expect("open");
+    assert_eq!(champion.parent_skin(12), Some(10));
+    assert_eq!(champion.parent_skin(10), None, "no bin, no parent");
+
+    let folder = champion.build_mod(12, None, &mods_dir).expect("build");
+    let shadow = generated_skin0(&mods_dir, &folder, "zedshadow").expect("shadow skin0.bin");
+    assert_eq!(
+        shadow.links.first().map(String::as_str),
+        Some("DATA/Characters/zedshadow/Skins/Skin10.bin"),
+        "the companion comes from the parent skin the game names"
     );
     let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
 }
@@ -888,7 +1000,11 @@ fn test_the_companion_falls_back_only_to_a_real_other_base() {
 #[test]
 fn test_generated_bin_facts_report_what_changed() {
     let chroma = classified_skin_bin("Zed", 70, 2);
-    let out = retarget_skin_bin(&chroma, "Zed", 70, 0).expect("retarget");
+    let identity = SlotIdentity {
+        classification: Some(1),
+        parent: 0,
+    };
+    let out = retarget_skin_bin(&chroma, "Zed", 70, 0, Some(identity)).expect("retarget");
     let before = skin_bin_facts(&chroma).expect("source facts");
     let after = skin_bin_facts(&out).expect("generated facts");
     assert_eq!(before.classification, Some(2));
@@ -896,4 +1012,245 @@ fn test_generated_bin_facts_report_what_changed() {
     assert_eq!(after.links[0], "DATA/Characters/Zed/Skins/Skin70.bin");
     assert_eq!(after.objects, 1);
     assert_eq!(skin_bin_facts(b"not a bin"), None);
+}
+
+fn fields_body(fields: &[(u32, u8, Vec<u8>)]) -> Vec<u8> {
+    let mut body = (fields.len() as u16).to_le_bytes().to_vec();
+    for (name, kind, value) in fields {
+        body.extend_from_slice(&name.to_le_bytes());
+        body.push(*kind);
+        body.extend_from_slice(value);
+    }
+    body
+}
+
+fn skin_with_graph(character: &str, skin: u32, classification: u32) -> Vec<u8> {
+    let graph = prop_key_hash(&format!("Characters/{character}/Animations/Skin{skin}"));
+    let inner = fields_body(&[(
+        prop_key_hash("animationGraphData"),
+        0x84,
+        graph.to_le_bytes().to_vec(),
+    )]);
+    let mut embed = 0x1234_0000u32.to_le_bytes().to_vec();
+    embed.extend_from_slice(&(inner.len() as u32).to_le_bytes());
+    embed.extend_from_slice(&inner);
+    let prefix = format!("Characters/{character}/Skins/Skin{skin}");
+    let body = fields_body(&[
+        (
+            prop_key_hash("skinClassification"),
+            7,
+            classification.to_le_bytes().to_vec(),
+        ),
+        (
+            prop_key_hash("objectPath"),
+            17,
+            prop_key_hash(&prefix).to_le_bytes().to_vec(),
+        ),
+        (prop_key_hash("skinAnimationProperties"), 0x83, embed),
+    ]);
+    serialize_prop_file(&PropFile {
+        version: 3,
+        links: vec![format!(
+            "DATA/Characters/{character}/Animations/Skin{skin}.bin"
+        )],
+        entries: vec![PropEntry {
+            class_hash: 0x9b67_e9f6,
+            key_hash: prop_key_hash(&prefix),
+            body,
+        }],
+    })
+    .expect("fixture")
+}
+
+fn graph_bin(character: &str, skin: u32) -> Vec<u8> {
+    let key = prop_key_hash(&format!("Characters/{character}/Animations/Skin{skin}"));
+    serialize_prop_file(&PropFile {
+        version: 3,
+        links: Vec::new(),
+        entries: vec![PropEntry {
+            class_hash: 0xf5fb_07c7,
+            key_hash: key,
+            body: fields_body(&[(prop_key_hash("objectPath"), 17, key.to_le_bytes().to_vec())]),
+        }],
+    })
+    .expect("fixture")
+}
+
+fn graph_link_of(bin: &[u8]) -> Option<u32> {
+    let body = &parse_prop_file(bin).expect("parse").entries[0].body;
+    field_value(
+        body,
+        &[
+            prop_key_hash("skinAnimationProperties"),
+            prop_key_hash("animationGraphData"),
+        ],
+    )
+    .expect("walk")
+    .and_then(|v| v.as_u32())
+}
+
+#[test]
+fn test_relocating_a_bin_moves_keys_and_references_and_adds_a_link_once() {
+    let bin = graph_bin("Zed", 5);
+    let from = prop_key_hash("Characters/Zed/Animations/Skin5");
+    let to = prop_key_hash("Characters/Zed/Animations/Skin0");
+    let moves = std::collections::BTreeMap::from([(from, to)]);
+    let out = relocate_prop(
+        &bin,
+        &moves,
+        Some("DATA/Characters/Zed/Animations/Skin5.bin"),
+    )
+    .expect("relocate");
+    let again = relocate_prop(
+        &out,
+        &moves,
+        Some("data/characters/zed/animations/skin5.bin"),
+    )
+    .expect("again");
+    let parsed = parse_prop_file(&again).expect("parse");
+    assert_eq!(parsed.entries[0].key_hash, to);
+    assert_eq!(skin_field(&again, "objectPath"), Some(to));
+    assert_eq!(
+        parsed.links.len(),
+        1,
+        "a link already there is not added twice"
+    );
+}
+
+#[test]
+fn test_the_graph_test_variant_moves_the_skins_own_graph_to_slot_0() {
+    let game = standard_game(
+        "graph_slot0",
+        &[
+            (
+                wad_path_hash(&skin_bin("zed", 5)),
+                skin_with_graph("Zed", 5, 1),
+            ),
+            (wad_path_hash(&animation_bin("zed", 5)), graph_bin("Zed", 5)),
+        ],
+    );
+    let mods_dir = game.join("mods");
+    let slot0 = prop_key_hash("Characters/Zed/Animations/Skin0");
+    let wad_dir = |folder: &str| {
+        mods_dir
+            .join(folder)
+            .join("WAD")
+            .join("Zed.wad.client")
+            .join("data")
+            .join("characters")
+            .join("zed")
+    };
+
+    let plain = StandardChampion::open(&game, "Zed")
+        .expect("open")
+        .build_mod(5, None, &mods_dir)
+        .expect("build");
+    assert!(
+        !wad_dir(&plain).join("animations").exists(),
+        "off by default"
+    );
+    let skin0 = std::fs::read(wad_dir(&plain).join("skins").join("skin0.bin")).expect("skin0");
+    assert_eq!(
+        graph_link_of(&skin0),
+        Some(prop_key_hash("Characters/Zed/Animations/Skin5"))
+    );
+
+    let moved = StandardChampion::open(&game, "Zed")
+        .expect("open")
+        .with_options(GenerationOptions {
+            graph_in_slot0: true,
+            chroma_keeps_classification: false,
+        })
+        .build_mod(5, None, &mods_dir)
+        .expect("build");
+    let skin0 = std::fs::read(wad_dir(&moved).join("skins").join("skin0.bin")).expect("skin0");
+    assert_eq!(graph_link_of(&skin0), Some(slot0));
+    assert!(
+        parse_prop_file(&skin0)
+            .expect("parse")
+            .links
+            .contains(&"DATA/Characters/Zed/Animations/Skin0.bin".to_string())
+    );
+    let graph = std::fs::read(wad_dir(&moved).join("animations").join("skin0.bin")).expect("graph");
+    let parsed = parse_prop_file(&graph).expect("parse graph");
+    assert_eq!(parsed.entries[0].key_hash, slot0);
+    assert_eq!(skin_field(&graph, "objectPath"), Some(slot0));
+    assert_eq!(
+        parsed.links,
+        vec!["DATA/Characters/Zed/Animations/Skin5.bin".to_string()]
+    );
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn test_the_classification_test_variant_keeps_the_chromas_own() {
+    let game = standard_game(
+        "chroma_class",
+        &[
+            (
+                wad_path_hash(&skin_bin("zed", 0)),
+                skin_object_bin("Zed", 0, 1, None),
+            ),
+            (
+                wad_path_hash(&skin_bin("zed", 70)),
+                skin_object_bin("Zed", 70, 2, Some(69)),
+            ),
+        ],
+    );
+    let mods_dir = game.join("mods");
+    let read = |champion: StandardChampion| {
+        let folder = champion.build_mod(70, None, &mods_dir).expect("build");
+        std::fs::read(
+            mods_dir
+                .join(folder)
+                .join("WAD")
+                .join("Zed.wad.client")
+                .join("data")
+                .join("characters")
+                .join("zed")
+                .join("skins")
+                .join("skin0.bin"),
+        )
+        .expect("skin0")
+    };
+    let slot = read(StandardChampion::open(&game, "Zed").expect("open"));
+    assert_eq!(classification_of(&slot), 1, "default: the slot's identity");
+    assert_eq!(skin_field(&slot, "skinParent"), Some(0));
+    let kept = read(
+        StandardChampion::open(&game, "Zed")
+            .expect("open")
+            .with_options(GenerationOptions {
+                graph_in_slot0: false,
+                chroma_keeps_classification: true,
+            }),
+    );
+    assert_eq!(classification_of(&kept), 2, "variant: the chroma's own");
+    assert_eq!(
+        skin_field(&kept, "skinParent"),
+        Some(0),
+        "the parent still follows the slot"
+    );
+    let _ = std::fs::remove_dir_all(&game); // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn test_prewarm_lists_only_champion_archives() {
+    let root = std::env::temp_dir().join(format!("bullet_prewarm_{}", std::process::id()));
+    let champions = root.join("DATA").join("FINAL").join("Champions");
+    std::fs::create_dir_all(&champions).expect("dir");
+    for name in [
+        "Garen.wad.client",
+        "Garen.pt_BR.wad.client",
+        "Viego.wad.client",
+        "notes.txt",
+        "..wad.client",
+    ] {
+        std::fs::write(champions.join(name), b"").expect("file");
+    }
+    assert_eq!(champion_aliases(&root), vec!["Garen", "Viego"]);
+    std::fs::remove_dir_all(&root).expect("cleanup");
+    assert!(
+        champion_aliases(&root).is_empty(),
+        "a missing folder lists nothing"
+    );
 }
