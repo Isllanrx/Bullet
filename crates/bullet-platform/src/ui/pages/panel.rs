@@ -101,6 +101,16 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
     }
 }
 
+pub(crate) fn follow_language(
+    window: &ControlPanel,
+    shown: &std::cell::Cell<Option<crate::i18n::Language>>,
+    active: crate::i18n::Language,
+) {
+    if shown.replace(Some(active)) != Some(active) {
+        window.set_labels(labels(active.text()));
+    }
+}
+
 pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
     window.set_status(state.status.as_str().into());
     window.set_party_line(state.party_line.as_str().into());
@@ -152,16 +162,17 @@ fn open(links: PanelLinks) {
             return;
         }
     };
-    window.set_labels(labels(crate::i18n::text()));
     runtime::repaint_on_expose(&window, |w| w.set_expose_flip(!w.get_expose_flip()));
 
     let last = std::rc::Rc::new(RefCell::new(None::<PanelSnapshot>));
+    let language = std::rc::Rc::new(std::cell::Cell::new(None::<crate::i18n::Language>));
     let refresh = {
         let weak = window.as_weak();
         let snapshot = links.snapshot.clone();
         let last = last.clone();
         move || {
             let Some(window) = weak.upgrade() else { return };
+            follow_language(&window, &language, crate::i18n::active_language());
             let state = snapshot();
             if last.borrow().as_ref() != Some(&state) {
                 render(&window, &state);

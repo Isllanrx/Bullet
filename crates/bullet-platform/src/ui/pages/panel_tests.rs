@@ -257,3 +257,70 @@ fn notices_appear_only_with_a_line_and_the_ltk_button_only_with_a_download() {
     );
     assert_eq!(window.get_ltk_download(), "");
 }
+
+#[test]
+fn long_diagnostic_lines_never_run_under_the_hint_below_them() {
+    let window = tall_panel();
+    let text = Language::English.text();
+    window.set_labels(labels(text));
+    let details = [
+        "OK",
+        "OK",
+        "waiting for the client to open",
+        "accepts the current patch; refuses game builds made 0 day(s) from now or later",
+        "LTK Manager 1.27.0 ships a newer injector signed by League Toolkit",
+        "running as administrator",
+    ];
+    let state = PanelSnapshot {
+        checks: details
+            .iter()
+            .map(|detail| PanelCheck {
+                label: "Injector DLL validity".into(),
+                ok: false,
+                detail: (*detail).into(),
+            })
+            .collect(),
+        ..snapshot()
+    };
+    render(&window, &state);
+    let bottom = |label: &str| {
+        let element = ElementHandle::find_by_accessible_label(&window, label)
+            .next()
+            .unwrap_or_else(|| panic!("{label} shown"));
+        element.absolute_position().y + element.size().height
+    };
+    let top = |label: &str| {
+        ElementHandle::find_by_accessible_label(&window, label)
+            .next()
+            .unwrap_or_else(|| panic!("{label} shown"))
+            .absolute_position()
+            .y
+    };
+    let last = bottom(details[5]);
+    let hint = top(text.panel_mark_problem_hint);
+    assert!(
+        hint >= last,
+        "hint at {hint} starts above the last check ending at {last}"
+    );
+    assert!(
+        bottom(details[3]) <= top(details[4]) - 1.0,
+        "a wrapped detail runs into the next row"
+    );
+}
+
+#[test]
+fn labels_follow_the_client_language_once_it_is_known() {
+    let window = tall_panel();
+    let shown = std::cell::Cell::new(None);
+    follow_language(&window, &shown, Language::Portuguese);
+    assert_eq!(
+        window.get_labels().section_diagnostics,
+        Language::Portuguese.text().panel_section_diagnostics
+    );
+    follow_language(&window, &shown, Language::English);
+    assert_eq!(
+        window.get_labels().section_diagnostics,
+        Language::English.text().panel_section_diagnostics
+    );
+    assert_eq!(shown.get(), Some(Language::English));
+}

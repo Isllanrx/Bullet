@@ -73,6 +73,35 @@ component Section inherits Rectangle {
     }
 }
 
+component CheckRow inherits Rectangle {
+    in property <PanelCheckRow> check;
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            width: 14px;
+            text: root.check.ok ? "✓" : "!";
+            color: root.check.ok ? Theme.cyan : #e05a4f;
+            font-size: Theme.text-base;
+            font-weight: 700;
+        }
+        VerticalLayout {
+            alignment: start;
+            Text {
+                text: root.check.label;
+                color: Theme.text;
+                font-size: Theme.text-base;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.check.detail;
+                color: Theme.muted;
+                font-size: Theme.text-sm;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
 component Toggle inherits Rectangle {
     in property <string> label;
     in property <string> hint;
@@ -311,29 +340,8 @@ export component ControlPanel inherits Window {
                     heading: root.labels.section-diagnostics;
                     VerticalLayout {
                         spacing: 6px;
-                        for check in root.checks: HorizontalLayout {
-                            spacing: 8px;
-                            Text {
-                                width: 14px;
-                                text: check.ok ? "✓" : "!";
-                                color: check.ok ? Theme.cyan : #e05a4f;
-                                font-size: Theme.text-base;
-                                font-weight: 700;
-                            }
-                            VerticalLayout {
-                                Text {
-                                    text: check.label;
-                                    color: Theme.text;
-                                    font-size: Theme.text-base;
-                                    wrap: word-wrap;
-                                }
-                                Text {
-                                    text: check.detail;
-                                    color: Theme.muted;
-                                    font-size: Theme.text-sm;
-                                    wrap: word-wrap;
-                                }
-                            }
+                        for check in root.checks: CheckRow {
+                            check: check;
                         }
                     }
                     Text {
