@@ -1622,51 +1622,18 @@ fn prepare_mod_directory(archive_path: &Path, target_dir: &Path) -> std::io::Res
     }
 
     if archive_path.is_dir() {
-        copy_dir_all(archive_path, target_dir)?;
+        bullet_platform::fs::mirror_tree(archive_path, target_dir)
+            .map_err(std::io::Error::other)?;
         return Ok(());
     }
 
-    std::fs::create_dir_all(target_dir)?;
     let file = std::fs::File::open(archive_path)?;
-    let mut zip_archive =
-        zip::ZipArchive::new(file).map_err(|e| std::io::Error::other(format!("zip error: {e}")))?;
-
-    for i in 0..zip_archive.len() {
-        let mut zip_file = zip_archive
-            .by_index(i)
-            .map_err(|e| std::io::Error::other(format!("zip error: {e}")))?;
-        let outpath = match zip_file.enclosed_name() {
-            Some(path) => target_dir.join(path),
-            None => continue,
-        };
-
-        if zip_file.is_dir() {
-            std::fs::create_dir_all(&outpath)?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                if !parent.exists() {
-                    std::fs::create_dir_all(parent)?;
-                }
-            }
-            let mut out = std::fs::File::create(&outpath)?;
-            std::io::copy(&mut zip_file, &mut out)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
-        }
-    }
+    bullet_platform::fs::safe_extract_zip(
+        std::io::BufReader::new(file),
+        target_dir,
+        &bullet_platform::fs::ExtractLimits::default(),
+    )
+    .map_err(std::io::Error::other)?;
     Ok(())
 }
 
