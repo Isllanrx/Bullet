@@ -5,6 +5,7 @@ pub mod error;
 pub mod fantome;
 pub mod hash;
 pub mod hash_index;
+pub mod modpkg;
 pub mod prop;
 pub mod wad;
 pub mod writer;

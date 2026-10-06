@@ -251,3 +251,84 @@ fn test_a_skin_mod_is_matched_to_its_champion_by_content_not_by_folder() {
     assert_eq!(zed.skin.len(), 1);
     assert_eq!(zed.skin[0].id, "bullet:skins/Neon Zed");
 }
+
+fn modpkg_with_one_raw_chunk(wad: &str, path_hash: u64, content: &[u8]) -> Vec<u8> {
+    let mut out = bullet_wad::modpkg::MAGIC.to_vec();
+    for value in [1u32, 0, 1, 1] {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out.extend_from_slice(&4u32.to_le_bytes());
+    out.extend_from_slice(b"base");
+    out.extend_from_slice(&0i32.to_le_bytes());
+    out.extend_from_slice(&1u32.to_le_bytes());
+    out.extend_from_slice(b"skin.bin\0");
+    out.extend_from_slice(&1u32.to_le_bytes());
+    out.extend_from_slice(wad.as_bytes());
+    out.push(0);
+    out.resize(out.len().next_multiple_of(8), 0);
+    let data_offset = (out.len() + 61) as u64;
+    let checksum = bullet_wad::hash::content_checksum(content);
+    out.extend_from_slice(&path_hash.to_le_bytes());
+    out.extend_from_slice(&data_offset.to_le_bytes());
+    out.push(0);
+    out.extend_from_slice(&(content.len() as u64).to_le_bytes());
+    out.extend_from_slice(&(content.len() as u64).to_le_bytes());
+    out.extend_from_slice(&checksum.to_le_bytes());
+    out.extend_from_slice(&checksum.to_le_bytes());
+    for value in [0u32, 0, 0] {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out.extend_from_slice(content);
+    out
+}
+
+#[test]
+fn test_a_modpkg_is_imported_offered_to_its_champion_and_staged_as_a_mod_folder() {
+    let root = TempDir::new("modpkg_root");
+    let source = TempDir::new("modpkg_source");
+    let staging = TempDir::new("modpkg_staging");
+    let file = source.0.join("Sniper Varus.modpkg");
+    std::fs::write(
+        &file,
+        modpkg_with_one_raw_chunk("varus.wad.client", 0xABCD, b"skin bin"),
+    )
+    .expect("write");
+
+    let imported = import_archive(&root.0, ModCategory::Skin, None, &file).expect("import");
+    assert_eq!(imported, root.0.join("skins").join("Sniper Varus.modpkg"));
+
+    let roots = [ModRoot {
+        path: root.0.clone(),
+        source: ModSource::Bullet,
+    }];
+    let catalog = scan_catalog(&roots, Some(110), &|entry: &ModEntry| {
+        belongs_to_alias(entry, Some("Varus"))
+    });
+    assert_eq!(catalog.skin.len(), 1, "offered to Varus");
+
+    let (selection, rejected) = catalog.apply_request(
+        &ModSelection::default(),
+        Some(110),
+        &ModSelectionView {
+            skin: Some(catalog.skin[0].id.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(rejected.is_empty(), "{rejected:?}");
+    let staged = stage_selected(&catalog, &selection, Some(110), &staging.0);
+    assert_eq!(staged.len(), 1);
+    let dir = staging.0.join(&staged[0]);
+    assert!(is_valid_mod_dir(&dir));
+    let wad = bullet_wad::WadFile::open(&dir.join("WAD").join("varus.wad.client")).expect("wad");
+    assert_eq!(
+        wad.read(0xABCD).expect("read").as_deref(),
+        Some(&b"skin bin"[..])
+    );
+
+    let broken = source.0.join("broken.modpkg");
+    std::fs::write(&broken, b"_modpkg_ truncated").expect("write");
+    assert!(matches!(
+        import_archive(&root.0, ModCategory::Skin, None, &broken),
+        Err(ImportRefusal::NotAModPackage(_))
+    ));
+}

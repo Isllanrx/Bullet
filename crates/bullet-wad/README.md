@@ -36,6 +36,7 @@ patch.
 | `prop.rs` | BIN/PROP parser and serializer, including the list of linked files; walks every field of an object (`flatten_fields`, `diff_fields`, `field_value`) with bounded depth for the byte-level records; records the installed game's field types (`record_field_shapes`) and converts a mod's text paths into the file references the game declares (`strings_to_files`) |
 | `hash.rs` | Path hashing (xxHash64) and content checksums (XXH3) |
 | `fantome.rs` | Reading `.fantome` packages |
+| `modpkg.rs` | Reading `.modpkg` packages (league-mod format v1): the table index is streamed, only the `base` layer is mounted, each chunk is bounds-checked and its XXH3 verified, and the stored bytes pass through as WAD chunks |
 | `hash_index.rs` | Hash-to-path lookup table |
 
 ## Design notes

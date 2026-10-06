@@ -50,7 +50,8 @@ would require writing to game memory, which Bullet deliberately does not do.
 ## 2. Custom mods
 
 ```text
-The player drops a .fantome into %LOCALAPPDATA%\Bullet\custom_mods\<category>
+The player drops or imports a .fantome, .zip or .modpkg into %LOCALAPPDATA%\Bullet\custom_mods\<category>
+  └─ a .modpkg is unpacked at staging into the same layout (META/info.json + WAD/<name>.wad.client, base layer)
   └─ the mod appears in the Mods tab and is selected there
      └─ the selection joins the other mods for the next build
         └─ compatibility check: every data file the mod links to must exist in the game or in the mod

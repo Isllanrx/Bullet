@@ -43,6 +43,9 @@ pub enum WadError {
     #[error("invalid .fantome: {0}")]
     InvalidFantome(String),
 
+    #[error("invalid .modpkg: {0}")]
+    InvalidModpkg(String),
+
     #[error("I/O error on '{path}': {source}")]
     FileIo {
         path: String,
