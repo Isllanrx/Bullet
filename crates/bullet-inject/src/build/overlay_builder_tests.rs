@@ -914,3 +914,52 @@ fn random_mod_stacks_keep_every_overlay_consistent_with_the_game_and_the_last_mo
         }
     }
 }
+
+#[test]
+fn a_saved_game_index_comes_back_whole_and_anything_stale_or_damaged_is_refused() {
+    let root = TempDir::new("index_cache");
+    let game = game(&root.0);
+    let mut files = Vec::new();
+    collect_game_wads(&game.join("DATA").join("FINAL"), &mut files);
+    files.sort();
+    let fingerprint = files_fingerprint(&files);
+    let index = index_game(&game, files.clone()).expect("index");
+    let file = root.0.join("game_index.bin");
+
+    store_index(&file, fingerprint, &index);
+    let loaded = load_index(&file, fingerprint, &game).expect("loaded");
+    assert_eq!(loaded.len(), index.len());
+    for (mount, wad) in &index {
+        let back = &loaded[mount];
+        assert_eq!(
+            (&back.relpath, &back.path, &back.names),
+            (&wad.relpath, &wad.path, &wad.names)
+        );
+    }
+    assert!(
+        load_index(&file, fingerprint ^ 1, &game).is_none(),
+        "another game build"
+    );
+
+    let bytes = std::fs::read(&file).expect("bytes");
+    for cut in 0..bytes.len() {
+        assert!(
+            parse_index(&bytes[..cut], fingerprint, &game).is_none(),
+            "cut at {cut}"
+        );
+    }
+    let mut longer = bytes.clone();
+    longer.push(0);
+    assert!(
+        parse_index(&longer, fingerprint, &game).is_none(),
+        "trailing bytes"
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    write_wad(&files[0], &[(77, b"patched")]);
+    assert_ne!(
+        files_fingerprint(&files),
+        fingerprint,
+        "a patched WAD changes the fingerprint"
+    );
+}
