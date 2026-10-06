@@ -236,7 +236,7 @@ fn run_audited(exe: &Path, tools: &Path, root: &Path, mut checks: Vec<Check>) ->
                         "task=\"tray-events\"",
                         "task=\"lcu-observer\"",
                         "task=\"activation-listener\"",
-                        "Overlay window and WebView surface created",
+                        "Overlay window created",
                         "task=\"injection-trigger\"",
                     ]);
                     check(

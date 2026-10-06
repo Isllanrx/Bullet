@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::mods::ModSelectionView;
 use crate::selection::{ChampionId, ChromaId, SkinId};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OverlayCommand {
     Select { id: u32 },
 
@@ -21,10 +20,10 @@ pub enum OverlayCommand {
     ChromaPreview { id: u32 },
 }
 
-impl OverlayCommand {
-    pub fn parse(payload: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(payload)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionOrigin {
+    Historic,
+    Random,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,79 +47,137 @@ impl OverlayTarget {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogChroma {
+    pub id: u32,
+    pub name: String,
+
+    pub color: Option<String>,
+
+    pub form: bool,
+
+    pub preview_path: Option<String>,
+
+    pub has_preview: bool,
+}
+
+impl CatalogChroma {
+    #[must_use]
+    pub fn with_preview(mut self, path: Option<&str>) -> Self {
+        self.preview_path = path.filter(|p| p.starts_with('/')).map(str::to_owned);
+        self.has_preview = self.preview_path.is_some();
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogSkin {
+    pub id: u32,
+    pub name: String,
+
+    pub name_unknown: bool,
+    pub chromas: Vec<CatalogChroma>,
+
+    pub tile: Option<std::sync::Arc<[u8]>>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Catalog {
+    pub champion_id: u32,
+    pub champion_name: String,
+
+    pub alias: Option<String>,
+    pub skins: Vec<CatalogSkin>,
+
+    pub locale: Option<String>,
+
+    pub quote: Option<String>,
+
+    pub mods: ModsPanel,
+
+    pub notice: Option<CatalogNotice>,
+
+    pub classic: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogNotice {
+    ToolsMissing,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ModsPanel {
+    pub available: crate::mods::ModCatalog,
+    pub selection: crate::mods::ModSelectionView,
+}
+
+impl Catalog {
+    #[must_use]
+    pub fn entry_count(&self) -> usize {
+        self.skins.iter().map(|s| 1 + s.chromas.len()).sum()
+    }
+
+    pub fn roll_random(&self, mut pick: impl FnMut(usize) -> usize) -> Option<OverlayTarget> {
+        let candidates: Vec<&CatalogSkin> = self
+            .skins
+            .iter()
+            .filter(|skin| !crate::selection::is_base_skin(skin.id, self.champion_id))
+            .collect();
+        if candidates.is_empty() {
+            return None;
+        }
+        let skin = candidates[pick(candidates.len()) % candidates.len()];
+        let options = 1 + skin.chromas.len();
+        let entry = match pick(options) % options {
+            0 => skin.id,
+            n => skin.chromas[n - 1].id,
+        };
+        self.resolve_target(entry)
+    }
+
+    #[must_use]
+    pub fn resolve_target(&self, entry_id: u32) -> Option<OverlayTarget> {
+        for skin in &self.skins {
+            if skin.id == entry_id {
+                return Some(OverlayTarget {
+                    champion_id: self.champion_id,
+                    skin_id: skin.id,
+                    chroma_id: None,
+                });
+            }
+            if let Some(chroma) = skin.chromas.iter().find(|c| c.id == entry_id) {
+                return Some(OverlayTarget {
+                    champion_id: self.champion_id,
+                    skin_id: skin.id,
+                    chroma_id: Some(chroma.id),
+                });
+            }
+        }
+        None
+    }
+
+    #[must_use]
+    pub fn chroma_preview_paths(&self) -> Vec<(u32, String)> {
+        self.skins
+            .iter()
+            .flat_map(|s| s.chromas.iter())
+            .filter_map(|c| c.preview_path.clone().map(|path| (c.id, path)))
+            .collect()
+    }
+
+    #[must_use]
+    pub fn chroma_preview_path(&self, chroma_id: u32) -> Option<&str> {
+        self.skins
+            .iter()
+            .flat_map(|s| s.chromas.iter())
+            .find(|c| c.id == chroma_id)
+            .and_then(|c| c.preview_path.as_deref())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_the_message_the_ui_actually_sends() {
-        assert_eq!(
-            OverlayCommand::parse(r#"{"type":"select","id":238001}"#)
-                .expect("the UI's own message must parse"),
-            OverlayCommand::Select { id: 238_001 }
-        );
-        assert_eq!(
-            OverlayCommand::parse(r#"{"type":"clear"}"#).expect("clear must parse"),
-            OverlayCommand::Clear
-        );
-
-        assert_eq!(
-            OverlayCommand::parse(
-                r#"{"type":"setMods","selection":{"map":"bullet:maps/Winter","others":["bullet:ui/HUD"]}}"#
-            )
-            .expect("setMods must parse"),
-            OverlayCommand::SetMods {
-                selection: ModSelectionView {
-                    map: Some("bullet:maps/Winter".into()),
-                    others: vec!["bullet:ui/HUD".into()],
-                    ..Default::default()
-                }
-            }
-        );
-        assert_eq!(
-            OverlayCommand::parse(r#"{"type":"openModsFolder"}"#).expect("must parse"),
-            OverlayCommand::OpenModsFolder
-        );
-        assert_eq!(
-            OverlayCommand::parse(r#"{"type":"random"}"#).expect("must parse"),
-            OverlayCommand::Random
-        );
-        assert_eq!(
-            OverlayCommand::parse(r#"{"type":"importMod","category":"loadingScreen"}"#)
-                .expect("must parse"),
-            OverlayCommand::ImportMod {
-                category: crate::mods::ModCategory::LoadingScreen
-            }
-        );
-        assert_eq!(
-            OverlayCommand::parse(r#"{"type":"chromaPreview","id":238004}"#).expect("must parse"),
-            OverlayCommand::ChromaPreview { id: 238_004 }
-        );
-        assert!(
-            OverlayCommand::parse(r#"{"type":"chromaPreview","path":"/x"}"#).is_err(),
-            "a preview request carries an id, never a path"
-        );
-        assert!(
-            OverlayCommand::parse(r#"{"type":"importMod","category":"C:/Windows"}"#).is_err(),
-            "a category outside the known ten is refused"
-        );
-    }
-
-    #[test]
-    fn rejects_messages_it_does_not_understand() {
-        assert!(
-            OverlayCommand::parse(r#"{"type":"inject","id":1}"#).is_err(),
-            "an unknown command must not be silently accepted"
-        );
-        assert!(
-            OverlayCommand::parse(r#"{"type":"select"}"#).is_err(),
-            "a select without an id has no target and must fail"
-        );
-        assert!(
-            OverlayCommand::parse("not json at all").is_err(),
-            "garbage must fail rather than resolve to a default"
-        );
-    }
 
     #[test]
     fn chroma_is_the_entry_that_gets_installed() {

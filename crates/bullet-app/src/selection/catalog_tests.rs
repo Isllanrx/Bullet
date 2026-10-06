@@ -131,31 +131,18 @@ fn test_refuses_an_id_that_is_not_in_the_catalog() {
 }
 
 #[test]
-fn test_serializes_to_the_shape_the_ui_expects() {
+fn test_builds_what_the_overlay_shows_and_leaves_tiles_unfetched() {
     let catalog = build_catalog(&library(), Some(&assets()));
-    let json = serde_json::to_value(&catalog).expect("serializes");
-
-    assert_eq!(json["championName"], "Zed");
-    assert_eq!(json["skins"][0]["chromas"][0]["color"], "#E58BA5");
-    assert!(
-        json["skins"][1]["chromas"]
-            .as_array()
-            .is_some_and(Vec::is_empty),
-        "a skin with no chromas serializes an empty list, not null"
+    assert_eq!(catalog.champion_name, "Zed");
+    assert_eq!(
+        catalog.skins[0].chromas[0].color.as_deref(),
+        Some("#E58BA5")
     );
+    assert!(catalog.skins[1].chromas.is_empty());
     assert!(
-        json["skins"][0].get("tile").is_none(),
-        "an unfetched tile must be omitted, not serialized as null"
+        catalog.skins.iter().all(|skin| skin.tile.is_none()),
+        "tiles come from the client later, never from the library"
     );
-}
-
-#[test]
-fn test_tile_data_uri_picks_the_mime_from_the_path_extension() {
-    let png = tile_data_uri("/lol-game-data/assets/.../ZedSquare.png", b"\x89PNG");
-    assert!(png.starts_with("data:image/png;base64,"));
-
-    let jpg = tile_data_uri("/lol-game-data/assets/.../ZedSplash.jpg", b"\xff\xd8\xff");
-    assert!(jpg.starts_with("data:image/jpeg;base64,"));
 }
 
 #[test]

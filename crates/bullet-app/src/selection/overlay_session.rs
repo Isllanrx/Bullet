@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use bullet_core::historic::{self, HistoricBook};
 use bullet_core::mods::{ModCatalog, ModCategory, ModRoot};
-use bullet_core::overlay::{OverlayCommand, OverlayTarget};
+use bullet_core::overlay::{OverlayCommand, OverlayTarget, SelectionOrigin};
 use bullet_core::phase::GamePhase;
 use bullet_core::selection::ChampionId;
 use bullet_core::state::{
@@ -18,8 +18,6 @@ use crate::catalog::{self, Catalog, ModsPanel, PreviewFetches};
 use crate::{historic_store, mods_store};
 
 const TRACK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
-
-const EMPTY_CATALOG_JSON: &str = r#"{"championId":0,"championName":"","skins":[]}"#;
 
 #[must_use]
 fn target_is_stale(target: Option<&OverlayTarget>, champion: Option<ChampionId>) -> bool {
@@ -110,7 +108,9 @@ async fn pick_and_import(
     }
 }
 
-async fn next_preview(fetches: &mut Option<PreviewFetches>) -> Option<(u32, Option<String>)> {
+async fn next_preview(
+    fetches: &mut Option<PreviewFetches>,
+) -> Option<(u32, Option<std::sync::Arc<[u8]>>)> {
     match fetches {
         Some(stream) => futures_util::StreamExt::next(stream).await,
         None => std::future::pending().await,
@@ -161,7 +161,7 @@ pub struct OverlaySession {
 
     random_declined: Option<ChampionId>,
 
-    chroma_previews: std::collections::HashMap<u32, String>,
+    chroma_previews: std::collections::HashMap<u32, std::sync::Arc<[u8]>>,
 
     preview_fetches: Option<PreviewFetches>,
 
@@ -254,7 +254,7 @@ impl OverlaySession {
                     }
                 }
                 fetched = next_preview(&mut self.preview_fetches) => match fetched {
-                    Some((id, Some(uri))) => self.deliver_chroma_preview(id, uri),
+                    Some((id, Some(image))) => self.deliver_chroma_preview(id, image),
                     Some((id, None)) => debug!(chroma_id = id, "Chroma preview not fetched"),
                     None => self.preview_fetches = None,
                 },
@@ -318,7 +318,7 @@ impl OverlaySession {
 
     async fn refresh_catalog(&mut self, champion: Option<ChampionId>) -> Option<Catalog> {
         let Some(champion_id) = champion else {
-            self.controller.set_catalog(EMPTY_CATALOG_JSON.to_owned());
+            self.controller.set_catalog(Catalog::default());
             return None;
         };
 
@@ -337,27 +337,19 @@ impl OverlaySession {
         if !self.mods.injection_tools.iter().all(|file| file.is_file()) {
             built.notice = Some(catalog::CatalogNotice::ToolsMissing);
         }
-        match catalog::catalog_json(&built) {
-            Ok(json) => {
-                info!(
-                    champion_id,
-                    champion = %built.champion_name,
-                    skins = built.skins.len(),
-                    entries = built.entry_count(),
-                    custom_mods = built.mods.available.len(),
-                    "Skin catalog sent to the overlay"
-                );
-                self.controller.set_catalog(json);
-                if !classic {
-                    self.warm_companions(built.alias.clone());
-                }
-                Some(built)
-            }
-            Err(e) => {
-                error!(error = %e, champion_id, "Could not serialize the skin catalog");
-                None
-            }
+        info!(
+            champion_id,
+            champion = %built.champion_name,
+            skins = built.skins.len(),
+            entries = built.entry_count(),
+            custom_mods = built.mods.available.len(),
+            "Skin catalog sent to the overlay"
+        );
+        self.controller.set_catalog(built.clone());
+        if !classic {
+            self.warm_companions(built.alias.clone());
         }
+        Some(built)
     }
 }
 
@@ -473,12 +465,7 @@ impl OverlaySession {
             set_mod_selection(&self.state_tx, next.clone());
         }
 
-        match serde_json::to_string(&next.view(champion)) {
-            Ok(json) => self
-                .controller
-                .eval_script(format!("window.bulletOverlay.setModSelection({json});")),
-            Err(e) => error!(error = %e, "Could not serialize the mod selection for the overlay"),
-        }
+        self.controller.set_mod_selection(next.view(champion));
     }
 
     fn track_historic(
@@ -538,7 +525,10 @@ impl OverlaySession {
             "Historic skin restored as the injection target"
         );
         set_overlay_target(&self.state_tx, restored.clone());
-        self.show_selection(Some(restored.package_entry_id()), Some("historic"));
+        self.show_selection(
+            Some(restored.package_entry_id()),
+            Some(SelectionOrigin::Historic),
+        );
         self.historic_restored = Some(restored);
     }
 
@@ -621,7 +611,10 @@ impl OverlaySession {
                     chroma_id = ?target.chroma_id,
                     "Random skin rolled as the injection target"
                 );
-                self.show_selection(Some(target.package_entry_id()), Some("random"));
+                self.show_selection(
+                    Some(target.package_entry_id()),
+                    Some(SelectionOrigin::Random),
+                );
                 set_overlay_target(&self.state_tx, target);
             }
             None => info!(
@@ -632,8 +625,8 @@ impl OverlaySession {
     }
 
     fn send_chroma_preview(&mut self, chroma_id: u32, catalog: Option<&Catalog>) {
-        if let Some(uri) = self.chroma_previews.get(&chroma_id) {
-            self.push_chroma_preview(chroma_id, uri);
+        if let Some(image) = self.chroma_previews.get(&chroma_id) {
+            self.controller.set_chroma_preview(chroma_id, image.clone());
             return;
         }
         if self.preview_fetches.is_some() {
@@ -649,26 +642,13 @@ impl OverlaySession {
         )]));
     }
 
-    fn deliver_chroma_preview(&mut self, chroma_id: u32, uri: String) {
-        self.push_chroma_preview(chroma_id, &uri);
-        self.chroma_previews.insert(chroma_id, uri);
+    fn deliver_chroma_preview(&mut self, chroma_id: u32, image: std::sync::Arc<[u8]>) {
+        self.controller.set_chroma_preview(chroma_id, image.clone());
+        self.chroma_previews.insert(chroma_id, image);
     }
 
-    fn push_chroma_preview(&self, chroma_id: u32, uri: &str) {
-        match serde_json::to_string(uri) {
-            Ok(json) => self.controller.eval_script(format!(
-                "window.bulletOverlay.setChromaPreview({chroma_id}, {json});"
-            )),
-            Err(e) => warn!(error = %e, chroma_id, "Could not serialize a chroma preview"),
-        }
-    }
-
-    fn show_selection(&self, entry_id: Option<u32>, origin: Option<&str>) {
-        let id = entry_id.map_or_else(|| "null".to_owned(), |id| id.to_string());
-        let origin = origin.map_or_else(|| "null".to_owned(), |o| format!("\"{o}\""));
-        self.controller.eval_script(format!(
-            "window.bulletOverlay.setSelection({id}, {origin});"
-        ));
+    fn show_selection(&self, entry_id: Option<u32>, origin: Option<SelectionOrigin>) {
+        self.controller.set_selection(entry_id, origin);
     }
 
     fn start_import(
@@ -712,12 +692,7 @@ impl OverlaySession {
                 );
                 if let Some(champion_id) = champion {
                     let panel = self.refresh_mods(champion_id, alias).await;
-                    match serde_json::to_string(&panel) {
-                        Ok(json) => self
-                            .controller
-                            .eval_script(format!("window.bulletOverlay.setMods({json});")),
-                        Err(e) => error!(error = %e, "Could not serialize the mods panel"),
-                    }
+                    self.controller.set_mods(panel);
                 }
             }
             Err(reason) => {

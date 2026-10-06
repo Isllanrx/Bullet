@@ -37,8 +37,14 @@ windows = { workspace = true, features = [
     "Win32_System_Registry",
 ] }
 zip.workspace = true
-wry.workspace = true
+slint.workspace = true
 raw-window-handle.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+i-slint-backend-testing.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true

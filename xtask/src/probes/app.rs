@@ -137,7 +137,7 @@ pub(crate) fn run_library_probe(champion_id: Option<u32>) {
 }
 
 pub(crate) fn run_catalog_demo(champion_id: u32) {
-    use bullet_app::catalog::{catalog_json, load_catalog, resolve_library_root};
+    use bullet_app::catalog::{load_catalog, resolve_library_root};
     use bullet_platform::client_window::client_window_state;
     use bullet_platform::overlay_window::{OverlayWindow, track_once};
     use std::time::{Duration, Instant};
@@ -175,14 +175,6 @@ pub(crate) fn run_catalog_demo(champion_id: u32) {
         );
     }
 
-    let json = match catalog_json(&catalog) {
-        Ok(json) => json,
-        Err(e) => {
-            eprintln!("[ERRO] serializacao: {e}");
-            std::process::exit(1);
-        }
-    };
-
     let (overlay, mut commands) = match OverlayWindow::spawn() {
         Ok(pair) => pair,
         Err(e) => {
@@ -191,7 +183,7 @@ pub(crate) fn run_catalog_demo(champion_id: u32) {
         }
     };
     let controller = overlay.controller();
-    controller.set_catalog(json);
+    controller.set_catalog(catalog.clone());
 
     println!("Overlay com o catalogo real. 45s. Restaure o cliente se estiver minimizado.");
     let started = Instant::now();
@@ -245,7 +237,7 @@ pub(crate) fn run_catalog_demo(champion_id: u32) {
 }
 
 pub(crate) fn run_ipc_probe(champion_id: u32) {
-    use bullet_app::catalog::{catalog_json, load_catalog, resolve_library_root};
+    use bullet_app::catalog::{load_catalog, resolve_library_root};
     use bullet_core::overlay::OverlayCommand;
     use bullet_platform::overlay_window::OverlayWindow;
     use std::time::{Duration, Instant};
@@ -271,14 +263,6 @@ pub(crate) fn run_ipc_probe(champion_id: u32) {
         .iter()
         .find_map(|skin| skin.chromas.first().map(|c| c.id));
 
-    let json = match catalog_json(&catalog) {
-        Ok(json) => json,
-        Err(e) => {
-            eprintln!("[ERRO] serializacao: {e}");
-            std::process::exit(1);
-        }
-    };
-
     let (overlay, mut commands) = match OverlayWindow::spawn() {
         Ok(pair) => pair,
         Err(e) => {
@@ -287,7 +271,7 @@ pub(crate) fn run_ipc_probe(champion_id: u32) {
         }
     };
     let controller = overlay.controller();
-    controller.set_catalog(json);
+    controller.set_catalog(catalog.clone());
     println!(
         "catalogo carregado: {} ({}) - {} skins",
         catalog.champion_name,
@@ -298,12 +282,12 @@ pub(crate) fn run_ipc_probe(champion_id: u32) {
     std::thread::sleep(Duration::from_millis(600));
 
     let mut expected: Vec<u32> = vec![first_skin.id];
-    controller.eval_script(click_script(first_skin.id));
+    controller.click(first_skin.id);
     if let Some(chroma_id) = first_chroma {
         println!("clicando skin {} e chroma {chroma_id}", first_skin.id);
         expected.push(chroma_id);
         std::thread::sleep(Duration::from_millis(300));
-        controller.eval_script(click_script(chroma_id));
+        controller.click(chroma_id);
     } else {
         println!("clicando skin {} (campeao sem chromas)", first_skin.id);
     }
@@ -351,10 +335,4 @@ pub(crate) fn run_ipc_probe(champion_id: u32) {
         eprintln!("[FALHA] esperado {expected:?}, recebido {received:?}");
         std::process::exit(1);
     }
-}
-
-pub(crate) fn click_script(entry_id: u32) -> String {
-    format!(
-        "(function() {{ var n = document.querySelector('[data-id=\"{entry_id}\"]');          if (n) {{ n.click(); }} else {{ window.ipc.postMessage(JSON.stringify({{type:'probe-missing'}})); }} }})();"
-    )
 }

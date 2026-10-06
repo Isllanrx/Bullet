@@ -1,57 +1,34 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::mpsc::{Sender, channel};
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
-use bullet_core::overlay::OverlayCommand;
+use bullet_core::mods::ModSelectionView;
+use bullet_core::overlay::{Catalog, ModsPanel, OverlayCommand, SelectionOrigin};
+use slint::winit_030::{WinitWindowAccessor, winit};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::{debug, info, warn};
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, CreateSolidBrush, SetWindowRgn};
+use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, HWND_TOPMOST, MSG,
-    PostMessageW, RegisterClassW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetForegroundWindow,
-    SetWindowPos, ShowWindow, TranslateMessage, WM_APP, WNDCLASSW, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_POPUP, WS_THICKFRAME,
+    HWND_TOPMOST, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SetWindowPos, ShowWindow,
 };
-use windows::core::w;
-use wry::dpi::{LogicalPosition, LogicalSize};
-use wry::{Rect, WebViewBuilder};
 
-const OVERLAY_HTML: &str = include_str!("overlay_ui.html");
-
-pub(crate) fn overlay_html() -> String {
-    OVERLAY_HTML.replace("{{version}}", crate::version::display_version())
-}
-
+use super::overlay_model as model;
+use super::runtime;
+use super::views::{self, ChromaGem, OverlayLabels, SkinCard, SkinRow};
 use crate::client_window::{
     ClientWindowState, WindowRect, client_window_state, overlay_placement, overlay_placement_on,
 };
 use crate::error::PlatformError;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-enum WindowControl {
-    Focus,
-    Blur,
-    Drag,
-    Resize,
-    Hide,
-}
-
-impl WindowControl {
-    fn try_parse(payload: &str) -> Option<Self> {
-        serde_json::from_str(payload).ok()
-    }
-}
+use crate::i18n::{Language, Text};
 
 pub const OVERLAY_WIDTH: i32 = 360;
 
 pub const OVERLAY_HEIGHT: i32 = 520;
 
 pub const OVERLAY_PADDING: i32 = 16;
-
-pub const OVERLAY_CORNER_RADIUS: i32 = 14;
 
 pub const OVERLAY_MIN_WIDTH: i32 = 320;
 
@@ -70,36 +47,42 @@ pub fn overlay_size() -> (i32, i32) {
     )
 }
 
-const WM_OVERLAY_RESIZED: u32 = WM_APP + 6;
-
-const WM_OVERLAY_SHOW: u32 = WM_APP + 1;
-
-const WM_OVERLAY_HIDE: u32 = WM_APP + 2;
-
-const WM_OVERLAY_QUIT: u32 = WM_APP + 3;
-
-const WM_OVERLAY_SCRIPT: u32 = WM_APP + 4;
-
-const WM_OVERLAY_FOCUS: u32 = WM_APP + 5;
-
-fn pack_point(x: i32, y: i32) -> isize {
-    let x = x.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as isize;
-    let y = y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as isize;
-    (x & 0xFFFF) | ((y & 0xFFFF) << 16)
+struct Overlay {
+    view: views::OverlayWindow,
+    hwnd: isize,
+    commands: UnboundedSender<OverlayCommand>,
+    catalog: Catalog,
+    language: Language,
+    search: String,
+    mods_tab: bool,
+    mods: ModsPanel,
+    selected: Option<u32>,
+    origin: Option<SelectionOrigin>,
+    columns: usize,
+    tiles: HashMap<u32, slint::Image>,
+    previews: HashMap<u32, slint::Image>,
+    preview_for: Option<u32>,
 }
 
-fn unpack_point(packed: isize) -> (i32, i32) {
-    let x = (packed & 0xFFFF) as u16 as i16 as i32;
-    let y = ((packed >> 16) & 0xFFFF) as u16 as i16 as i32;
-    (x, y)
+thread_local! {
+    static OVERLAY: RefCell<Option<Overlay>> = const { RefCell::new(None) };
+}
+
+fn with_overlay(work: impl FnOnce(&mut Overlay)) {
+    OVERLAY.with(|cell| match cell.try_borrow_mut() {
+        Ok(mut slot) => {
+            if let Some(overlay) = slot.as_mut() {
+                work(overlay);
+            }
+        }
+        Err(_) => debug!("Overlay update skipped: the overlay is already being updated"),
+    });
 }
 
 #[derive(Clone)]
 pub struct OverlayController {
     hwnd: isize,
     alive: Arc<AtomicBool>,
-
-    pending_scripts: Arc<Mutex<Vec<String>>>,
 }
 
 impl OverlayController {
@@ -108,82 +91,71 @@ impl OverlayController {
         self.hwnd
     }
 
-    pub fn show_at(&self, rect: WindowRect) {
+    fn post(&self, work: impl FnOnce(&mut Overlay) + Send + 'static) {
         if !self.alive.load(Ordering::SeqCst) {
             return;
         }
-
-        unsafe {
-            if let Err(e) = PostMessageW(
-                HWND(self.hwnd as *mut _),
-                WM_OVERLAY_SHOW,
-                WPARAM(pack_point(rect.left, rect.top) as usize),
-                LPARAM(pack_point(rect.width(), rect.height())),
-            ) {
-                warn!(error = %e, "Could not post show request to the overlay window");
-            }
+        if let Err(e) = runtime::run_on_ui(move || with_overlay(work)) {
+            warn!(error = %e, "Could not reach the overlay window");
         }
+    }
+
+    pub fn show_at(&self, rect: WindowRect) {
+        self.post(move |overlay| overlay.show_at(rect));
     }
 
     pub fn hide(&self) {
-        if !self.alive.load(Ordering::SeqCst) {
-            return;
-        }
-
-        unsafe {
-            if let Err(e) = PostMessageW(
-                HWND(self.hwnd as *mut _),
-                WM_OVERLAY_HIDE,
-                WPARAM(0),
-                LPARAM(0),
-            ) {
-                warn!(error = %e, "Could not post hide request to the overlay window");
-            }
-        }
+        self.post(|overlay| overlay.hide());
     }
 
-    pub fn set_catalog(&self, catalog_json: String) {
-        self.eval_script(format!("window.bulletOverlay.setCatalog({catalog_json});"));
+    pub fn set_catalog(&self, catalog: Catalog) {
+        self.post(move |overlay| overlay.set_catalog(catalog));
     }
 
-    pub fn eval_script(&self, script: String) {
-        if !self.alive.load(Ordering::SeqCst) {
-            return;
-        }
+    pub fn set_selection(&self, entry_id: Option<u32>, origin: Option<SelectionOrigin>) {
+        self.post(move |overlay| {
+            overlay.selected = entry_id;
+            overlay.origin = entry_id.and(origin);
+            overlay.render_selection();
+        });
+    }
 
-        match self.pending_scripts.lock() {
-            Ok(mut queue) => queue.push(script),
-            Err(e) => {
-                warn!(error = %e, "Overlay script queue is poisoned; dropping this update");
-                return;
-            }
-        }
+    pub fn set_mods(&self, panel: ModsPanel) {
+        self.post(move |overlay| {
+            overlay.mods = panel;
+            overlay.render_mods();
+        });
+    }
 
-        unsafe {
-            if let Err(e) = PostMessageW(
-                HWND(self.hwnd as *mut _),
-                WM_OVERLAY_SCRIPT,
-                WPARAM(0),
-                LPARAM(0),
-            ) {
-                warn!(error = %e, "Could not notify the overlay about queued work");
-            }
-        }
+    pub fn set_mod_selection(&self, selection: ModSelectionView) {
+        self.post(move |overlay| {
+            overlay.mods.selection = selection;
+            overlay.render_mods();
+        });
+    }
+
+    pub fn set_chroma_preview(&self, chroma_id: u32, image: Arc<[u8]>) {
+        self.post(move |overlay| overlay.deliver_preview(chroma_id, &image));
+    }
+
+    pub fn click(&self, entry_id: u32) {
+        self.post(move |overlay| overlay.choose(entry_id));
     }
 
     pub fn shutdown(&self) {
         if !self.alive.swap(false, Ordering::SeqCst) {
             return;
         }
-
-        unsafe {
-            // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
-            let _ = PostMessageW(
-                HWND(self.hwnd as *mut _),
-                WM_OVERLAY_QUIT,
-                WPARAM(0),
-                LPARAM(0),
-            );
+        if let Err(e) = runtime::run_on_ui(|| {
+            OVERLAY.with_borrow_mut(|slot| {
+                if let Some(overlay) = slot.take() {
+                    if let Err(e) = overlay.view.hide() {
+                        debug!(error = %e, "The overlay window was already closed");
+                    }
+                }
+            });
+        }) {
+            debug!(error = %e, "The overlay window was already gone at shutdown");
         }
     }
 }
@@ -194,31 +166,35 @@ pub struct OverlayWindow {
 
 impl OverlayWindow {
     pub fn spawn() -> Result<(Self, UnboundedReceiver<OverlayCommand>), PlatformError> {
-        let (ready_tx, ready_rx) = channel::<Result<isize, String>>();
         let (command_tx, command_rx) = unbounded_channel::<OverlayCommand>();
-        let alive = Arc::new(AtomicBool::new(true));
-        let pending_scripts: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-
-        {
-            let alive = alive.clone();
-            let pending_scripts = pending_scripts.clone();
-            thread::spawn(move || {
-                run_overlay_message_loop(ready_tx, alive, pending_scripts, command_tx)
-            });
-        }
-
+        let (ready_tx, ready_rx) = channel::<Result<isize, String>>();
+        runtime::run_on_ui(move || {
+            let created = create(command_tx);
+            let ready = ready_tx.clone();
+            match created {
+                Ok(view) => runtime::when_created(&view, move |view, hwnd| {
+                    finish(view, hwnd);
+                    if ready.send(Ok(hwnd)).is_err() {
+                        debug!("Nobody waited for the overlay window");
+                    }
+                }),
+                Err(e) => {
+                    if ready_tx.send(Err(e)).is_err() {
+                        debug!("Nobody waited for the overlay window");
+                    }
+                }
+            }
+        })?;
         let hwnd = ready_rx
             .recv()
             .map_err(|_| PlatformError::Window("overlay window thread died at startup".into()))?
             .map_err(PlatformError::Window)?;
-
-        info!("Overlay window and WebView surface created");
+        info!("Overlay window created");
         Ok((
             Self {
                 controller: OverlayController {
                     hwnd,
-                    alive,
-                    pending_scripts,
+                    alive: Arc::new(AtomicBool::new(true)),
                 },
             },
             command_rx,
@@ -234,6 +210,392 @@ impl OverlayWindow {
 impl Drop for OverlayWindow {
     fn drop(&mut self) {
         self.controller.shutdown();
+    }
+}
+
+fn create(commands: UnboundedSender<OverlayCommand>) -> Result<views::OverlayWindow, String> {
+    let view = views::OverlayWindow::new().map_err(|e| format!("overlay window: {e}"))?;
+    wire(&view);
+    view.show().map_err(|e| format!("overlay window: {e}"))?;
+    let mut overlay = Overlay::new(view.clone_strong(), commands);
+    overlay.apply_language();
+    overlay.render_all();
+    OVERLAY.with_borrow_mut(|slot| *slot = Some(overlay));
+    Ok(view)
+}
+
+fn finish(view: &views::OverlayWindow, hwnd: isize) {
+    view.window()
+        .with_winit_window(|window: &winit::window::Window| {
+            use winit::platform::windows::WindowExtWindows;
+            window.set_skip_taskbar(true);
+        });
+    let target = HWND(hwnd as *mut _);
+    unsafe {
+        let _ = ShowWindow(target, SW_HIDE); // ignore-ok: returns the previous visibility, not an error
+    }
+    view.window().on_winit_window_event(|_, event| {
+        if let winit::event::WindowEvent::Resized(size) = event {
+            let (width, height) = (size.width as i32, size.height as i32);
+            if width > 0 && height > 0 {
+                OVERLAY_SIZE.0.store(width, Ordering::Relaxed);
+                OVERLAY_SIZE.1.store(height, Ordering::Relaxed);
+            }
+        }
+        slint::winit_030::EventResult::Propagate
+    });
+    with_overlay(|overlay| overlay.hwnd = hwnd);
+}
+
+fn wire(view: &views::OverlayWindow) {
+    view.on_search_edited(|search| {
+        with_overlay(|overlay| {
+            overlay.search = search.to_string();
+            overlay.render_list();
+        });
+    });
+    view.on_search_focused(|| {
+        with_overlay(|overlay| crate::client_window::take_foreground(overlay.hwnd));
+    });
+    view.on_search_done(crate::client_window::return_foreground_to_client);
+    view.on_choose(|id| {
+        if let Ok(id) = u32::try_from(id) {
+            with_overlay(|overlay| overlay.choose(id));
+        }
+    });
+    view.on_random(|| with_overlay(|overlay| overlay.send(OverlayCommand::Random)));
+    view.on_show_tab(|mods_tab| {
+        with_overlay(|overlay| {
+            if overlay.mods_tab != mods_tab {
+                overlay.mods_tab = mods_tab;
+                overlay.search.clear();
+                overlay.view.set_search(SharedString::default());
+                overlay.view.set_mods_tab(mods_tab);
+                overlay.render_list();
+            }
+        });
+    });
+    view.on_mod_clicked(|slot, id| {
+        with_overlay(|overlay| {
+            if let Some(next) = model::toggle_mod(&overlay.mods.selection, &slot, &id) {
+                overlay.mods.selection = next.clone();
+                overlay.render_mods();
+                overlay.send(OverlayCommand::SetMods { selection: next });
+            }
+        });
+    });
+    view.on_import_mod(|index| {
+        let categories = model::import_categories();
+        if let Some(category) = usize::try_from(index).ok().and_then(|i| categories.get(i)) {
+            let category = *category;
+            with_overlay(|overlay| overlay.send(OverlayCommand::ImportMod { category }));
+        }
+    });
+    view.on_open_mods_folder(|| {
+        with_overlay(|overlay| overlay.send(OverlayCommand::OpenModsFolder))
+    });
+    view.on_gem_hovered(|gem, x, y, on| {
+        with_overlay(|overlay| {
+            if on && gem.has_preview {
+                overlay.show_preview(&gem, x, y);
+            } else if !on {
+                overlay.hide_preview();
+            }
+        });
+    });
+    view.on_scrolled(|| with_overlay(Overlay::hide_preview));
+    view.on_columns_changed(|columns| {
+        with_overlay(|overlay| {
+            overlay.columns = usize::try_from(columns).unwrap_or(1).max(1);
+            overlay.render_rows();
+        });
+    });
+    view.on_drag(|| {
+        with_overlay(|overlay| {
+            overlay.hide_preview();
+            overlay
+                .view
+                .window()
+                .with_winit_window(|window: &winit::window::Window| {
+                    if let Err(e) = window.drag_window() {
+                        debug!(error = %e, "The overlay window could not be dragged");
+                    }
+                });
+        });
+    });
+    view.on_resize(|| {
+        with_overlay(|overlay| {
+            overlay.hide_preview();
+            overlay
+                .view
+                .window()
+                .with_winit_window(|window: &winit::window::Window| {
+                    if let Err(e) =
+                        window.drag_resize_window(winit::window::ResizeDirection::SouthEast)
+                    {
+                        debug!(error = %e, "The overlay window could not be resized");
+                    }
+                });
+        });
+    });
+    view.on_hide_requested(|| with_overlay(|overlay| overlay.hide()));
+}
+
+impl Overlay {
+    fn new(view: views::OverlayWindow, commands: UnboundedSender<OverlayCommand>) -> Self {
+        Self {
+            view,
+            hwnd: 0,
+            commands,
+            catalog: Catalog::default(),
+            language: Language::for_locale(None),
+            search: String::new(),
+            mods_tab: false,
+            mods: ModsPanel::default(),
+            selected: None,
+            origin: None,
+            columns: 1,
+            tiles: HashMap::new(),
+            previews: HashMap::new(),
+            preview_for: None,
+        }
+    }
+
+    fn text(&self) -> &'static Text {
+        self.language.text()
+    }
+
+    fn send(&self, command: OverlayCommand) {
+        if matches!(command, OverlayCommand::ChromaPreview { .. }) {
+            debug!(?command, "Overlay UI command received");
+        } else {
+            info!(?command, "Overlay UI command received");
+        }
+        if self.commands.send(command).is_err() {
+            debug!("Nobody is listening for overlay commands any more");
+        }
+    }
+
+    fn show_at(&self, rect: WindowRect) {
+        let target = HWND(self.hwnd as *mut _);
+        let (x, y, width, height) = (rect.left, rect.top, rect.width(), rect.height());
+        unsafe {
+            let _ = SetWindowPos(target, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE); // ignore-ok: a refused reposition is retried by the next tracking tick, 200 ms later
+            let _ = ShowWindow(target, SW_SHOWNOACTIVATE); // ignore-ok: returns the previous visibility, not an error
+        }
+    }
+
+    fn hide(&mut self) {
+        self.hide_preview();
+        unsafe {
+            let _ = ShowWindow(HWND(self.hwnd as *mut _), SW_HIDE); // ignore-ok: returns the previous visibility, not an error
+        }
+    }
+
+    fn set_catalog(&mut self, catalog: Catalog) {
+        self.language = Language::for_locale(catalog.locale.as_deref());
+        self.tiles = catalog
+            .skins
+            .iter()
+            .filter_map(|skin| {
+                let image = runtime::image(skin.tile.as_deref()?)?;
+                Some((skin.id, image))
+            })
+            .collect();
+        self.mods = catalog.mods.clone();
+        self.catalog = catalog;
+        self.selected = None;
+        self.origin = None;
+        self.previews.clear();
+        self.hide_preview();
+        self.search.clear();
+        self.view.set_search(SharedString::default());
+        self.apply_language();
+        self.render_all();
+    }
+
+    fn choose(&mut self, entry_id: u32) {
+        let (selected, command) = model::choose(self.selected, entry_id);
+        self.selected = selected;
+        self.origin = None;
+        self.render_selection();
+        self.send(command);
+    }
+
+    fn apply_language(&self) {
+        let text = self.text();
+        self.view.set_labels(OverlayLabels {
+            version: crate::version::display_version().into(),
+            search_skin: text.overlay_search_skin.into(),
+            search_mod: text.overlay_search_mod.into(),
+            dice: text.overlay_dice.into(),
+            tab_skins: text.overlay_tab_skins.into(),
+            tab_mods: text.overlay_tab_mods.into(),
+            historic_tag: text.overlay_historic_tag.into(),
+            random_tag: text.overlay_random_tag.into(),
+            connected: text.overlay_connected.into(),
+            import_mod: text.overlay_import_mod.into(),
+            open_folder: text.overlay_open_folder.into(),
+        });
+        let categories: Vec<SharedString> = model::import_categories()
+            .into_iter()
+            .map(|category| model::category_label(category, text).into())
+            .collect();
+        self.view
+            .set_import_categories(ModelRc::new(VecModel::from(categories)));
+    }
+
+    fn render_all(&mut self) {
+        let text = self.text();
+        self.view
+            .set_champion(model::champion_label(&self.catalog, text).into());
+        self.view
+            .set_portrait_initial(model::initial(&self.catalog.champion_name).into());
+        let portrait = self
+            .catalog
+            .skins
+            .iter()
+            .find_map(|skin| self.tiles.get(&skin.id));
+        self.view.set_has_portrait(portrait.is_some());
+        self.view
+            .set_portrait(portrait.cloned().unwrap_or_default());
+        self.view
+            .set_notice(model::notice(&self.catalog, text).into());
+        let (footer, quote) =
+            model::footer(&self.catalog, self.language == Language::Portuguese, text);
+        self.view.set_footer_right(footer.into());
+        self.view.set_footer_quote(quote);
+        self.view.set_mods_tab(self.mods_tab);
+        self.render_list();
+        self.render_selection();
+    }
+
+    fn render_list(&mut self) {
+        self.hide_preview();
+        self.render_rows();
+        self.render_mods();
+    }
+
+    fn render_rows(&self) {
+        let cards: Vec<SkinCard> = model::visible_skins(&self.catalog, &self.search)
+            .into_iter()
+            .map(|skin| self.card(skin))
+            .collect();
+        let rows: Vec<SkinRow> = model::chunk(&cards, self.columns)
+            .into_iter()
+            .map(|cards| SkinRow {
+                cards: ModelRc::new(VecModel::from(cards)),
+            })
+            .collect();
+        let (big, sub) = model::empty_texts(&self.catalog, &self.search, self.text());
+        self.view.set_empty_big(big.into());
+        self.view.set_empty_sub(sub.into());
+        self.view.set_rows(ModelRc::new(VecModel::from(rows)));
+    }
+
+    fn card(&self, skin: &bullet_core::overlay::CatalogSkin) -> SkinCard {
+        let tile = self.tiles.get(&skin.id);
+        let chromas: Vec<ChromaGem> = skin
+            .chromas
+            .iter()
+            .map(|chroma| ChromaGem {
+                id: i32::try_from(chroma.id).unwrap_or(-1),
+                name: chroma.name.as_str().into(),
+                color: parse_color(chroma.color.as_deref()),
+                form: chroma.form,
+                has_preview: chroma.has_preview,
+            })
+            .collect();
+        SkinCard {
+            id: i32::try_from(skin.id).unwrap_or(-1),
+            name: skin.name.as_str().into(),
+            name_unknown: skin.name_unknown,
+            tile: tile.cloned().unwrap_or_default(),
+            has_tile: tile.is_some(),
+            initial: model::initial(&skin.name).into(),
+            chromas: ModelRc::new(VecModel::from(chromas)),
+        }
+    }
+
+    fn render_mods(&self) {
+        let text = self.text();
+        let lines = model::mod_lines(
+            &self.mods.available,
+            &self.mods.selection,
+            &self.search,
+            text,
+        );
+        self.view.set_mod_lines(ModelRc::new(VecModel::from(lines)));
+        let count = model::selected_count(&self.mods.selection);
+        self.view.set_mods_count(if count == 0 {
+            SharedString::default()
+        } else {
+            count.to_string().into()
+        });
+    }
+
+    fn render_selection(&self) {
+        let to_int = |id: Option<u32>| id.and_then(|id| i32::try_from(id).ok()).unwrap_or(-1);
+        self.view.set_selected_id(to_int(self.selected));
+        self.view.set_selected_skin(to_int(
+            self.selected
+                .and_then(|id| model::parent_skin(&self.catalog, id)),
+        ));
+        self.view.set_origin(match self.origin {
+            Some(SelectionOrigin::Historic) => views::SelectionOrigin::Historic,
+            Some(SelectionOrigin::Random) => views::SelectionOrigin::Random,
+            None => views::SelectionOrigin::None,
+        });
+    }
+
+    fn show_preview(&mut self, gem: &ChromaGem, x: f32, y: f32) {
+        let Ok(id) = u32::try_from(gem.id) else {
+            return;
+        };
+        self.preview_for = Some(id);
+        self.view.set_preview_name(gem.name.clone());
+        self.view.set_preview_anchor_x(x);
+        self.view.set_preview_anchor_y(y);
+        match self.previews.get(&id) {
+            Some(image) => {
+                self.view.set_preview_image(image.clone());
+                self.view.set_preview_loading(false);
+            }
+            None => {
+                self.view.set_preview_image(slint::Image::default());
+                self.view.set_preview_loading(true);
+                self.send(OverlayCommand::ChromaPreview { id });
+            }
+        }
+        self.view.set_preview_visible(true);
+    }
+
+    fn hide_preview(&mut self) {
+        self.preview_for = None;
+        self.view.set_preview_visible(false);
+    }
+
+    fn deliver_preview(&mut self, chroma_id: u32, bytes: &[u8]) {
+        let Some(image) = runtime::image(bytes) else {
+            debug!(chroma_id, "A chroma preview could not be decoded");
+            return;
+        };
+        if self.preview_for == Some(chroma_id) {
+            self.view.set_preview_image(image.clone());
+            self.view.set_preview_loading(false);
+        }
+        self.previews.insert(chroma_id, image);
+    }
+}
+
+pub(crate) fn parse_color(color: Option<&str>) -> slint::Color {
+    let fallback = slint::Color::from_rgb_u8(0x3a, 0x4a, 0x5a);
+    let Some(hex) = color.and_then(|c| c.strip_prefix('#')) else {
+        return fallback;
+    };
+    match (hex.len(), u32::from_str_radix(hex, 16)) {
+        (6, Ok(rgb)) => slint::Color::from_argb_encoded(0xff00_0000 | rgb),
+        _ => fallback,
     }
 }
 
@@ -313,327 +675,6 @@ pub fn track_once(controller: &OverlayController, wanted: bool) -> Option<Window
     let mut lock = GLOBAL_TRACKER.lock().unwrap_or_else(|e| e.into_inner());
     let tracker = lock.get_or_insert_with(OverlayTracker::new);
     tracker.tick(controller, wanted)
-}
-
-fn run_overlay_message_loop(
-    ready_tx: Sender<Result<isize, String>>,
-    alive: Arc<AtomicBool>,
-    pending_scripts: Arc<Mutex<Vec<String>>>,
-    command_tx: UnboundedSender<OverlayCommand>,
-) {
-    let class_name = w!("BulletOverlayWindowClass");
-
-    unsafe {
-        let wc = WNDCLASSW {
-            lpfnWndProc: Some(overlay_wnd_proc),
-            hInstance: Default::default(),
-            lpszClassName: class_name,
-            hbrBackground: CreateSolidBrush(COLORREF(0x0014_0F0B)),
-            ..Default::default()
-        };
-        RegisterClassW(&wc);
-    }
-
-    let hwnd = unsafe {
-        CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            class_name,
-            w!("Bullet"),
-            WS_POPUP | WS_THICKFRAME,
-            0,
-            0,
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT,
-            None,
-            None,
-            None,
-            None,
-        )
-    };
-
-    let hwnd = match hwnd {
-        Ok(hwnd) if !hwnd.is_invalid() => hwnd,
-        other => {
-            warn!(result = ?other, "Failed to create the overlay window");
-            let _ = ready_tx.send(Err(format!("overlay window creation failed: {other:?}"))); // ignore-ok: nobody is waiting any more; the thread tears itself down below
-            alive.store(false, Ordering::SeqCst);
-            return;
-        }
-    };
-
-    let host = super::dialog_host::HostHandle(hwnd);
-
-    let mut web_context = wry::WebContext::new(crate::paths::webview2_data_dir());
-
-    let hwnd_raw = hwnd.0 as isize;
-    let html = overlay_html();
-    let webview = match WebViewBuilder::new_with_web_context(&mut web_context)
-        .with_html(html)
-        .with_ipc_handler(move |request| {
-            let payload = request.body();
-
-            match WindowControl::try_parse(payload) {
-                Some(WindowControl::Focus) => {
-                    unsafe {
-                        use windows::Win32::System::Threading::{
-                            AttachThreadInput, GetCurrentThreadId,
-                        };
-                        use windows::Win32::UI::WindowsAndMessaging::{
-                            BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId,
-                        };
-
-                        let target_hwnd = HWND(hwnd_raw as *mut _);
-                        let foreground_hwnd = GetForegroundWindow();
-                        let foreground_thread = GetWindowThreadProcessId(foreground_hwnd, None);
-                        let current_thread = GetCurrentThreadId();
-
-                        if foreground_thread != 0 && foreground_thread != current_thread {
-                            let _ = AttachThreadInput(foreground_thread, current_thread, true); // ignore-ok: best-effort thread input attachment
-                            let _ = BringWindowToTop(target_hwnd); // ignore-ok: brings window to top of z-order
-                            let _ = SetForegroundWindow(target_hwnd); // ignore-ok: transfer foreground focus
-                            let _ = AttachThreadInput(foreground_thread, current_thread, false); // ignore-ok: detach thread input after transfer
-                        } else {
-                            let _ = BringWindowToTop(target_hwnd); // ignore-ok: brings window to top of z-order
-                            let _ = SetForegroundWindow(target_hwnd); // ignore-ok: best-effort focus grant
-                        }
-                        // ignore-ok: our own window; a failure means the loop already ended
-                        let _ = PostMessageW(target_hwnd, WM_OVERLAY_FOCUS, WPARAM(0), LPARAM(0));
-                    }
-                    return;
-                }
-                Some(WindowControl::Blur) => {
-                    if let Some(client) = crate::client_window::find_client_hwnd() {
-                        unsafe {
-                            use windows::Win32::System::Threading::{
-                                AttachThreadInput, GetCurrentThreadId,
-                            };
-                            use windows::Win32::UI::WindowsAndMessaging::{
-                                GetForegroundWindow, GetWindowThreadProcessId,
-                            };
-
-                            let foreground_hwnd = GetForegroundWindow();
-                            let foreground_thread = GetWindowThreadProcessId(foreground_hwnd, None);
-                            let current_thread = GetCurrentThreadId();
-
-                            if foreground_thread != 0 && foreground_thread != current_thread {
-                                let _ = AttachThreadInput(foreground_thread, current_thread, true); // ignore-ok: best-effort thread input attachment
-                                let _ = SetForegroundWindow(client); // ignore-ok: restore focus to client
-                                let _ = AttachThreadInput(foreground_thread, current_thread, false); // ignore-ok: detach thread input after transfer
-                            } else {
-                                let _ = SetForegroundWindow(client); // ignore-ok: restore focus to client
-                            }
-                        }
-                    }
-                    return;
-                }
-                Some(WindowControl::Drag) => {
-                    unsafe {
-                        use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
-                        use windows::Win32::UI::WindowsAndMessaging::{
-                            HTCAPTION, SendMessageW, WM_NCLBUTTONDOWN,
-                        };
-
-                        // ignore-ok: initiating window drag via Win32 non-client message
-                        let _ = ReleaseCapture();
-
-                        // ignore-ok: non-client click message forwarded to start system window drag
-                        let _ = SendMessageW(
-                            HWND(hwnd_raw as *mut _),
-                            WM_NCLBUTTONDOWN,
-                            WPARAM(HTCAPTION as usize),
-                            LPARAM(0),
-                        );
-                    }
-                    return;
-                }
-                Some(WindowControl::Resize) => {
-                    unsafe {
-                        use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
-                        use windows::Win32::UI::WindowsAndMessaging::{
-                            HTBOTTOMRIGHT, SendMessageW, WM_NCLBUTTONDOWN,
-                        };
-
-                        // ignore-ok: the WebView holds the capture; releasing it lets the size loop take the mouse
-                        let _ = ReleaseCapture();
-
-                        // ignore-ok: non-client click on the corner starts the system resize loop
-                        let _ = SendMessageW(
-                            HWND(hwnd_raw as *mut _),
-                            WM_NCLBUTTONDOWN,
-                            WPARAM(HTBOTTOMRIGHT as usize),
-                            LPARAM(0),
-                        );
-                    }
-                    return;
-                }
-                Some(WindowControl::Hide) => {
-                    unsafe {
-                        // ignore-ok: user requested close/hide via overlay titlebar button
-                        let _ = ShowWindow(HWND(hwnd_raw as *mut _), SW_HIDE);
-                    }
-                    return;
-                }
-                None => {}
-            }
-
-            match OverlayCommand::parse(payload) {
-                Ok(command) => {
-                    if matches!(command, OverlayCommand::ChromaPreview { .. }) {
-                        debug!(?command, "Overlay UI command received");
-                    } else {
-                        info!(?command, "Overlay UI command received");
-                    }
-                    if command_tx.send(command).is_err() {
-                        debug!("Nobody is listening for overlay commands any more");
-                    }
-                }
-
-                Err(e) => {
-                    warn!(error = %e, payload = %payload, "Unreadable message from the overlay UI");
-                }
-            }
-        })
-        .with_transparent(false)
-        .with_bounds(Rect {
-            position: LogicalPosition::new(0, 0).into(),
-            size: LogicalSize::new(OVERLAY_WIDTH, OVERLAY_HEIGHT).into(),
-        })
-        .build_as_child(&host)
-    {
-        Ok(webview) => webview,
-        Err(e) => {
-            warn!(error = %e, "Could not create the WebView2 overlay surface");
-            let _ = ready_tx.send(Err(format!("WebView2 surface unavailable: {e}"))); // ignore-ok: nobody is waiting any more; the thread tears itself down below
-            alive.store(false, Ordering::SeqCst);
-            return;
-        }
-    };
-
-    apply_rounded_region(hwnd, OVERLAY_WIDTH, OVERLAY_HEIGHT);
-
-    if ready_tx.send(Ok(hwnd.0 as isize)).is_err() {
-        alive.store(false, Ordering::SeqCst);
-        return;
-    }
-
-    let mut msg = MSG::default();
-
-    unsafe {
-        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-            match msg.message {
-                WM_OVERLAY_QUIT => break,
-                WM_OVERLAY_SHOW => {
-                    let (x, y) = unpack_point(msg.wParam.0 as isize);
-                    let (w, h) = unpack_point(msg.lParam.0);
-                    let _ = SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE); // ignore-ok: a refused reposition is retried by the next tracking tick, 200 ms later
-                    let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE); // ignore-ok: returns the previous visibility, not an error
-                    if let Err(e) = webview.set_visible(true) {
-                        debug!(error = %e, "Could not resume the overlay WebView");
-                    }
-                    if let Err(e) = webview.set_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: LogicalSize::new(w, h).into(),
-                    }) {
-                        debug!(error = %e, "Could not resize the overlay WebView");
-                    }
-                }
-                WM_OVERLAY_HIDE => {
-                    let _ = ShowWindow(hwnd, SW_HIDE); // ignore-ok: returns the previous visibility, not an error
-                    if let Err(e) = webview.set_visible(false) {
-                        debug!(error = %e, "Could not suspend the hidden overlay WebView");
-                    }
-                }
-                WM_OVERLAY_RESIZED => {
-                    let (w, h) = overlay_size();
-                    apply_rounded_region(hwnd, w, h);
-                    if let Err(e) = webview.set_bounds(Rect {
-                        position: LogicalPosition::new(0, 0).into(),
-                        size: LogicalSize::new(w, h).into(),
-                    }) {
-                        debug!(error = %e, "Could not resize the overlay WebView");
-                    }
-                }
-                WM_OVERLAY_FOCUS => {
-                    if let Err(e) = webview.focus() {
-                        debug!(error = %e, "Could not move keyboard focus into the overlay WebView");
-                    }
-                }
-                WM_OVERLAY_SCRIPT => {
-                    let queued: Vec<String> = pending_scripts
-                        .lock()
-                        .map(|mut queue| std::mem::take(&mut *queue))
-                        .unwrap_or_default();
-                    for script in queued {
-                        if let Err(e) = webview.evaluate_script(&script) {
-                            warn!(error = %e, "Could not run a script in the overlay UI");
-                        }
-                    }
-                }
-                _ => {
-                    let _ = TranslateMessage(&msg); // ignore-ok: returns whether a key event was translated; this pump forwards either way
-                    DispatchMessageW(&msg);
-                }
-            }
-        }
-    }
-
-    drop(webview);
-    alive.store(false, Ordering::SeqCst);
-    debug!("Overlay message loop finished");
-}
-
-fn apply_rounded_region(hwnd: HWND, width: i32, height: i32) {
-    unsafe {
-        let region = CreateRoundRectRgn(
-            0,
-            0,
-            width + 1,
-            height + 1,
-            OVERLAY_CORNER_RADIUS,
-            OVERLAY_CORNER_RADIUS,
-        );
-        if SetWindowRgn(hwnd, region, true) == 0 {
-            warn!("Could not apply rounded-corner region to the overlay window");
-        }
-    }
-}
-
-unsafe extern "system" fn overlay_wnd_proc(
-    hwnd: HWND,
-    msg: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        MINMAXINFO, WM_GETMINMAXINFO, WM_NCCALCSIZE, WM_SIZE,
-    };
-
-    match msg {
-        WM_NCCALCSIZE if wparam.0 != 0 => LRESULT(0),
-        WM_GETMINMAXINFO => {
-            let info = lparam.0 as *mut MINMAXINFO;
-            if !info.is_null() {
-                unsafe {
-                    (*info).ptMinTrackSize.x = OVERLAY_MIN_WIDTH;
-                    (*info).ptMinTrackSize.y = OVERLAY_MIN_HEIGHT;
-                }
-            }
-            LRESULT(0)
-        }
-        WM_SIZE => {
-            let (w, h) = unpack_point(lparam.0);
-            if w > 0 && h > 0 {
-                OVERLAY_SIZE.0.store(w, Ordering::Relaxed);
-                OVERLAY_SIZE.1.store(h, Ordering::Relaxed);
-                unsafe {
-                    // ignore-ok: our own window; a lost message is redone by the next WM_SIZE
-                    let _ = PostMessageW(hwnd, WM_OVERLAY_RESIZED, WPARAM(0), LPARAM(0));
-                }
-            }
-            LRESULT(0)
-        }
-        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
-    }
 }
 
 #[cfg(test)]
