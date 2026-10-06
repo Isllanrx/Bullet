@@ -86,7 +86,9 @@ maintainer approves a pull request
   └─ pr-approved.yml records the PR number and the approved commit (read-only token)
      └─ automerge.yml re-checks everything through the API and enables auto-merge (squash)
         └─ GitHub merges only when "CI OK" and "Security OK" pass on that exact commit
-           └─ release.yml: if the workspace version has no release yet, full gate without cache,
+           └─ release.yml: next version = last release tag + 1 minor (a "breaking" label on the PR
+              makes it the next major; the workspace version in Cargo.toml is a floor), stamped into
+              Cargo.toml and Cargo.lock by `cargo xtask set-version`, full gate without cache,
               bullet.exe signed, installer built around it and signed (when signing is configured),
               checksums,
               build provenance attestation → published as a PRE-RELEASE
