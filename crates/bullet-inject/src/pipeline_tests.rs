@@ -111,7 +111,7 @@ async fn test_pipeline_aborts_before_building_on_bad_dll_hash() {
     );
 
     let pipeline = InjectionPipeline::new(config, Some(tx));
-    let result = pipeline.execute(&["my_skin_mod".into()], 1234, 5678).await;
+    let result = pipeline.execute(&["my_skin_mod".into()], 1234).await;
 
     assert!(result.is_err(), "should abort on wrong hash");
     assert!(matches!(
@@ -136,7 +136,7 @@ async fn test_pipeline_fails_loudly_when_the_overlay_cannot_be_built() {
 
     let pipeline = InjectionPipeline::new(config, Some(tx));
     let result = pipeline
-        .execute(&["my_skin_mod".into()], std::process::id(), 0)
+        .execute(&["my_skin_mod".into()], std::process::id())
         .await;
 
     assert!(result.is_err(), "an unbuildable overlay must fail loudly");
