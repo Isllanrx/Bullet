@@ -49,10 +49,10 @@ under a flat path (`bullet_platform::fs`, `bullet_wad::prop`), so callers never 
 | `bullet-platform` | `os/instance`, `os/system`, `os/storage`, `league/` (client settings and window, game build, paths), `ui/pages` (WebView windows and their HTML), `ui/desktop` (tray, hotkey, clipboard, dialogs, shell), `ui/locale` |
 | `bullet-wad` | `archive/` (WAD, writer, `.fantome`, `.modpkg`), `properties/` (BIN/PROP), `hashing/` |
 | `bullet-lcu` | `connection/` (client, lockfile, WebSocket, observer), `session/` (champion select, live selection, skin registration, assets) |
-| `bullet-classic` | `animation/` (forms, gear toggle, clip aliases), `generation/` (builder, generator, client data) |
+| `bullet-classic` | `animation/` (forms, gear toggle, clip aliases), `generation/` (builder, client data, and `generator/`: retarget, characters, classic, standard) |
 | `bullet-inject` | `build/` (overlay builder, cache, mod compatibility), `injector/` (LTK host, overlay process, DLL validation, runner) |
 | `bullet-party` | `transport/` (client, config, protocol), `security/` (crypto, token) |
-| `bullet-app` | `selection/`, `game/`, `updates/`, `diagnostics/`, `party/`; the binary-only modules (`main.rs`, `logging.rs`, `trigger.rs`) stay at the root |
+| `bullet-app` | `selection/`, `game/`, `updates/`, `diagnostics/`, `party/`; the binary-only modules (`main.rs`, `logging.rs`, `trigger.rs` with `trigger/paths.rs` and `trigger/mods.rs`) stay at the root |
 | `xtask` | `build/`, `lint/`, `audit/`, `testing/`, `probes/`; `main.rs` only dispatches |
 
 ## Startup sequence
