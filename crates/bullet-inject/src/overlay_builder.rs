@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -18,6 +18,7 @@ const TFT_MOUNTS: [&str; 2] = ["map21", "map22"];
 const BASE_STORE_DIR: &str = "overlay_base";
 
 static GAME_COPY_LOCK: Mutex<()> = Mutex::new(());
+static BUILDS_WAITING_FOR_COPIES: AtomicUsize = AtomicUsize::new(0);
 
 pub const OVERLAY_BUILDER_REVISION: u32 = 4;
 
@@ -213,9 +214,11 @@ pub fn build(
 
     let base_store = base_store_for(overlay_dir);
     let revision = OVERLAY_BUILDER_REVISION.to_string();
+    BUILDS_WAITING_FOR_COPIES.fetch_add(1, Ordering::AcqRel);
     let _copies = GAME_COPY_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    BUILDS_WAITING_FOR_COPIES.fetch_sub(1, Ordering::AcqRel);
     let (mut written, mut bytes) = (0usize, 0u64);
     let mut manifest = Vec::with_capacity(overlay.len());
     for (name, wad) in &overlay {
@@ -793,6 +796,7 @@ pub fn prewarm_shared_copies(
     game_dir: &Path,
     overlay_dir: &Path,
     names: &[u64],
+    match_started: &dyn Fn() -> bool,
 ) -> Result<usize, InjectError> {
     let Some(store) = base_store_for(overlay_dir) else {
         return Ok(0);
@@ -802,6 +806,7 @@ pub fn prewarm_shared_copies(
     let _copies = GAME_COPY_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let stop = || match_started() && BUILDS_WAITING_FOR_COPIES.load(Ordering::Acquire) == 0;
     let mut copied = 0usize;
     for (mount, wad) in game.iter() {
         if !is_map(wad)
@@ -819,10 +824,13 @@ pub fn prewarm_shared_copies(
             &wad.path,
             &store.join(&wad.relpath),
             &revision,
-            &|| false,
+            &stop,
         )
-        .map_err(|e| {
-            InjectError::Overlay(format!("could not copy '{}': {e}", wad.path.display()))
+        .map_err(|e| match e {
+            bullet_wad::error::WadError::Cancelled => InjectError::Cancelled,
+            other => {
+                InjectError::Overlay(format!("could not copy '{}': {other}", wad.path.display()))
+            }
         })?;
         if made {
             copied += 1;
