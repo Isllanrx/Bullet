@@ -34,6 +34,7 @@ injector needs.
 | `ui/pages/panel.rs`, `ui/pages/panel_ui.html` | The control panel: status, options, party, folders and diagnostics in one window |
 | `os/storage/preferences.rs` | Persisted on/off preferences: accept matches automatically (off by default) and roll a random skin when none is chosen (on by default), and light match loading (on by default) |
 | `ui/pages/welcome.rs`, `ui/pages/party_dialog.rs`, `ui/desktop/dialog.rs` | The first-run window, the party dialog and message boxes |
+| `ui/pages/dialog_host.rs` | The window the control panel, the first-run window and the party dialog share: centered, dark title bar, one backdrop brush per process, a WebView sized to the client area and the message pump |
 | `ui/locale/i18n.rs` | Translations (English, Portuguese, Spanish) for everything shown outside the League client; falls back to English |
 | `os/instance/single_instance.rs`, `os/instance/activation.rs` | Only one Bullet runs at a time; starting it again brings the first one to the front |
 | `os/system/autostart.rs` | The "start with Windows" setting |

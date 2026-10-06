@@ -3,12 +3,7 @@ use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use std::num::NonZeroIsize;
-
 use bullet_core::overlay::OverlayCommand;
-use raw_window_handle::{
-    HandleError, HasWindowHandle, RawWindowHandle, Win32WindowHandle, WindowHandle,
-};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tracing::{debug, info, warn};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
@@ -366,7 +361,7 @@ fn run_overlay_message_loop(
         }
     };
 
-    let host = OverlayWindowHandle(hwnd);
+    let host = super::dialog_host::HostHandle(hwnd);
 
     let mut web_context = wry::WebContext::new(crate::paths::webview2_data_dir());
 
@@ -638,17 +633,6 @@ unsafe extern "system" fn overlay_wnd_proc(
             LRESULT(0)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
-    }
-}
-
-struct OverlayWindowHandle(HWND);
-
-impl HasWindowHandle for OverlayWindowHandle {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        let raw = NonZeroIsize::new(self.0.0 as isize).ok_or(HandleError::Unavailable)?;
-        let handle = Win32WindowHandle::new(raw);
-
-        Ok(unsafe { WindowHandle::borrow_raw(RawWindowHandle::Win32(handle)) })
     }
 }
 
