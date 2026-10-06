@@ -2,7 +2,9 @@ use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
 };
-use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
+use windows::Win32::System::Memory::{
+    GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock,
+};
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 
 use crate::error::PlatformError;
@@ -74,8 +76,9 @@ pub fn get_text() -> Result<Option<String>, PlatformError> {
         if source.is_null() {
             return Ok(None);
         }
+        let readable = (GlobalSize(block) / std::mem::size_of::<u16>()).min(MAX_READ_CHARS);
         let mut len = 0usize;
-        while len < MAX_READ_CHARS && *source.add(len) != 0 {
+        while len < readable && *source.add(len) != 0 {
             len += 1;
         }
         let text = String::from_utf16_lossy(std::slice::from_raw_parts(source, len));
