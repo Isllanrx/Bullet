@@ -165,12 +165,41 @@ pub fn atomic_write(target_path: &Path, content: &[u8], sync: bool) -> Result<()
     Ok(())
 }
 
+fn is_portable_segment(segment: &std::ffi::OsStr) -> bool {
+    const RESERVED: [&str; 22] = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    let Some(name) = segment.to_str() else {
+        return false;
+    };
+    let stem = name.split('.').next().unwrap_or(name).trim_end();
+    !name.is_empty()
+        && !name.ends_with(['.', ' '])
+        && !name
+            .chars()
+            .any(|c| c.is_control() || matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*'))
+        && !RESERVED
+            .iter()
+            .any(|device| stem.eq_ignore_ascii_case(device))
+}
+
 pub fn validate_archive_path(entry_path: &Path) -> Result<PathBuf, PlatformError> {
     let mut clean_path = PathBuf::new();
 
     for comp in entry_path.components() {
         match comp {
-            Component::Normal(segment) => clean_path.push(segment),
+            Component::Normal(segment) if is_portable_segment(segment) => clean_path.push(segment),
+            Component::Normal(_) => {
+                warn!(
+                    entry = %entry_path.display(),
+                    "Refused an archive entry with a name Windows treats specially"
+                );
+                return Err(PlatformError::Security(format!(
+                    "archive entry has a reserved or unsafe name: '{}'",
+                    entry_path.display()
+                )));
+            }
             Component::ParentDir => {
                 warn!(
                     entry = %entry_path.display(),
