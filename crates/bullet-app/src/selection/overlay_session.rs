@@ -58,9 +58,9 @@ pub fn should_roll_random(champion_id: ChampionId, fallback: RandomFallback) -> 
         && !fallback.target_chosen
         && !fallback.already_rolled
         && !fallback.declined
-        && fallback.lcu_skin.is_none_or(|skin| {
-            bullet_core::selection::SelectionMode::is_base_skin(skin, champion_id)
-        })
+        && fallback
+            .lcu_skin
+            .is_none_or(|skin| bullet_core::selection::is_base_skin(skin, champion_id))
 }
 
 pub struct OverlaySession {
@@ -239,7 +239,7 @@ impl OverlaySession {
             return None;
         };
 
-        let classic = bullet_classic::builder::ClassicIdMapper::is_classic_champion(champion_id);
+        let classic = bullet_classic::builder::is_classic_champion(champion_id);
         let mut built = if classic {
             let game_dir = bullet_platform::paths::normalize_game_dir(&self.mods.game_dir)
                 .or_else(bullet_platform::paths::discover_game_dir)

@@ -9,13 +9,13 @@ fn default_state_is_idle() {
 }
 
 #[test]
-fn enter_champ_select_resets_state() {
+fn entering_champ_select_resets_the_match() {
     let (tx, rx) = new_state_channel();
 
     set_champion(&tx, 1);
     set_selected_skin(&tx, 1001);
 
-    enter_champ_select(&tx, QueueType::Draft);
+    set_phase(&tx, GamePhase::ChampSelect);
 
     let state = rx.borrow();
     assert_eq!(state.phase, GamePhase::ChampSelect);
@@ -41,7 +41,7 @@ fn overlay_target_survives_lcu_updates_and_dies_with_the_champ_select() {
     assert!(rx.borrow().overlay_target.is_none());
 
     set_overlay_target(&tx, target);
-    enter_champ_select(&tx, QueueType::Draft);
+    set_phase(&tx, GamePhase::ChampSelect);
     assert!(
         rx.borrow().overlay_target.is_none(),
         "a new champ select starts with no target"
@@ -67,25 +67,11 @@ fn losing_the_client_drops_the_overlay_target() {
 }
 
 #[test]
-fn selection_mode_effective_skin_id() {
-    let explicit = SelectionMode::Explicit {
-        skin_id: 21069,
-        chroma_id: Some(21070),
-    };
-    assert_eq!(explicit.effective_skin_id(), 21069);
-
-    let random = SelectionMode::Random {
-        rolled_skin_id: 1005,
-    };
-    assert_eq!(random.effective_skin_id(), 1005);
-}
-
-#[test]
 fn base_skin_detection() {
-    assert!(SelectionMode::is_base_skin(1000, 1));
-    assert!(SelectionMode::is_base_skin(0, 1));
+    assert!(crate::selection::is_base_skin(1000, 1));
+    assert!(crate::selection::is_base_skin(0, 1));
 
-    assert!(!SelectionMode::is_base_skin(1001, 1));
+    assert!(!crate::selection::is_base_skin(1001, 1));
 }
 
 #[test]
@@ -160,7 +146,6 @@ fn finished_match(tx: &StateSender) {
     set_phase(tx, GamePhase::ChampSelect);
     set_champion(tx, 518);
     set_selected_skin(tx, 518_000);
-    lock_champion(tx);
     set_team(
         tx,
         Some("me".into()),
@@ -194,7 +179,6 @@ fn assert_no_match_state(state: &AppState, context: &str) {
     assert!(state.overlay_target.is_none(), "{context}: target");
     assert!(state.team.is_empty(), "{context}: team");
     assert!(state.local_puuid.is_none(), "{context}: local PUUID");
-    assert!(!state.champion_locked, "{context}: lock");
     assert_eq!(
         state.injection,
         InjectionStatus::Idle,
@@ -271,7 +255,7 @@ fn only_entering_a_pre_match_phase_starts_a_new_match() {
 fn clear_for_new_game_resets_everything() {
     let (tx, rx) = new_state_channel();
 
-    enter_champ_select(&tx, QueueType::Draft);
+    set_phase(&tx, GamePhase::ChampSelect);
     set_champion(&tx, 1);
     set_selected_skin(&tx, 1001);
     set_injection_status(&tx, InjectionStatus::Confirmed);

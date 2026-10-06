@@ -184,11 +184,6 @@ impl WadWriter {
     }
 
     #[must_use]
-    pub fn keeps_game_header(&self) -> bool {
-        self.kept_checksum.is_some()
-    }
-
-    #[must_use]
     pub fn stored_len_of(entry: &WriterEntry) -> usize {
         entry.stored_len()
     }

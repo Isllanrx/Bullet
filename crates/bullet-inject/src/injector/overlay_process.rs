@@ -10,6 +10,7 @@ use tracing::{debug, error, info, warn};
 use crate::error::InjectError;
 use crate::ltk_host::{self, HostEvent, HostLogLevel, HostState, StderrLevel};
 
+#[cfg(test)]
 fn is_dll_failure(line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     lower.contains("failed") || lower.contains("error") || lower.contains("unable to")
@@ -32,6 +33,7 @@ pub struct OverlayProcess {
 }
 
 impl OverlayProcess {
+    #[cfg(test)]
     pub fn spawn(program: &Path, args: &[String]) -> Result<Self, InjectError> {
         let program_str = program.display().to_string();
 

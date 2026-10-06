@@ -4,8 +4,8 @@ use tokio::sync::watch;
 use crate::mods::ModSelection;
 use crate::overlay::OverlayTarget;
 use crate::party::{PartyPeer, PartyStatus, TeamMember};
-use crate::phase::{GamePhase, QueueType};
-use crate::selection::{ChampionId, SelectionMode, SkinId, SkinInfo};
+use crate::phase::GamePhase;
+use crate::selection::{ChampionId, SkinId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum InjectionStatus {
@@ -27,23 +27,15 @@ pub enum InjectionStatus {
 pub struct AppState {
     pub phase: GamePhase,
 
-    pub queue_type: Option<QueueType>,
-
     pub champion_id: Option<ChampionId>,
 
     pub selected_skin_id: Option<SkinId>,
 
-    pub selection_mode: Option<SelectionMode>,
-
     pub overlay_target: Option<OverlayTarget>,
-
-    pub available_skins: Vec<SkinInfo>,
 
     pub lcu_connected: bool,
 
     pub injection: InjectionStatus,
-
-    pub champion_locked: bool,
 
     pub mods: ModSelection,
 
@@ -62,15 +54,11 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             phase: GamePhase::None,
-            queue_type: None,
             champion_id: None,
             selected_skin_id: None,
-            selection_mode: None,
             overlay_target: None,
-            available_skins: Vec::new(),
             lcu_connected: false,
             injection: InjectionStatus::Idle,
-            champion_locked: false,
             mods: ModSelection::default(),
             local_puuid: None,
             team: Vec::new(),
@@ -91,14 +79,10 @@ pub fn new_state_channel() -> (StateSender, StateReceiver) {
 }
 
 fn reset_match(state: &mut AppState) {
-    state.queue_type = None;
     state.champion_id = None;
     state.selected_skin_id = None;
-    state.selection_mode = None;
     state.overlay_target = None;
-    state.available_skins.clear();
     state.injection = InjectionStatus::Idle;
-    state.champion_locked = false;
     state.local_puuid = None;
     state.team.clear();
 }
@@ -114,14 +98,6 @@ fn starts_new_match(from: GamePhase, to: GamePhase) -> bool {
         )
 }
 
-pub fn enter_champ_select(tx: &StateSender, queue_type: QueueType) {
-    tx.send_modify(|state| {
-        reset_match(state);
-        state.phase = GamePhase::ChampSelect;
-        state.queue_type = Some(queue_type);
-    });
-}
-
 pub fn set_champion(tx: &StateSender, champion_id: ChampionId) {
     tx.send_modify(|state| {
         state.champion_id = Some(champion_id);
@@ -131,18 +107,6 @@ pub fn set_champion(tx: &StateSender, champion_id: ChampionId) {
 pub fn set_selected_skin(tx: &StateSender, skin_id: SkinId) {
     tx.send_modify(|state| {
         state.selected_skin_id = Some(skin_id);
-    });
-}
-
-pub fn apply_selection(tx: &StateSender, mode: SelectionMode) {
-    tx.send_modify(|state| {
-        state.selection_mode = Some(mode);
-    });
-}
-
-pub fn lock_champion(tx: &StateSender) {
-    tx.send_modify(|state| {
-        state.champion_locked = true;
     });
 }
 

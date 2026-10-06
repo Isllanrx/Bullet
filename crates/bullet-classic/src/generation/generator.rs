@@ -27,7 +27,7 @@ pub fn is_safe_alias(alias: &str) -> bool {
 
 #[must_use]
 pub fn skin_number(skin_or_chroma_id: u32) -> u32 {
-    crate::builder::ClassicIdMapper::normalize_skin_id(skin_or_chroma_id) % 1000
+    crate::builder::normalize_skin_id(skin_or_chroma_id) % 1000
 }
 
 #[must_use]
@@ -811,12 +811,6 @@ impl ClassicChampion {
     }
 
     #[must_use]
-    pub fn has_animation(&self, character: &str, skin: u32) -> bool {
-        self.wad
-            .contains(wad_path_hash(&animation_bin(character, skin)))
-    }
-
-    #[must_use]
     pub fn skin_numbers(&self, character: &str, limit: u32) -> Vec<u32> {
         (0..limit)
             .filter(|n| self.has_skin(character, *n))
@@ -970,11 +964,6 @@ pub fn slots_for(client_skin_id: Option<u32>) -> Vec<u32> {
 }
 
 pub const STANDARD_MOD_PREFIX: &str = "std_";
-
-#[must_use]
-pub fn is_generated_folder(name: &str) -> bool {
-    name.starts_with(CLASSIC_MOD_PREFIX) || name.starts_with(STANDARD_MOD_PREFIX)
-}
 
 type SharedScan = std::sync::Arc<std::sync::OnceLock<BTreeSet<String>>>;
 

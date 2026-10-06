@@ -722,7 +722,6 @@ fn test_classic_champion_retargets_animation_bin() {
 
     let champion = ClassicChampion::open(&game, "Annie").expect("open");
     assert!(champion.has_skin("jade_annie", 15));
-    assert!(champion.has_animation("jade_annie", 15));
 
     let mut known = BTreeSet::new();
     known.insert("jade_annie".to_string());

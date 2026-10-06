@@ -164,8 +164,7 @@ pub fn apply_session_to_state(state_tx: &StateSender, session: &ChampSelectSessi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bullet_core::phase::QueueType;
-    use bullet_core::state::{enter_champ_select, new_state_channel};
+    use bullet_core::state::{new_state_channel, set_phase};
 
     #[test]
     fn test_parse_session_and_extract_local_selection() {
@@ -202,7 +201,7 @@ mod tests {
         assert_eq!(skin, 21069);
 
         let (tx, rx) = new_state_channel();
-        enter_champ_select(&tx, QueueType::Draft);
+        set_phase(&tx, GamePhase::ChampSelect);
 
         apply_session_to_state(&tx, &session);
 

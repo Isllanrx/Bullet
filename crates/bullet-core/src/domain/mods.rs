@@ -50,11 +50,6 @@ impl ModCategory {
             Self::Other => "others",
         }
     }
-
-    #[must_use]
-    pub fn is_single_choice(self) -> bool {
-        matches!(self, Self::Skin | Self::Map | Self::Font | Self::Announcer)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

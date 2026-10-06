@@ -222,10 +222,6 @@ impl SystemTray {
     pub fn try_recv_event(&self) -> Option<TrayEvent> {
         self.event_rx.try_recv().ok()
     }
-
-    pub fn recv_event(&self) -> Option<TrayEvent> {
-        self.event_rx.recv().ok()
-    }
 }
 
 impl Drop for SystemTray {

@@ -34,7 +34,6 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 | `injector/ltk_host.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
 | `injector/overlay_process.rs` | Starts the host, reads its output without blocking, and kills it if Bullet drops it |
 | `pipeline.rs` | Orchestrates build → arm → confirm |
-| `injector/runner.rs` | Runs external processes without a console window |
 | `injector/dll_validator.rs` | Checks a binary's SHA-256 against its audited hash before it is ever run or loaded |
 
 ## Rules the builder follows

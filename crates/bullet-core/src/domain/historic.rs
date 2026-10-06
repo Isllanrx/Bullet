@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::overlay::OverlayTarget;
-use crate::selection::{ChampionId, ChromaId, SelectionMode, SkinId};
+use crate::selection::{ChampionId, ChromaId, SkinId, is_base_skin};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HistoricEntry {
@@ -60,13 +60,12 @@ pub fn may_restore(
     has_overlay_target: bool,
     lcu_skin: Option<SkinId>,
 ) -> bool {
-    !has_overlay_target
-        && lcu_skin.is_none_or(|skin| SelectionMode::is_base_skin(skin, champion_id))
+    !has_overlay_target && lcu_skin.is_none_or(|skin| is_base_skin(skin, champion_id))
 }
 
 #[must_use]
 pub fn superseded_in_client(champion_id: ChampionId, lcu_skin: Option<SkinId>) -> bool {
-    lcu_skin.is_some_and(|skin| !SelectionMode::is_base_skin(skin, champion_id))
+    lcu_skin.is_some_and(|skin| !is_base_skin(skin, champion_id))
 }
 
 #[cfg(test)]
