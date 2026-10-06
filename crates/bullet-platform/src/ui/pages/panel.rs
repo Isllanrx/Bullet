@@ -1,36 +1,20 @@
-use std::num::NonZeroIsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::mpsc::Sender;
 use std::thread;
 
-use raw_window_handle::{
-    HandleError, HasWindowHandle, RawWindowHandle, Win32WindowHandle, WindowHandle,
-};
 use serde::Serialize;
 use tracing::{debug, warn};
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Dwm::{DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute};
-use windows::Win32::Graphics::Gdi::{
-    BeginPaint, COLOR_WINDOW, CreateSolidBrush, DeleteObject, EndPaint, FillRect, HBRUSH,
-    PAINTSTRUCT,
-};
+use windows::Win32::Foundation::HWND;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, ICON_BIG, ICON_SMALL, IDC_ARROW, IsIconic, KillTimer, LoadCursorW,
-    MINMAXINFO, PostMessageW, PostQuitMessage, RegisterClassW, SM_CXSCREEN, SM_CYSCREEN,
-    SW_RESTORE, SW_SHOW, SendMessageW, SetForegroundWindow, SetTimer, ShowWindow, TranslateMessage,
-    WINDOW_EX_STYLE, WM_APP, WM_CLOSE, WM_DESTROY, WM_GETMINMAXINFO, WM_PAINT, WM_SETICON, WM_SIZE,
-    WM_TIMER, WNDCLASSW, WS_CAPTION, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_OVERLAPPED, WS_SYSMENU,
-    WS_THICKFRAME, WS_VISIBLE,
+    IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow, WM_APP,
 };
 use windows::core::w;
-use wry::WebViewBuilder;
 
+use super::dialog_host::{self, Dialog, DialogSpec, WM_HOST_TICK};
 use crate::tray::TrayEvent;
 
 const PANEL_HTML: &str = include_str!("panel_ui.html");
-const WM_PANEL_RESIZED: u32 = WM_APP + 11;
 const WM_PANEL_REFRESH: u32 = WM_APP + 12;
 const TIMER_REFRESH: usize = 3001;
 const REFRESH_MS: u32 = 700;
@@ -181,284 +165,85 @@ pub fn show_panel(links: PanelLinks) {
     thread::spawn(move || run_panel(&links));
 }
 
-struct PanelWindowHandle(HWND);
-
-impl HasWindowHandle for PanelWindowHandle {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        let non_zero = NonZeroIsize::new(self.0.0 as isize).ok_or(HandleError::Unavailable)?;
-        let raw = RawWindowHandle::Win32(Win32WindowHandle::new(non_zero));
-        unsafe { Ok(WindowHandle::borrow_raw(raw)) }
-    }
-}
-
-fn client_bounds(hwnd: HWND) -> wry::Rect {
-    let mut rect = RECT::default();
-    unsafe {
-        // ignore-ok: a zeroed rect sizes the WebView at 0x0 until the next WM_SIZE
-        let _ = GetClientRect(hwnd, &mut rect);
-    }
-    wry::Rect {
-        position: wry::dpi::LogicalPosition::new(0, 0).into(),
-        size: wry::dpi::LogicalSize::new(
-            (rect.right - rect.left).max(0) as u32,
-            (rect.bottom - rect.top).max(0) as u32,
-        )
-        .into(),
-    }
-}
-
 fn run_panel(links: &PanelLinks) {
-    let class_name = w!("BulletPanelWindowClass");
-    let hicon = crate::welcome::load_bullet_icon().unwrap_or_default();
-    let wc = WNDCLASSW {
-        lpfnWndProc: Some(panel_wnd_proc),
-        lpszClassName: class_name,
-        hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
-        hIcon: hicon,
-        hbrBackground: HBRUSH((COLOR_WINDOW.0 + 1) as *mut _),
-        ..Default::default()
-    };
-    unsafe {
-        let _ = RegisterClassW(&wc); // ignore-ok: a second registration fails only because the class exists
-    }
-
-    let screen_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
-    let screen_h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
-    let hwnd = match unsafe {
-        CreateWindowExW(
-            WINDOW_EX_STYLE(0),
-            class_name,
-            w!("Bullet"),
-            WS_OVERLAPPED
-                | WS_CAPTION
-                | WS_SYSMENU
-                | WS_THICKFRAME
-                | WS_MINIMIZEBOX
-                | WS_MAXIMIZEBOX
-                | WS_VISIBLE,
-            (screen_w - PANEL_WIDTH) / 2,
-            (screen_h - PANEL_HEIGHT) / 2,
-            PANEL_WIDTH,
-            PANEL_HEIGHT,
-            None,
-            None,
-            None,
-            None,
-        )
-    } {
-        Ok(hwnd) => hwnd,
-        Err(e) => {
-            warn!(error = %e, "Control panel: the window could not be created");
-            return;
-        }
-    };
-    if OPEN_PANEL
-        .compare_exchange(0, hwnd.0 as isize, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        unsafe {
-            // ignore-ok: a panel is already open; this duplicate is discarded
-            let _ = DestroyWindow(hwnd);
-        }
-        return;
-    }
-
-    if !hicon.is_invalid() {
-        unsafe {
-            // ignore-ok: WM_SETICON returns the previous icon, not a status
-            let _ = SendMessageW(
-                hwnd,
-                WM_SETICON,
-                WPARAM(ICON_BIG as usize),
-                LPARAM(hicon.0 as isize),
-            );
-            // ignore-ok: WM_SETICON returns the previous icon, not a status
-            let _ = SendMessageW(
-                hwnd,
-                WM_SETICON,
-                WPARAM(ICON_SMALL as usize),
-                LPARAM(hicon.0 as isize),
-            );
-        }
-    }
-    let dark: i32 = 1;
-    unsafe {
-        // ignore-ok: cosmetic; older Windows builds refuse this attribute by design
-        let _ = DwmSetWindowAttribute(
-            hwnd,
-            DWMWA_USE_IMMERSIVE_DARK_MODE,
-            &dark as *const _ as *const _,
-            std::mem::size_of::<i32>() as u32,
-        );
-    }
-    let mut web_context = wry::WebContext::new(crate::paths::webview2_data_dir());
-
     let html = match panel_html(&PanelLabels::from_text(crate::i18n::text())) {
         Ok(html) => html,
         Err(e) => {
             warn!(error = %e, "Control panel: labels could not be serialized");
-            close_failed(hwnd);
             return;
         }
     };
-    let host = PanelWindowHandle(hwnd);
-    let hwnd_raw = hwnd.0 as isize;
+    let spec = DialogSpec {
+        class: w!("BulletPanelWindowClass"),
+        title: "Bullet",
+        size: (PANEL_WIDTH, PANEL_HEIGHT),
+        min_size: Some((PANEL_MIN_WIDTH, PANEL_MIN_HEIGHT)),
+    };
+    let mut dialog = match Dialog::create(&spec) {
+        Ok(dialog) => dialog,
+        Err(e) => {
+            warn!(error = %e, "Control panel could not be opened");
+            return;
+        }
+    };
+    let hwnd = dialog.raw();
+    if OPEN_PANEL
+        .compare_exchange(0, hwnd, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        dialog.destroy();
+        return;
+    }
+
     let events = links.events.clone();
-    let webview = WebViewBuilder::new_with_web_context(&mut web_context)
-        .with_html(html)
-        .with_bounds(client_bounds(hwnd))
-        .with_ipc_handler(move |request| {
-            let body = request.body().as_str();
-            match event_for(body) {
-                Some(event) => {
-                    if events.send(event).is_err() {
-                        warn!(
-                            message = body,
-                            "Control panel: Bullet is shutting down; the action was not taken"
-                        );
-                    }
+    let webview = dialog.webview(html, move |request| {
+        let body = request.body().as_str();
+        match event_for(body) {
+            Some(event) => {
+                if events.send(event).is_err() {
+                    warn!(
+                        message = body,
+                        "Control panel: Bullet is shutting down; the action was not taken"
+                    );
                 }
-                None if body == "ready" => {}
-                None => debug!(message = body, "Control panel: unknown message ignored"),
             }
-            unsafe {
-                // ignore-ok: our own window; a lost refresh is redone by the next timer tick
-                let _ = PostMessageW(
-                    HWND(hwnd_raw as *mut _),
-                    WM_PANEL_REFRESH,
-                    WPARAM(0),
-                    LPARAM(0),
-                );
-            }
-        })
-        .build_as_child(&host);
+            None if body == "ready" => {}
+            None => debug!(message = body, "Control panel: unknown message ignored"),
+        }
+        dialog_host::post(hwnd, WM_PANEL_REFRESH);
+    });
     let webview = match webview {
         Ok(webview) => webview,
         Err(e) => {
-            warn!(error = %e, "Control panel: the WebView could not be created");
-            close_failed(hwnd);
+            warn!(error = %e, "Control panel could not be opened");
+            OPEN_PANEL.store(0, Ordering::SeqCst);
             return;
         }
     };
 
-    unsafe {
-        // ignore-ok: ShowWindow returns the previous visibility, not a status
-        let _ = ShowWindow(hwnd, SW_SHOW);
-        // ignore-ok: Windows may refuse the foreground; the window is still shown
-        let _ = SetForegroundWindow(hwnd);
-        // ignore-ok: without the timer the panel refreshes only when the user acts on it
-        let _ = SetTimer(hwnd, TIMER_REFRESH, REFRESH_MS, None);
-    }
+    dialog.show(true);
+    dialog.tick_every(TIMER_REFRESH, REFRESH_MS);
 
     let mut last_sent = String::new();
-    let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
-    unsafe {
-        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-            match msg.message {
-                WM_PANEL_RESIZED => {
-                    if let Err(e) = webview.set_bounds(client_bounds(hwnd)) {
-                        debug!(error = %e, "Control panel: the WebView could not be resized");
-                    }
-                    continue;
-                }
-                WM_PANEL_REFRESH => {
-                    match serde_json::to_string(&(links.snapshot)()) {
-                        Ok(json) if json != last_sent => {
-                            let script =
-                                format!("window.bulletPanel && window.bulletPanel.render({json});");
-                            if let Err(e) = webview.evaluate_script(&script) {
-                                debug!(error = %e, "Control panel: the page could not be refreshed");
-                            } else {
-                                last_sent = json;
-                            }
-                        }
-                        Ok(_) => {}
-                        Err(e) => {
-                            warn!(error = %e, "Control panel: the state could not be serialized")
-                        }
-                    }
-                    continue;
-                }
-                _ => {}
-            }
-            // ignore-ok: reports whether a key message was translated; nothing depends on it
-            let _ = TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+    dialog.run(&webview, |message, id| {
+        let refresh =
+            message == WM_PANEL_REFRESH || (message == WM_HOST_TICK && id == TIMER_REFRESH);
+        if !refresh {
+            return;
         }
-    }
+        match serde_json::to_string(&(links.snapshot)()) {
+            Ok(json) if json != last_sent => {
+                let script = format!("window.bulletPanel && window.bulletPanel.render({json});");
+                match webview.evaluate_script(&script) {
+                    Ok(()) => last_sent = json,
+                    Err(e) => debug!(error = %e, "Control panel: the page could not be refreshed"),
+                }
+            }
+            Ok(_) => {}
+            Err(e) => warn!(error = %e, "Control panel: the state could not be serialized"),
+        }
+    });
     OPEN_PANEL.store(0, Ordering::SeqCst);
-}
-
-fn close_failed(hwnd: HWND) {
-    OPEN_PANEL.store(0, Ordering::SeqCst);
-    unsafe {
-        // ignore-ok: the only failure is an already-gone window, which is the wanted outcome
-        let _ = DestroyWindow(hwnd);
-    }
-}
-
-unsafe extern "system" fn panel_wnd_proc(
-    hwnd: HWND,
-    msg: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
-    match msg {
-        WM_TIMER if wparam.0 == TIMER_REFRESH => {
-            unsafe {
-                // ignore-ok: our own window; a lost refresh is redone by the next tick
-                let _ = PostMessageW(hwnd, WM_PANEL_REFRESH, WPARAM(0), LPARAM(0));
-            }
-            LRESULT(0)
-        }
-        WM_SIZE => {
-            unsafe {
-                // ignore-ok: our own window; a lost resize is redone by the next WM_SIZE
-                let _ = PostMessageW(hwnd, WM_PANEL_RESIZED, WPARAM(0), LPARAM(0));
-            }
-            LRESULT(0)
-        }
-        WM_GETMINMAXINFO => {
-            let info = lparam.0 as *mut MINMAXINFO;
-            if !info.is_null() {
-                unsafe {
-                    (*info).ptMinTrackSize.x = PANEL_MIN_WIDTH;
-                    (*info).ptMinTrackSize.y = PANEL_MIN_HEIGHT;
-                }
-            }
-            LRESULT(0)
-        }
-        WM_CLOSE => {
-            unsafe {
-                // ignore-ok: the timer dies with the window either way
-                let _ = KillTimer(hwnd, TIMER_REFRESH);
-                // ignore-ok: the only failure is an already-gone window, which is the wanted outcome
-                let _ = DestroyWindow(hwnd);
-            }
-            LRESULT(0)
-        }
-        WM_PAINT => {
-            let mut ps = PAINTSTRUCT::default();
-            unsafe {
-                let hdc = BeginPaint(hwnd, &mut ps);
-                let mut rect = RECT::default();
-                // ignore-ok: a zeroed rect paints nothing; this fill is only the WebView backdrop
-                let _ = GetClientRect(hwnd, &mut rect);
-                let brush = CreateSolidBrush(COLORREF(0x000C0805));
-                FillRect(hdc, &rect, brush);
-                // ignore-ok: a failed delete leaks one brush; nothing else depends on it
-                let _ = DeleteObject(brush);
-                // ignore-ok: EndPaint always succeeds for a PAINTSTRUCT from BeginPaint
-                let _ = EndPaint(hwnd, &ps);
-            }
-            LRESULT(0)
-        }
-        WM_DESTROY => {
-            unsafe { PostQuitMessage(0) };
-            LRESULT(0)
-        }
-        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
-    }
 }
 
 #[cfg(test)]
