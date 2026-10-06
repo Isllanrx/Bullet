@@ -361,7 +361,11 @@ C:\Program Files\Bullet\              installed program (read-only for users)
 - It only loads its injector from its own folders, never from another product's. Before loading it, Bullet
   checks the file's SHA-256 hash against the one built into Bullet. A file that has been swapped is refused
   and logged.
-- It never writes to the game folder. Everything it generates lives in `%LOCALAPPDATA%\Bullet`.
+- It never writes to the game folder. Everything it generates lives in `%LOCALAPPDATA%\Bullet`. The one
+  exception is **Light match loading** (control panel, on by default): it sets
+  `install.crash_reporting.enabled: false` in the League client's own `Config\LeagueClientSettings.yaml`, the
+  same change LTK Manager makes, so the injector checks each archive when the game loads it instead of all of
+  them as the match starts. Nothing else in that file changes, and turning the option off stops it.
 - It collects no telemetry. It only talks to the League client on your own machine, to GitHub to read the
   latest Bullet release number and compare the injector files of LTK Manager releases with the audited ones
   (both off with `BULLET_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only receives encrypted

@@ -299,6 +299,10 @@
           <span><span id="l-randomSkin"></span><small id="l-randomSkinHint"></small></span>
           <span class="switch"></span>
         </div>
+        <div class="toggle" role="switch" tabindex="0" id="t-lightLoading" data-message="toggle:lightLoading">
+          <span><span id="l-lightLoading"></span><small id="l-lightLoadingHint"></small></span>
+          <span class="switch"></span>
+        </div>
         <div class="toggle" role="switch" tabindex="0" id="t-autoAccept" data-message="toggle:autoAccept">
           <span id="l-autoAccept"></span>
           <span class="switch"></span>
@@ -363,6 +367,8 @@
       setText("h-diagnostics", labels.sectionDiagnostics);
       setText("l-randomSkin", labels.randomSkin);
       setText("l-randomSkinHint", labels.randomSkinHint);
+      setText("l-lightLoading", labels.lightLoading);
+      setText("l-lightLoadingHint", labels.lightLoadingHint);
       setText("l-autoAccept", labels.autoAccept);
       setText("l-autostart", labels.autostart);
       setText("b-partyCreate", labels.partyCreate);
@@ -401,6 +407,7 @@
           setText("status", state.status);
           setText("party-line", state.partyLine);
           setSwitch("t-randomSkin", state.randomSkin);
+          setSwitch("t-lightLoading", state.lightLoading);
           setSwitch("t-autoAccept", state.autoAccept);
           setSwitch("t-autostart", state.autostart);
           setText("update-line", state.updateLine);
