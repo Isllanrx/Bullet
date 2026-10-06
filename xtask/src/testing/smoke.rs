@@ -284,3 +284,31 @@ fn run_audited(exe: &Path, tools: &Path, root: &Path, mut checks: Vec<Check>) ->
     let _ = std::fs::remove_dir_all(root); // ignore-ok: smoke scratch folder
     checks
 }
+
+pub(crate) fn run_smoke(args: &[String]) {
+    let exe = args
+        .first()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("dist").join("bullet.exe"));
+    let Some(tools) = args.get(1).map(PathBuf::from) else {
+        println!("uso: smoke <bullet.exe> <pasta com o injetor auditado>");
+        return;
+    };
+    if !exe.is_file() {
+        println!("binario nao encontrado: {}", exe.display());
+        std::process::exit(1);
+    }
+    let checks = run(&exe, &tools);
+    let failed = checks.iter().filter(|c| !c.ok).count();
+    println!(
+        "
+smoke: {} verificacoes, {failed} falhas",
+        checks.len()
+    );
+    for c in checks.iter().filter(|c| !c.ok) {
+        println!("  FALHA {}: {}", c.scenario, c.expectation);
+    }
+    if failed > 0 {
+        std::process::exit(1);
+    }
+}
