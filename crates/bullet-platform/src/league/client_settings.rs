@@ -164,6 +164,71 @@ mod tests {
     }
 
     #[test]
+    fn random_settings_files_keep_every_other_line_and_end_with_crash_reporting_off() {
+        let mut state = 0x5EED_0401u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let lines = [
+            "install:",
+            "    crash_reporting:",
+            "        enabled: true",
+            "        enabled: false",
+            "        type: \"crashpad\"",
+            "    globals:",
+            "        locale: \"en_US\"",
+            "  crash_reporting:",
+            "    enabled: true",
+            "other:",
+            "    crash_reporting:",
+            "        enabled: true",
+            "# comment",
+            "",
+            "patcher:",
+            "    locales:",
+            "    - \"en_US\"",
+        ];
+        for _ in 0..20_000 {
+            let newline = if next() % 2 == 0 { "\r\n" } else { "\n" };
+            let text: String = (0..next() % 12)
+                .map(|_| format!("{}{newline}", lines[(next() % lines.len() as u64) as usize]))
+                .collect();
+            let Some(edited) = with_crash_reporting_off(&text) else {
+                continue;
+            };
+            assert_eq!(with_crash_reporting_off(&edited), None, "{text:?}");
+            let after: Vec<&str> = edited.lines().collect();
+            let mut cursor = after.iter();
+            for line in text
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("enabled:"))
+            {
+                assert!(cursor.any(|l| *l == line), "{line:?} lost from {text:?}");
+            }
+            let install = after
+                .iter()
+                .position(|l| *l == "install:")
+                .expect("install section");
+            assert!(
+                after[install + 1..]
+                    .iter()
+                    .take_while(|l| l.is_empty() || l.starts_with(' ') || l.starts_with('#'))
+                    .any(|l| l.trim() == "enabled: false"),
+                "{edited:?}"
+            );
+            if text.contains("\r\n") {
+                assert!(
+                    !edited.replace("\r\n", "").contains('\n'),
+                    "line endings mixed in {edited:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn the_file_lives_in_the_install_roots_config_folder() {
         let game = Path::new("D:/Riot Games/League of Legends/Game");
         assert_eq!(
