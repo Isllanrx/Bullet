@@ -32,7 +32,7 @@ The default was set to `info` after measuring that most `debug` output was "wait
 | Overlay | `Overlay WAD written` per archive: write mode, entries replaced and added, whether the header matches the game's; at `debug`, every changed entry |
 | Game reads | `The game opened this archive from the overlay`, one line per archive the injector redirected |
 | Match | `Live game data: roster and skins as the game reports them`, `a skin changed during the match`, `Live game event` (kills, multikills, objectives), from the game's local live data API |
-| After the match | `Game log: skins the game loaded for this match` and each distinct error from the game's own log |
+| After the match | `Game log: skins the game loaded for this match` and each distinct error from the game's own log, also after a crash that leaves the client on the reconnect screen |
 | User marks | `User marked a problem` with the game time (mm:ss), champion and skin, from `Ctrl+Shift+B` in game or the panel button |
 | Screenshots | `Screenshot taken during the match` with the game time of each F12 screenshot the game saved during the match |
 | Export | `Match diagnostics exported automatically` when a match ends |
