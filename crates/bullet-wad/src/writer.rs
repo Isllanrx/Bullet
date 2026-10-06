@@ -813,6 +813,23 @@ pub fn optimal_stored(
     }
 }
 
+#[must_use]
+pub fn prop_payload(entry: &WriterEntry) -> Option<Vec<u8>> {
+    let Payload::Memory(stored) = &entry.payload else {
+        return None;
+    };
+    if entry.subchunk_count != 0 {
+        return None;
+    }
+    if entry.kind == CompressionType::Raw as u8 {
+        return crate::prop::is_prop(stored).then(|| stored.to_vec());
+    }
+    if entry.kind != CompressionType::Zstd as u8 || !crate::prop::is_prop(&zstd_head(stored)) {
+        return None;
+    }
+    zstd::decode_all(stored.as_ref()).ok()
+}
+
 fn zstd_head(stored: &[u8]) -> Vec<u8> {
     let mut head = Vec::with_capacity(16);
     if let Ok(decoder) = zstd::Decoder::new(stored) {

@@ -56,6 +56,10 @@ The player drops a .fantome into %LOCALAPPDATA%\Bullet\custom_mods\<category>
         └─ compatibility check: every data file the mod links to must exist in the game or in the mod
            · a dangling link means the mod was made for an older patch → it is dropped with a warning
              (it would otherwise crash the loading screen)
+        └─ property types: a mod made before the game turned text paths into file references (STRING → FILE,
+           the XXH64 of the lowercase path) gets those values converted, using the types the installed game
+           declares for the same object class and field in the bins the mod replaces, their links and the
+           champion's animation graph (an older mod otherwise crashes the game while loading)
         └─ the overlay builder merges what is left, with the same rules as for skins
 ```
 

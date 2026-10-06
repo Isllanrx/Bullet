@@ -643,3 +643,143 @@ fn test_prewarm_copies_only_the_maps_holding_the_champions_skin_bins() {
         Some(&b"new shadow"[..])
     );
 }
+
+fn prop(links: &[&str], objects: Vec<(u32, Vec<bullet_wad::prop::tree::Field>)>) -> Vec<u8> {
+    let entries = objects
+        .into_iter()
+        .enumerate()
+        .map(|(key, (class_hash, fields))| bullet_wad::prop::PropEntry {
+            class_hash,
+            key_hash: u32::try_from(key).expect("key"),
+            body: bullet_wad::prop::tree::write_fields(&fields).expect("fields"),
+        })
+        .collect();
+    bullet_wad::prop::serialize_prop_file(&bullet_wad::prop::PropFile {
+        version: 3,
+        links: links.iter().map(|l| (*l).to_owned()).collect(),
+        entries,
+    })
+    .expect("prop")
+}
+
+fn path_field(name: u32, kind: u8, path: &str) -> bullet_wad::prop::tree::Field {
+    use bullet_wad::prop::tree::{FIELD_FILE, Field, Value};
+    let bytes = if kind == FIELD_FILE {
+        wad_path_hash(path).to_le_bytes().to_vec()
+    } else {
+        let mut text = u16::try_from(path.len())
+            .expect("short")
+            .to_le_bytes()
+            .to_vec();
+        text.extend_from_slice(path.as_bytes());
+        text
+    };
+    Field {
+        name,
+        value: Value::Raw { kind, bytes },
+    }
+}
+
+#[test]
+fn test_a_stale_mod_bin_gets_the_file_references_the_installed_game_declares() {
+    use bullet_wad::prop::tree::{FIELD_FILE, parse_fields};
+    const STRING: u8 = 16;
+    let root = TempDir::new("retype");
+    let game = root.0.join("Game");
+    let skin = wad_path_hash("data/characters/varus/skins/skin0.bin");
+    let shared_link = "DATA/Characters/Varus/Varus_Multi.bin";
+    write_wad(
+        &game.join("DATA/FINAL/Champions/Varus.wad.client"),
+        &[
+            (
+                skin,
+                &prop(
+                    &[shared_link],
+                    vec![(
+                        0x9B67,
+                        vec![path_field(1, FIELD_FILE, "ASSETS/Varus/Skin.tex")],
+                    )],
+                ),
+            ),
+            (
+                wad_path_hash(shared_link),
+                &prop(
+                    &[],
+                    vec![(
+                        0xBEEF,
+                        vec![path_field(7, FIELD_FILE, "ASSETS/Varus/Fx.dds")],
+                    )],
+                ),
+            ),
+        ],
+    );
+    let mods = root.0.join("mods");
+    let sniper = make_mod(&mods, "sniper");
+    write_wad(
+        &sniper.join("WAD").join("Varus.wad.client"),
+        &[(
+            skin,
+            &prop(
+                &[shared_link],
+                vec![
+                    (
+                        0x9B67,
+                        vec![path_field(1, STRING, "ASSETS/Sniper/Skin.tex")],
+                    ),
+                    (0xBEEF, vec![path_field(7, STRING, "ASSETS/Sniper/Fx.dds")]),
+                    (
+                        0xCAFE,
+                        vec![path_field(9, STRING, "ASSETS/Sniper/Unknown.dds")],
+                    ),
+                ],
+            ),
+        )],
+    );
+    let overlay = root.0.join("overlay");
+
+    build(
+        &game,
+        &mods,
+        &overlay,
+        &["sniper".into()],
+        &AtomicBool::new(false),
+    )
+    .expect("build");
+
+    let served =
+        read(&overlay.join("DATA/FINAL/Champions/Varus.wad.client"), skin).expect("skin bin");
+    let file = bullet_wad::prop::parse_prop_file(&served).expect("prop");
+    let kinds: Vec<(u8, Vec<u8>)> = file
+        .entries
+        .iter()
+        .map(|entry| {
+            let fields = parse_fields(&entry.body).expect("fields");
+            match &fields[0].value {
+                bullet_wad::prop::tree::Value::Raw { kind, bytes } => (*kind, bytes.clone()),
+                other => panic!("unexpected {other:?}"),
+            }
+        })
+        .collect();
+    assert_eq!(
+        kinds[0],
+        (
+            FIELD_FILE,
+            wad_path_hash("assets/sniper/skin.tex")
+                .to_le_bytes()
+                .to_vec()
+        )
+    );
+    assert_eq!(
+        kinds[1],
+        (
+            FIELD_FILE,
+            wad_path_hash("assets/sniper/fx.dds").to_le_bytes().to_vec()
+        ),
+        "classes defined only in a linked bin are known too"
+    );
+    assert_eq!(
+        kinds[2].0, STRING,
+        "a class the game does not have is left as is"
+    );
+    assert_eq!(file.links, vec![shared_link.to_owned()]);
+}
