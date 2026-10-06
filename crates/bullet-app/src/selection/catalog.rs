@@ -546,12 +546,7 @@ pub async fn load_classic_catalog(
 }
 
 async fn lcu_client() -> Option<bullet_lcu::client::LcuClient> {
-    let lockfile = tokio::task::spawn_blocking(|| bullet_lcu::lockfile::Lockfile::discover(None))
-        .await
-        .ok()?
-        .ok()?;
-
-    bullet_lcu::client::LcuClient::new(&lockfile, bullet_lcu::client::DEFAULT_LCU_TIMEOUT).ok()
+    bullet_lcu::client::LcuClient::discover().await.ok()
 }
 
 const PREVIEW_FETCHES: usize = 4;

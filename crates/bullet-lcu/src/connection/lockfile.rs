@@ -124,7 +124,7 @@ impl Lockfile {
             warn!(path = %env_path.display(), "LCU_LOCKFILE is set but points nowhere");
         }
 
-        for proc_name in &["LeagueClientUx.exe", "LeagueClient.exe"] {
+        for proc_name in &bullet_platform::game_version::CLIENT_EXES {
             match ProcessFinder::find_process_path(proc_name) {
                 Ok(Some(exe_path)) => {
                     let mut candidates = Vec::with_capacity(2);

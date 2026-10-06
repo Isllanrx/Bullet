@@ -1,3 +1,7 @@
+pub const HOST_EXE: &str = "ltk_patcher_host.exe";
+
+pub const DLL_FILE: &str = "ltk_patcher_dll.dll";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HostLogLevel {
     Error = 0,
