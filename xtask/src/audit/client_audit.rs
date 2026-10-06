@@ -1,3 +1,6 @@
+use crate::game_dir;
+use std::path::PathBuf;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -486,4 +489,99 @@ pub fn render_classic(findings: &[ClassicFindings]) -> String {
     );
     lines.push(String::new());
     lines.join("\n")
+}
+
+pub(crate) fn run_client_audit(args: &[String]) {
+    let mut client_dir = None;
+    let mut root = None;
+    let mut out = std::env::temp_dir().join("bullet_client_audit.md");
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--client" => client_dir = iter.next().map(PathBuf::from),
+            "--root" => root = iter.next().map(PathBuf::from),
+            "--out" => {
+                if let Some(path) = iter.next() {
+                    out = PathBuf::from(path);
+                }
+            }
+            other => println!("argumento ignorado: {other}"),
+        }
+    }
+    let Some(game) = root.or_else(game_dir) else {
+        return;
+    };
+    let client_dir = client_dir
+        .or_else(|| game.parent().map(std::path::Path::to_path_buf))
+        .unwrap_or_default();
+    let data = match ClientData::open(&client_dir) {
+        Ok(data) => data,
+        Err(e) => {
+            println!("dados do cliente indisponiveis: {e}");
+            return;
+        }
+    };
+    let champions = match champion_ids(&data) {
+        Ok(champions) => champions,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
+    let regular: Vec<&(i64, String)> = champions
+        .iter()
+        .filter(|(id, _)| !is_classic(*id))
+        .collect();
+    println!(
+        "cliente: {} | jogo: {} | campeoes: {} (+{} classicos)",
+        client_dir.display(),
+        game.display(),
+        regular.len(),
+        champions.len() - regular.len()
+    );
+    let findings: Vec<ChampionFindings> = regular
+        .iter()
+        .map(|(id, alias)| audit_champion(&data, &game, *id, alias))
+        .collect();
+    let staging = std::env::temp_dir().join("bullet_client_audit_classic");
+    if let Err(e) = std::fs::create_dir_all(&staging) {
+        println!("pasta temporaria indisponivel: {e}");
+        return;
+    }
+    let classic: Vec<ClassicFindings> = champions
+        .iter()
+        .filter(|(id, _)| is_classic(*id))
+        .map(|(id, alias)| audit_classic(&data, &game, *id, alias, &staging))
+        .collect();
+    let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
+    let report = format!(
+        "{}
+{}",
+        render(&findings),
+        render_classic(&classic)
+    );
+    match std::fs::write(&out, report) {
+        Ok(()) => println!("relatorio: {}", out.display()),
+        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+    }
+}
+
+pub(crate) fn run_client_dump(args: &[String]) {
+    let Some(client_dir) = args.first().map(PathBuf::from) else {
+        println!("uso: client-dump <pasta do cliente> <caminho relativo>");
+        return;
+    };
+    let data = match ClientData::open(&client_dir) {
+        Ok(data) => data,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
+    for relative in &args[1..] {
+        match data.read(relative) {
+            Some(bytes) => println!("{}", String::from_utf8_lossy(&bytes)),
+            None => println!("ausente: {relative}"),
+        }
+    }
 }

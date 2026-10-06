@@ -1,3 +1,5 @@
+use crate::game_dir;
+
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -391,4 +393,69 @@ pub fn render(outcomes: &[Outcome]) -> String {
 fn median(mut values: Vec<u128>) -> u128 {
     values.sort_unstable();
     values.get(values.len() / 2).copied().unwrap_or(0)
+}
+
+pub(crate) fn run_harness(args: &[String]) {
+    let mut root = None;
+    let mut out = std::env::temp_dir().join("bullet_harness.md");
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--root" => root = iter.next().map(PathBuf::from),
+            "--out" => {
+                if let Some(path) = iter.next() {
+                    out = PathBuf::from(path);
+                }
+            }
+            other => println!("argumento ignorado: {other}"),
+        }
+    }
+    let Some(game) = root.or_else(game_dir) else {
+        return;
+    };
+    let data = match bullet_classic::client_data::ClientGameData::for_game(&game) {
+        Ok(data) => data,
+        Err(e) => {
+            println!("dados do cliente indisponiveis: {e}");
+            return;
+        }
+    };
+    let cases = match sample(&data, &game) {
+        Ok(cases) => cases,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
+    let scratch = std::env::temp_dir().join("bullet_harness_run");
+    let cache = std::env::temp_dir().join("bullet_harness_cache");
+    if let Err(e) = std::fs::create_dir_all(&cache) {
+        println!("pasta temporaria indisponivel: {e}");
+        return;
+    }
+    println!("jogo: {} | casos: {}", game.display(), cases.len());
+    let mut outcomes = Vec::with_capacity(cases.len());
+    for (n, case) in cases.iter().enumerate() {
+        let outcome = run_case(case, &game, &scratch, &cache);
+        println!(
+            "[{}/{}] {} {} ({} ms)",
+            n + 1,
+            cases.len(),
+            if outcome.failures.is_empty() {
+                "ok"
+            } else {
+                "FALHA"
+            },
+            outcome.label,
+            outcome.build_ms
+        );
+        outcomes.push(outcome);
+    }
+    match std::fs::write(&out, render(&outcomes)) {
+        Ok(()) => println!("relatorio: {}", out.display()),
+        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+    }
+    if outcomes.iter().any(|o| !o.failures.is_empty()) {
+        std::process::exit(1);
+    }
 }

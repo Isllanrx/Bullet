@@ -1,3 +1,7 @@
+use crate::bullet_data_dir;
+use crate::package::{USER_SUPPLIED_TOOLS, audited_hash};
+use sha2::{Digest, Sha256};
+
 use std::path::{Path, PathBuf};
 
 pub const UNINSTALL_KEY: &str = r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{D387A5B1-8C56-4D2A-94B8-975DE11C6B45}_is1";
@@ -231,6 +235,59 @@ pub fn parse_phase(args: &[String]) -> Option<Phase> {
             kept_user_content: kept,
         }),
         _ => None,
+    }
+}
+
+pub(crate) fn run_install_audit(args: &[String]) {
+    let Some(phase) = parse_phase(args) else {
+        eprintln!("usage: cargo xtask install-audit installed | uninstalled [--kept-user-content]");
+        std::process::exit(2);
+    };
+
+    let registry = RegExe;
+    let program_dir = install_location(&registry).unwrap_or_else(|| {
+        std::env::var_os("ProgramW6432")
+            .or_else(|| std::env::var_os("ProgramFiles"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(r"C:\Program Files"))
+            .join("Bullet")
+    });
+    let layout = Layout {
+        program_dir,
+        data_dir: bullet_data_dir(),
+    };
+    let tools_dir = layout.program_dir.join("tools");
+    let mut tools = Vec::with_capacity(USER_SUPPLIED_TOOLS.len());
+    for (name, constants) in USER_SUPPLIED_TOOLS {
+        if !tools_dir.join(name).is_file() {
+            println!(
+                "  [INFO] {name} not in {} yet (the user supplies it)",
+                tools_dir.display()
+            );
+            continue;
+        }
+        match constants.first().map(|c| audited_hash(c)) {
+            Some(Ok(hash)) => tools.push((name, hash)),
+            Some(Err(e)) => {
+                eprintln!("[ERRO] {e}");
+                std::process::exit(1);
+            }
+            None => {}
+        }
+    }
+    let sha256 = |path: &std::path::Path| -> Option<String> {
+        std::fs::read(path)
+            .ok()
+            .map(|bytes| bullet_inject::dll_validator::to_hex(&Sha256::digest(&bytes)))
+    };
+    let mut checks = audit_files(&layout, phase, &tools, &sha256);
+    checks.extend(audit_registry(
+        phase,
+        &layout.program_dir.join("bullet.exe"),
+        &registry,
+    ));
+    if !report(&checks) {
+        std::process::exit(1);
     }
 }
 

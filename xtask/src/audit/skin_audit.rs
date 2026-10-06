@@ -1,3 +1,5 @@
+use crate::game_dir;
+
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -480,4 +482,102 @@ pub fn render(reports: &[ChampionReport], missed: &BTreeMap<String, BTreeSet<Str
 #[must_use]
 pub fn default_report_path() -> PathBuf {
     std::env::temp_dir().join("bullet_skin_audit.md")
+}
+
+pub(crate) fn run_skin_audit(args: &[String]) {
+    let mut root = None;
+    let mut out = default_report_path();
+    let mut filters = Vec::new();
+    let mut keep: Option<PathBuf> = None;
+    let mut options = bullet_classic::generator::GenerationOptions::default();
+    let mut forms = false;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--root" => root = iter.next().map(PathBuf::from),
+            "--out" => {
+                if let Some(path) = iter.next() {
+                    out = PathBuf::from(path);
+                }
+            }
+            "--keep" => keep = iter.next().map(PathBuf::from),
+            "--forms" => forms = true,
+            "--variant" => match iter.next().map(String::as_str) {
+                Some("graph-slot0") => options.graph_in_slot0 = true,
+                Some("chroma-classification") => options.chroma_keeps_classification = true,
+                other => eprintln!(
+                    "unknown variant {other:?}; expected graph-slot0 or chroma-classification"
+                ),
+            },
+            other => filters.push(other.to_owned()),
+        }
+    }
+    let Some(game) = root.or_else(game_dir) else {
+        return;
+    };
+    let aliases = champion_aliases(&game, &filters);
+    println!("jogo: {} | campeoes: {}", game.display(), aliases.len());
+
+    let maps = map_hashes(&game);
+    println!(
+        "WADs de mapa: {:?}",
+        maps.iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+    );
+    let cache_dir = std::env::temp_dir().join("bullet_skin_audit_cache");
+    let staging = keep
+        .clone()
+        .unwrap_or_else(|| std::env::temp_dir().join("bullet_skin_audit_mods"));
+    let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder may not exist
+    if let Err(e) = std::fs::create_dir_all(&staging).and(std::fs::create_dir_all(&cache_dir)) {
+        println!("pasta temporaria indisponivel: {e}");
+        return;
+    }
+
+    let started = std::time::Instant::now();
+    let mut reports = Vec::with_capacity(aliases.len());
+    for alias in &aliases {
+        let report = audit_champion(
+            &game,
+            alias,
+            &maps,
+            &cache_dir,
+            &staging,
+            AuditSettings {
+                keep: keep.is_some(),
+                options,
+                forms,
+            },
+        );
+        let findings = report.skins.values().filter(|f| !f.is_clean()).count()
+            + report.forms.values().filter(|f| !f.is_clean()).count();
+        println!(
+            "{alias}: skins={} formas={} companheiros={:?} achados={findings} varredura_ms={}{}",
+            report.skins.len(),
+            report.forms.len(),
+            report.companion_skins.keys().collect::<Vec<_>>(),
+            report.scan_ms,
+            report
+                .open_error
+                .as_deref()
+                .map(|e| format!(" ERRO={e}"))
+                .unwrap_or_default()
+        );
+        reports.push(report);
+    }
+    let missed = missed_companions(&reports, &game);
+    let rendered = render(&reports, &missed);
+    match std::fs::write(&out, rendered) {
+        Ok(()) => println!(
+            "
+relatorio: {} ({} s)",
+            out.display(),
+            started.elapsed().as_secs()
+        ),
+        Err(e) => println!("relatorio nao gravado em {}: {e}", out.display()),
+    }
+    if keep.is_none() {
+        let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
+    }
 }

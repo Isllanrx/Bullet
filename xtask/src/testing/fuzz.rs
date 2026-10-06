@@ -1,3 +1,5 @@
+use crate::game_dir;
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
@@ -257,4 +259,64 @@ pub fn run(corpus: &Corpus, iterations: usize, seed: u64) -> Report {
     }
     std::panic::set_hook(previous);
     report
+}
+
+pub(crate) fn run_fuzz(args: &[String]) {
+    let iterations = args
+        .first()
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(200_000usize);
+    let seed = args
+        .get(1)
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(0x5eed_b011e7u64);
+    let Some(game) = game_dir() else {
+        return;
+    };
+    let corpus = corpus(
+        &game,
+        &[
+            ("Zed", 10),
+            ("Orianna", 1),
+            ("Annie", 5),
+            ("Lux", 7),
+            ("Garen", 44),
+            ("Seraphine", 2),
+            ("Kaisa", 71),
+            ("MonkeyKing", 3),
+            ("Yasuo", 87),
+            ("Sona", 6),
+        ],
+    );
+    println!(
+        "corpus: {} WADs reais reduzidos, {} bins reais | iteracoes: {iterations} | semente: {seed}",
+        corpus.wads.len(),
+        corpus.bins.len()
+    );
+    let started = std::time::Instant::now();
+    let report = run(&corpus, iterations, seed);
+    println!(
+        "{} iteracoes em {} s: {} aceitas, {} recusadas com erro tipado, {} panicos",
+        report.iterations,
+        started.elapsed().as_secs(),
+        report.accepted,
+        report.rejected,
+        report.panics.len()
+    );
+    println!(
+        "propriedades em bins reais: {} verificacoes, {} falhas",
+        report.property_checks,
+        report.property_failures.len()
+    );
+    for failure in report
+        .property_failures
+        .iter()
+        .chain(report.panics.iter())
+        .take(20)
+    {
+        println!("  FALHA {failure}");
+    }
+    if !report.panics.is_empty() || !report.property_failures.is_empty() {
+        std::process::exit(1);
+    }
 }
