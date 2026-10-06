@@ -291,7 +291,7 @@ fn run_panel(links: &PanelLinks) {
             std::mem::size_of::<i32>() as u32,
         );
     }
-    crate::paths::ensure_webview2_data_dir();
+    let mut web_context = wry::WebContext::new(crate::paths::webview2_data_dir());
 
     let html = match panel_html(&PanelLabels::from_text(crate::i18n::text())) {
         Ok(html) => html,
@@ -304,7 +304,7 @@ fn run_panel(links: &PanelLinks) {
     let host = PanelWindowHandle(hwnd);
     let hwnd_raw = hwnd.0 as isize;
     let events = links.events.clone();
-    let webview = WebViewBuilder::new()
+    let webview = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_html(html)
         .with_bounds(client_bounds(hwnd))
         .with_ipc_handler(move |request| {
