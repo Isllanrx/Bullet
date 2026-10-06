@@ -315,7 +315,10 @@ impl OverlaySession {
                 &game_dir,
                 &overlay_dir,
                 &skin_bins,
-                &|| state_rx.borrow().phase.is_in_game(),
+                &|| {
+                    state_rx.borrow().phase.is_in_game()
+                        && !bullet_inject::overlay_builder::build_waiting_for_copies()
+                },
             ) {
                 Ok(copied) => info!(
                     companions = ?companions,
