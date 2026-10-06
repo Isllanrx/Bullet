@@ -17,8 +17,8 @@ component InlineButton inherits Rectangle {
     width: max(64px, label.preferred-width + 24px);
     border-radius: 3px;
     border-width: 1px;
-    border-color: touch.has-hover ? Theme.gold-bright : Theme.gold-dim;
-    background: touch.has-hover ? Theme.gold : Theme.gold.with-alpha(0.1);
+    border-color: touch.has-hover ? Theme.gold-bright : Theme.button-line;
+    background: touch.has-hover ? Theme.gold : Theme.gold.with-alpha(0.12);
     animate background, border-color { duration: 150ms; }
     label := Text {
         text: root.text;
@@ -174,7 +174,6 @@ export component PartyDialog inherits Window {
                     min-width: 130px;
                     min-height: 36px;
                     horizontal-stretch: 0;
-                    secondary: true;
                     caps: true;
                     tracking: 0.6px;
                     text: root.cancel-label;
