@@ -8,6 +8,8 @@ pub const GAME_PATCH_FILE: &str = "game_patch.json";
 
 pub const GAME_EXES: [&str; 2] = ["League of Legends.exe", "League of Legends (TM) Client.exe"];
 
+pub const CLIENT_EXES: [&str; 2] = ["LeagueClientUx.exe", "LeagueClient.exe"];
+
 #[must_use]
 pub fn game_exe(game_dir: &Path) -> PathBuf {
     GAME_EXES

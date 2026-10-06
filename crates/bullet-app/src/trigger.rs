@@ -63,8 +63,8 @@ impl ResolvedPaths {
             }
         }
 
-        let ltk_host_exe = tools_dir.join("ltk_patcher_host.exe");
-        let ltk_dll_path = tools_dir.join("ltk_patcher_dll.dll");
+        let ltk_host_exe = tools_dir.join(bullet_inject::ltk_host::HOST_EXE);
+        let ltk_dll_path = tools_dir.join(bullet_inject::ltk_host::DLL_FILE);
 
         let mut candidate_library_dirs =
             vec![app_data_dir.join("library"), app_data_dir.join("skins")];
@@ -119,7 +119,8 @@ pub enum ToolsSource {
 
 fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource) {
     let complete = |dir: &PathBuf| {
-        dir.join("ltk_patcher_host.exe").is_file() && dir.join("ltk_patcher_dll.dll").is_file()
+        dir.join(bullet_inject::ltk_host::HOST_EXE).is_file()
+            && dir.join(bullet_inject::ltk_host::DLL_FILE).is_file()
     };
 
     if let Some(dir) = candidates.iter().find(|dir| complete(dir)) {
@@ -481,28 +482,11 @@ impl InjectionTrigger {
     ) -> (Option<u32>, Option<u32>) {
         let from_state = (state.champion_id, state.selected_skin_id);
 
-        let discovery =
-            tokio::task::spawn_blocking(|| bullet_lcu::lockfile::Lockfile::discover(None)).await;
-
-        let lockfile = match discovery {
-            Ok(Ok(lockfile)) => lockfile,
-            Ok(Err(e)) => {
-                warn!(error = %e, "Rule #1 re-read skipped: no lockfile; using the published state");
-                return from_state;
-            }
-            Err(e) => {
-                warn!(error = %e, "Rule #1 re-read skipped: lockfile discovery task failed");
-                return from_state;
-            }
-        };
-
-        let client = match bullet_lcu::client::LcuClient::new(
-            &lockfile,
-            bullet_lcu::client::DEFAULT_LCU_TIMEOUT,
-        ) {
+        let discovery = bullet_lcu::client::LcuClient::discover().await;
+        let client = match discovery {
             Ok(client) => client,
             Err(e) => {
-                warn!(error = %e, "Rule #1 re-read skipped: LCU client unavailable");
+                warn!(error = %e, "Rule #1 re-read skipped: no LCU client; using the published state");
                 return from_state;
             }
         };
@@ -1240,27 +1224,10 @@ impl InjectionTrigger {
     }
 
     async fn lcu_client(&self) -> Option<bullet_lcu::client::LcuClient> {
-        let discovery =
-            tokio::task::spawn_blocking(|| bullet_lcu::lockfile::Lockfile::discover(None)).await;
-        let lockfile = match discovery {
-            Ok(Ok(lockfile)) => lockfile,
-            Ok(Err(e)) => {
-                warn!(error = %e, "No LCU lockfile; the skin cannot be registered in champ select");
-                return None;
-            }
-            Err(e) => {
-                warn!(error = %e, "Lockfile discovery task failed");
-                return None;
-            }
-        };
-        match bullet_lcu::client::LcuClient::new(&lockfile, bullet_lcu::client::DEFAULT_LCU_TIMEOUT)
-        {
-            Ok(client) => Some(client),
-            Err(e) => {
-                warn!(error = %e, "Could not build the LCU client");
-                None
-            }
-        }
+        bullet_lcu::client::LcuClient::discover()
+            .await
+            .inspect_err(|e| warn!(error = %e, "No LCU client; the skin cannot be registered in champ select"))
+            .ok()
     }
 
     fn effective_game_dir(&self, pid: Option<u32>) -> PathBuf {

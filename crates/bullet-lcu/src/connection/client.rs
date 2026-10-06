@@ -18,6 +18,13 @@ pub struct LcuClient {
 }
 
 impl LcuClient {
+    pub async fn discover() -> Result<Self, LcuError> {
+        let lockfile = tokio::task::spawn_blocking(|| Lockfile::discover(None))
+            .await
+            .map_err(|e| LcuError::Io(std::io::Error::other(e)))??;
+        Self::new(&lockfile, DEFAULT_LCU_TIMEOUT)
+    }
+
     pub fn new(lockfile: &Lockfile, timeout: Duration) -> Result<Self, LcuError> {
         let mut headers = HeaderMap::new();
         let auth_val = HeaderValue::from_str(&lockfile.basic_auth_header())

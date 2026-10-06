@@ -108,7 +108,7 @@ fn install_path_from_settings(text: &str) -> Option<PathBuf> {
 pub fn discover_game_dir() -> Option<PathBuf> {
     for exe in crate::game_version::GAME_EXES
         .into_iter()
-        .chain(["LeagueClientUx.exe", "LeagueClient.exe"])
+        .chain(crate::game_version::CLIENT_EXES)
     {
         if let Ok(Some(path)) = crate::process::ProcessFinder::find_process_path(exe) {
             if let Some(valid) = path.parent().and_then(normalize_game_dir) {

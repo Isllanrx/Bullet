@@ -25,7 +25,10 @@ const MAX_INSPECTIONS_PER_CHECK: usize = 12;
 const VERDICTS_FILE: &str = "ltk_releases.txt";
 const NOTIFIED_FILE: &str = "ltk_notified.txt";
 
-pub const INJECTOR_FILES: [&str; 2] = ["ltk_patcher_host.exe", "ltk_patcher_dll.dll"];
+pub const INJECTOR_FILES: [&str; 2] = [
+    bullet_inject::ltk_host::HOST_EXE,
+    bullet_inject::ltk_host::DLL_FILE,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuditedInjector {
