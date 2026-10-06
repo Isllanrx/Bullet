@@ -46,6 +46,9 @@ impl Lockfile {
         if auth_token.is_empty() {
             return Err(LcuError::InvalidLockfile("auth token is empty".into()));
         }
+        if port == 0 {
+            return Err(LcuError::InvalidLockfile("port 0".into()));
+        }
 
         Ok(Self {
             process_name,
