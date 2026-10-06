@@ -4,6 +4,7 @@ pub enum Language {
     Script,
     Css,
     Html,
+    Slint,
     Toml,
     Yaml,
     Inno,
@@ -17,6 +18,7 @@ impl Language {
             "ts" | "js" | "mjs" | "cjs" => Some(Self::Script),
             "css" => Some(Self::Css),
             "html" | "htm" => Some(Self::Html),
+            "slint" => Some(Self::Slint),
             "toml" => Some(Self::Toml),
             "yml" | "yaml" => Some(Self::Yaml),
             "iss" => Some(Self::Inno),
@@ -38,6 +40,7 @@ pub fn lex(language: Language, src: &str) -> Result<Vec<Comment>, String> {
         Language::Script => Script::at(src, 0, &mut out).code(src.len(), false)?,
         Language::Css => css(src, 0, src.len(), &mut out)?,
         Language::Html => html(src, &mut out)?,
+        Language::Slint => slint(src, &mut out)?,
         Language::Toml => toml(src, &mut out)?,
         Language::Yaml => yaml(src, &mut out)?,
         Language::Inno => inno(src, &mut out)?,
@@ -65,7 +68,7 @@ pub fn is_directive(language: Language, src: &str, comment: Comment) -> bool {
                 || follows_pinned_action(src, comment)
         }
         Language::Toml => text.starts_with("#:schema"),
-        Language::Css | Language::Html | Language::Inno => false,
+        Language::Css | Language::Html | Language::Slint | Language::Inno => false,
     }
 }
 
@@ -415,6 +418,35 @@ fn css(src: &str, from: usize, to: usize, out: &mut Vec<Comment>) -> Result<(), 
             q @ (b'"' | b'\'') => {
                 i = quoted_end(b, i, to, q, true)
                     .ok_or_else(|| unterminated(src, i, "CSS string"))?;
+            }
+            _ => i += 1,
+        }
+    }
+    Ok(())
+}
+
+fn slint(src: &str, out: &mut Vec<Comment>) -> Result<(), String> {
+    let b = src.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                let end = line_end(b, i);
+                out.push(Comment { start: i, end });
+                i = end;
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                let close = find(b, i + 2, b.len(), b"*/")
+                    .ok_or_else(|| unterminated(src, i, "Slint comment"))?;
+                out.push(Comment {
+                    start: i,
+                    end: close + 2,
+                });
+                i = close + 2;
+            }
+            b'"' => {
+                i = quoted_end(b, i, b.len(), b'"', true)
+                    .ok_or_else(|| unterminated(src, i, "Slint string"))?;
             }
             _ => i += 1,
         }

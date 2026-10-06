@@ -220,6 +220,50 @@ fn an_unterminated_literal_is_an_error_not_a_guess() {
 }
 
 #[test]
+fn slint_comments_are_found_outside_strings_and_division_is_code() {
+    let src = "export component A {
+    width: (parent.width + 7px) / 25px; // trailing
+    text: \"// not a comment \\\" /* still text */\";
+    /* block
+       comment */
+}
+";
+    let found: Vec<&str> = lex(Language::Slint, src)
+        .expect("valid Slint")
+        .iter()
+        .map(|c| &src[c.start..c.end])
+        .collect();
+    assert_eq!(
+        found,
+        vec![
+            "// trailing",
+            "/* block
+       comment */"
+        ]
+    );
+    assert!(
+        lex(
+            Language::Slint,
+            "text: \"open;
+"
+        )
+        .is_err()
+    );
+    assert!(
+        lex(
+            Language::Slint,
+            "/* open
+"
+        )
+        .is_err()
+    );
+    assert_eq!(
+        Language::of("crates/x/ui/overlay.slint"),
+        Some(Language::Slint)
+    );
+}
+
+#[test]
 fn only_code_files_are_in_scope() {
     assert_eq!(Language::of("a/b.rs"), Some(Language::Rust));
     assert_eq!(
