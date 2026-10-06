@@ -353,3 +353,76 @@ fn a_gem_without_a_preview_never_asks_for_one() {
     assert!(!view.get_preview_visible());
     assert!(drain(&mut commands).is_empty());
 }
+
+fn bounds(element: &ElementHandle) -> (f32, f32, f32, f32) {
+    let at = element.absolute_position();
+    let size = element.size();
+    (at.x, at.y, at.x + size.width, at.y + size.height)
+}
+
+#[test]
+fn every_gem_stays_inside_its_card_at_any_window_width() {
+    let (view, _commands) = open_overlay();
+    let many: Vec<CatalogChroma> = (0..23)
+        .map(|i| CatalogChroma {
+            id: 238_100 + i,
+            name: format!("Gem {i}"),
+            color: Some("#3050c0".into()),
+            form: false,
+            preview_path: None,
+            has_preview: false,
+        })
+        .collect();
+    let mut wide = catalog();
+    wide.skins[1].chromas = many;
+    with_overlay(|overlay| overlay.set_catalog(wide));
+
+    for width in [320.0, 360.0, 480.0, 620.0, 900.0] {
+        view.window()
+            .set_size(slint::LogicalSize::new(width, 1400.0));
+        view.invoke_columns_changed(view.get_columns());
+        let card = ElementHandle::find_by_accessible_label(&view, "Zed Choque")
+            .next()
+            .expect("the card with chromas");
+        let (left, top, right, bottom) = bounds(&card);
+        for i in 0..23 {
+            let gem = ElementHandle::find_by_accessible_label(&view, &format!("Gem {i}"))
+                .next()
+                .unwrap_or_else(|| panic!("gem {i} at width {width}"));
+            let (gl, gt, gr, gb) = bounds(&gem);
+            assert!(
+                gl >= left && gr <= right && gt >= top && gb <= bottom,
+                "gem {i} ({gl},{gt})-({gr},{gb}) escapes its card ({left},{top})-({right},{bottom}) at width {width}"
+            );
+        }
+    }
+}
+
+#[test]
+fn minimizing_folds_the_window_to_its_header_and_restoring_brings_the_size_back() {
+    let (view, _commands) = open_overlay();
+    let text = Language::English.text();
+    let before = view.window().size();
+
+    press(&view, text.overlay_minimize);
+    assert!(view.get_collapsed());
+    let folded = view
+        .window()
+        .size()
+        .to_logical(view.window().scale_factor());
+    assert!(
+        folded.height <= view.get_header_height() + 1.0,
+        "folded to {folded:?}, header is {}",
+        view.get_header_height()
+    );
+    assert!(
+        ElementHandle::find_by_accessible_label(&view, text.overlay_hide)
+            .next()
+            .is_some(),
+        "hide stays reachable"
+    );
+
+    press(&view, text.overlay_restore);
+    assert!(!view.get_collapsed());
+    assert_eq!(view.window().size(), before);
+}
