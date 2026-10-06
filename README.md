@@ -479,8 +479,11 @@ users are pointed at after it has been tested in a real match.
 
 ### Publishing a release
 
-1. Bump `version` under `[workspace.package]` in the root `Cargo.toml` in a pull request.
-2. Once it merges, the pre-release `v<version>` is built and published automatically.
+1. Merge an approved pull request into `main`. The next version is picked automatically: the last release plus
+   one minor (`1.2` → `1.3`), or the next major (`2.0`) when the pull request carries the `breaking` label.
+   Merges that only touch documentation do not release.
+2. The pre-release `v<version>` is built and published automatically. To force a higher version, raise
+   `version` under `[workspace.package]` in the root `Cargo.toml`; it is used as a floor.
 3. Test it in a real match, then run **Promote release** from the Actions tab with that tag.
 
 The one-time repository setup (GitHub App, ruleset, `production` environment) is described in

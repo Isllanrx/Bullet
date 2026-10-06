@@ -159,8 +159,9 @@ in `docs/architecture.md` ("Source layout"). New modules go into the folder of t
     tested, and presented to the user; commits/pushes are executed only when the user explicitly requests it.
     Commits and PRs never carry `Co-Authored-By` or any AI attribution trailer.
 12. **Version format is two numbers (`1.0`, `1.1`, `2.0`) across UI, installer, and release tags.**
-    Cargo strictly requires SemVer 2.0.0 (`MAJOR.MINOR.PATCH`), so Cargo.toml bumps minor (e.g. `1.1.0`)
-    and helper functions (`display_version()`) strip the zero for user-facing surfaces.
+    Cargo strictly requires SemVer 2.0.0 (`MAJOR.MINOR.PATCH`), so Cargo.toml holds `X.Y.0` and helper
+    functions (`display_version()`) strip the zero for user-facing surfaces. Nobody bumps it by hand: the release
+    stamps the next version (`cargo xtask set-version`); the value in Cargo.toml is only a floor.
 13. **The overlay never takes focus on its own.** It is created without activation and shown with
     `SW_SHOWNOACTIVATE`; only a click in its search box takes the foreground (thread-input attach), and Enter or
     Escape gives it back to the client. The interface is Slint (ADR-035): one `bullet-ui` thread owns the event
@@ -201,8 +202,9 @@ in `docs/architecture.md` ("Source layout"). New modules go into the folder of t
 
 ## Release flow
 
-A PR that bumps `[workspace.package].version` → maintainer approval → `automerge.yml` enables squash
-auto-merge once "CI OK" and "Security OK" pass → `release.yml` builds, attests and publishes a
+An approved PR into `main` → `automerge.yml` enables squash auto-merge once "CI OK" and "Security OK" pass →
+`release.yml` picks the next version (last tag + 1 minor, next major with the `breaking` label, Cargo.toml as a
+floor; docs-only merges skip), stamps it with `cargo xtask set-version`, builds, attests and publishes a
 **pre-release** → tested in a match → `promote.yml` marks it latest. Protected paths (workflows, installer,
 xtask, toolchain, lockfile, trigger/hashes, injector code, party cipher) never auto-merge.
 

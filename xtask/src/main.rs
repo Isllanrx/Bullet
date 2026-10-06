@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::ExitStatus;
 
 use audit::{client_audit, install_audit, skin_audit};
-use build::{check, package};
+use build::{check, package, version};
 use lint::{adr008, comment_lexers, comments};
 use probes::{app, classic, wad};
 use testing::{fuzz, harness, smoke};
@@ -23,6 +23,7 @@ fn main() {
         "comments" => comments::run(&args[2..]),
         "package" => package::run_package(),
         "installer" => package::run_installer(&args[2..]),
+        "set-version" => version::run_set_version(&args[2..]),
         "client-probe" => app::run_client_probe(),
         "overlay-demo" => app::run_overlay_demo(),
         "library-probe" => app::run_library_probe(args.get(2).and_then(|a| a.parse().ok())),
@@ -50,6 +51,9 @@ fn print_help() {
     eprintln!("Bullet Automation Tool (xtask)\n");
     eprintln!("Usage: cargo xtask <command>\n");
     eprintln!("Commands:");
+    eprintln!(
+        "  set-version      - Stamp the workspace version in Cargo.toml and Cargo.lock (<major.minor>)"
+    );
     eprintln!(
         "  client-probe     - Report the League Client window state and where the overlay would sit"
     );
