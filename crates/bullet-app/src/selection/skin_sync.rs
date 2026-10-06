@@ -155,14 +155,34 @@ pub async fn download_and_extract_skins(
         )));
     }
 
+    if resp
+        .content_length()
+        .is_some_and(|len| len > limits.max_total_bytes)
+    {
+        return Err(SkinSyncError::InvalidResponse(format!(
+            "the archive is larger than {} bytes",
+            limits.max_total_bytes
+        )));
+    }
     let bytes = resp.bytes().await?;
     info!(
         bytes = bytes.len(),
         "Repository archive downloaded; beginning safe extraction"
     );
 
-    let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor)?;
+    let library_dir = library_dir.to_path_buf();
+    let limits = limits.clone();
+    tokio::task::spawn_blocking(move || extract_skins(bytes, &library_dir, &limits))
+        .await
+        .map_err(|e| SkinSyncError::Io(std::io::Error::other(e)))?
+}
+
+fn extract_skins<B: AsRef<[u8]>>(
+    bytes: B,
+    library_dir: &Path,
+    limits: &ExtractLimits,
+) -> Result<usize, SkinSyncError> {
+    let mut archive = ZipArchive::new(Cursor::new(bytes))?;
 
     let mut extracted_count = 0usize;
     let mut total_bytes_extracted = 0u64;
@@ -208,7 +228,13 @@ pub async fn download_and_extract_skins(
         }
 
         let mut buf = Vec::with_capacity(entry_size as usize);
-        entry.read_to_end(&mut buf)?;
+        (&mut entry).take(entry_size + 1).read_to_end(&mut buf)?;
+        if buf.len() as u64 != entry_size {
+            return Err(SkinSyncError::InvalidResponse(format!(
+                "{raw_name} unpacked to {} bytes, not the {entry_size} it declares",
+                buf.len()
+            )));
+        }
 
         atomic_write(&target_path, &buf, false)?;
         extracted_count += 1;

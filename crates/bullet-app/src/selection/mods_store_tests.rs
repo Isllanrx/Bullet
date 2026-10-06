@@ -332,3 +332,36 @@ fn test_a_modpkg_is_imported_offered_to_its_champion_and_staged_as_a_mod_folder(
         Err(ImportRefusal::NotAModPackage(_))
     ));
 }
+
+#[test]
+fn the_space_an_archive_needs_is_what_it_unpacks_to_not_its_file_size() {
+    use std::io::Write;
+    let dir = TempDir::new("unpacked_size");
+    let zipped = dir.0.join("bomb.fantome");
+    {
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(&zipped).expect("zip"));
+        let deflated = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        writer
+            .start_file("WAD/Zed.wad.client", deflated)
+            .expect("entry");
+        writer
+            .write_all(&vec![0u8; 64 * 1024 * 1024])
+            .expect("zeros");
+        writer.finish().expect("finish");
+    }
+    let on_disk = std::fs::metadata(&zipped).expect("meta").len();
+    assert!(on_disk < 1024 * 1024, "{on_disk}");
+    assert_eq!(unpacked_size(&zipped), 64 * 1024 * 1024);
+
+    let package = dir.0.join("skin.modpkg");
+    std::fs::write(
+        &package,
+        modpkg_with_one_raw_chunk("zed.wad.client", 1, &[7; 1000]),
+    )
+    .expect("pkg");
+    assert_eq!(
+        unpacked_size(&package),
+        std::fs::metadata(&package).expect("meta").len().max(1000)
+    );
+}
