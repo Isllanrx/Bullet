@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicIsize, Ordering};
-use std::sync::mpsc::Sender;
 use std::thread;
 
 use serde::Serialize;
@@ -54,7 +53,7 @@ pub type SnapshotSource = Arc<dyn Fn() -> PanelSnapshot + Send + Sync>;
 
 #[derive(Clone)]
 pub struct PanelLinks {
-    pub events: Sender<TrayEvent>,
+    pub events: tokio::sync::mpsc::UnboundedSender<TrayEvent>,
     pub snapshot: SnapshotSource,
 }
 

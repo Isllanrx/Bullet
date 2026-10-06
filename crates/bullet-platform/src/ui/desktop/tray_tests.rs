@@ -1,12 +1,19 @@
 use super::*;
 
-#[test]
-fn test_tray_lifecycle() {
-    let tray = SystemTray::spawn("Bullet Unit Test").expect("spawn tray");
+#[tokio::test]
+async fn test_an_event_wakes_the_receiver_without_polling() {
+    let mut tray = SystemTray::spawn("Bullet Unit Test").expect("spawn tray");
     let controller = tray.controller();
-
     controller.update_status("Testing");
-    assert!(tray.try_recv_event().is_none());
+
+    let idle = tokio::time::timeout(std::time::Duration::from_millis(150), tray.recv_event()).await;
+    assert!(idle.is_err(), "no event arrives on its own");
+
+    controller.events().send(TrayEvent::Quit).expect("send");
+    let event = tokio::time::timeout(std::time::Duration::from_secs(2), tray.recv_event())
+        .await
+        .expect("the event wakes the receiver");
+    assert!(matches!(event, Some(TrayEvent::Quit)));
 
     drop(tray);
 }

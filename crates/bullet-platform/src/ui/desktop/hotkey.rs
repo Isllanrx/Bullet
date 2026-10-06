@@ -1,4 +1,6 @@
-use std::sync::mpsc::{Sender, channel};
+use std::sync::mpsc::channel;
+
+use tokio::sync::mpsc::UnboundedSender;
 
 use tracing::{debug, info, warn};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
@@ -75,7 +77,7 @@ fn unregister() {
 }
 
 #[must_use]
-pub fn spawn_mark_problem_hotkey(events: Sender<TrayEvent>) -> Option<MarkProblemHotkey> {
+pub fn spawn_mark_problem_hotkey(events: UnboundedSender<TrayEvent>) -> Option<MarkProblemHotkey> {
     let (ready_tx, ready_rx) = channel();
     let spawned = std::thread::Builder::new()
         .name("bullet-hotkey".into())
