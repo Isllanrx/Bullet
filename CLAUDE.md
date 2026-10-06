@@ -78,12 +78,28 @@ and the crate READMEs, in English, without internal references.
   process older than two seconds is never hooked (a mid-load hook crashed Diana); companions are indexed once per
   champion and patch, ahead of champion select.
 
+- 2026-10-06 (dev, not released, no match proof yet):
+  - #27 root cause proven offline: mods made before the game turned text paths into file references now get
+    those properties retyped from the installed game's types (Sniper Varus: 15 mismatches before, 0 after).
+  - The game's own log is read after a crash that leaves the client in reconnect.
+  - Freeze work: companions indexed in background mode and paused from ready check; the map copy ahead stops
+    when the match starts; Light match loading turns the client's crash reporting off (ADR-034), as LTK
+    Manager does.
+  - Mods: `.modpkg` import (RuneForge/DivineSkins); zips with a wrong CRC, nested WAD folders and `.wad` files
+    are accepted.
+  - WeGame layouts are found.
+  - The compatible LTK Manager release is found at run time (panel line, tray notice). Startup offers to
+    install the audited injector from GitHub with an elevated copy that re-verifies the hashes.
+  - LTK Manager 1.26.1 still ships the DLL that expired on 2026-10-04.
+  - Modules were grouped into segment folders in every crate and in `xtask` (`docs/architecture.md`).
+  - The native patcher experiment lives on `experiment/native-patcher`, not on dev.
+
 ## Architecture
 
 ```
 bullet-core      → Domain types, AppState (watch channel), phases, supervisor, env names
 bullet-platform  → Win32: processes, game/tools discovery, windows, tray, i18n, atomic writes
-bullet-wad       → WAD v3 reader/writer, BIN/PROP, .fantome, hash index
+bullet-wad       → WAD v3 reader/writer, BIN/PROP, .fantome, .modpkg, hash index
 bullet-lcu       → LCU REST + WebSocket, champion select, live selection, skin registration
 bullet-classic   → Store skins and Classic Rift models generated from the installed game
 bullet-inject    → Mod compatibility, native overlay builder, LTK host
@@ -94,6 +110,9 @@ bullet-app       → Binary: composition, lifecycle, tray, catalog, injection tr
 
 **Dependency rules:** core→nothing, platform→core, wad→nothing, lcu→core, classic→wad,
 inject→core+platform+wad, party→core, app→all.
+
+Inside each crate, modules live in segment folders and `lib.rs` re-exports them under flat paths; the layout is
+in `docs/architecture.md` ("Source layout"). New modules go into the folder of their segment.
 
 ## Decisions that must not be undone
 

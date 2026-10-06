@@ -27,7 +27,7 @@ view), never inside the client.
 | --- | --- | --- |
 | `bullet-core` | Domain types, shared state, game phases, task supervisor, configuration names | nothing |
 | `bullet-platform` | Windows: processes, discovery of the game and tools, windows, tray, translations | core |
-| `bullet-wad` | WAD archives, BIN/PROP data files, `.fantome` packages, hash index | nothing |
+| `bullet-wad` | WAD archives, BIN/PROP data files, `.fantome` and `.modpkg` packages, hash index | nothing |
 | `bullet-lcu` | League client REST and WebSocket, champion select | core |
 | `bullet-classic` | Skins and Classic Rift models generated from the installed game | wad |
 | `bullet-inject` | Mod checks, overlay builder, injector host | core, platform, wad |
@@ -38,6 +38,23 @@ view), never inside the client.
 Dependencies only point one way. The pure crates (`core`, `wad`) know nothing about Windows or the client,
 so most of the logic can be tested without either.
 
+## Source layout
+
+Inside each crate, modules are grouped into one folder per segment, and `lib.rs` re-exports every module
+under a flat path (`bullet_platform::fs`, `bullet_wad::prop`), so callers never depend on the folders.
+
+| Crate | Folders |
+| --- | --- |
+| `bullet-core` | `domain/` (historic, library, mods, overlay, party), `runtime/` (phase, selection, state, supervisor) |
+| `bullet-platform` | `os/instance`, `os/system`, `os/storage`, `league/` (client settings and window, game build, paths), `ui/pages` (WebView windows and their HTML), `ui/desktop` (tray, hotkey, clipboard, dialogs, shell), `ui/locale` |
+| `bullet-wad` | `archive/` (WAD, writer, `.fantome`, `.modpkg`), `properties/` (BIN/PROP), `hashing/` |
+| `bullet-lcu` | `connection/` (client, lockfile, WebSocket, observer), `session/` (champion select, live selection, skin registration, assets) |
+| `bullet-classic` | `animation/` (forms, gear toggle, clip aliases), `generation/` (builder, generator, client data) |
+| `bullet-inject` | `build/` (overlay builder, cache, mod compatibility), `injector/` (LTK host, overlay process, DLL validation, runner) |
+| `bullet-party` | `transport/` (client, config, protocol), `security/` (crypto, token) |
+| `bullet-app` | `selection/`, `game/`, `updates/`, `diagnostics/`, `party/`; the binary-only modules (`main.rs`, `logging.rs`, `trigger.rs`) stay at the root |
+| `xtask` | `build/`, `lint/`, `audit/`, `testing/`, `probes/`; `main.rs` only dispatches |
+
 ## Startup sequence
 
 1. **Single instance.** A named mutex guarantees one running Bullet; starting it again brings the first one
@@ -45,14 +62,17 @@ so most of the logic can be tested without either.
 2. **User profile.** The desktop user is resolved through the Windows API, and data goes to that user's
    `%LOCALAPPDATA%\Bullet`.
 3. **Logging.** A non-blocking daily log file starts in `%LOCALAPPDATA%\Bullet\logs`.
-4. **Discovery.** The game install (from Riot's metadata or the running process) and the injector tools (from
-   Bullet's own folder, hash-checked) are located.
-6. **Warm-up.** The index of the game's archives is built on a background thread so champion select never
+4. **Discovery.** The game install (from Riot's metadata or the running process, WeGame layouts included) and
+   the injector tools (from Bullet's own folder, hash-checked) are located. When the tools are missing or not
+   the audited build, Bullet offers to download them from the compatible LTK Manager release and copies them
+   with a verified, elevated copy of itself; otherwise it opens the download page and stops.
+5. **Warm-up.** The index of the game's archives is built on a background thread so champion select never
    waits for it.
-7. **Game build.** The game executable's build timestamp is read. After a patch, cached overlays and locale
+6. **Game build.** The game executable's build timestamp is read. After a patch, cached overlays and locale
    data are discarded. If the injector DLL does not support this build, the user is told immediately.
-8. **Services.** The supervised tasks start: client observer, selection window session, party mode, and the
-   optional skin library sync.
+7. **Services.** The supervised tasks start: client observer, selection window session, party mode, the
+   Bullet and LTK Manager release checks, and the optional skin library sync. Companion characters are indexed
+   on a thread in Windows background mode, paused from the ready check until the match ends.
 
 ## Shared state
 
