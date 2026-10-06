@@ -21,20 +21,6 @@ pub fn state_dir() -> Result<PathBuf, PlatformError> {
 }
 
 #[must_use]
-pub fn webview2_data_dir() -> Option<PathBuf> {
-    let dir = data_dir()
-        .map(|dir| dir.join("webview2"))
-        .unwrap_or_else(|_| std::env::temp_dir().join("Bullet").join("webview2"));
-    match std::fs::create_dir_all(&dir) {
-        Ok(()) => Some(dir),
-        Err(e) => {
-            tracing::warn!(dir = %dir.display(), error = %e, "Could not create the WebView2 data directory; WebView2 uses its default");
-            None
-        }
-    }
-}
-
-#[must_use]
 pub fn tools_dir_candidates(data_dir: &Path) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Ok(install) = install_dir() {

@@ -44,6 +44,10 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.injector_auto_body, "version"),
             (text.injector_auto_failed, "error"),
             (text.broken_tools_body, "version"),
+            (text.overlay_no_results_sub, "term"),
+            (text.overlay_no_library_big, "champion"),
+            (text.overlay_skin_many, "count"),
+            (text.overlay_no_mods_match, "term"),
         ] {
             assert!(
                 template.contains(&format!("{{{key}}}")),

@@ -177,14 +177,6 @@ fn clearing_removes_the_target() {
     assert!(rx.borrow().overlay_target.is_none());
 }
 
-#[test]
-fn the_empty_catalog_is_valid_json_the_ui_can_consume() {
-    let value: serde_json::Value =
-        serde_json::from_str(EMPTY_CATALOG_JSON).expect("must be valid JSON");
-    assert_eq!(value["championId"], 0);
-    assert!(value["skins"].as_array().is_some_and(Vec::is_empty));
-}
-
 fn fallback() -> RandomFallback {
     RandomFallback {
         enabled: true,

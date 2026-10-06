@@ -2,8 +2,10 @@ use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
+use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowW, GetWindowRect, IsIconic, IsWindowVisible,
+    BringWindowToTop, FindWindowW, GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId,
+    IsIconic, IsWindowVisible, SetForegroundWindow,
 };
 use windows::core::w;
 
@@ -84,6 +86,32 @@ pub fn find_client_hwnd() -> Option<HWND> {
         match FindWindowW(w!("RCLIENT"), None) {
             Ok(hwnd) if !hwnd.is_invalid() => Some(hwnd),
             _ => None,
+        }
+    }
+}
+
+pub(crate) fn take_foreground(hwnd: isize) {
+    switch_foreground(HWND(hwnd as *mut _));
+}
+
+pub(crate) fn return_foreground_to_client() {
+    if let Some(client) = find_client_hwnd() {
+        switch_foreground(client);
+    }
+}
+
+fn switch_foreground(target: HWND) {
+    unsafe {
+        let foreground_thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+        let current_thread = GetCurrentThreadId();
+        let attach = foreground_thread != 0 && foreground_thread != current_thread;
+        if attach {
+            let _ = AttachThreadInput(foreground_thread, current_thread, true); // ignore-ok: without the attachment Windows may refuse the foreground, which leaves focus where it was
+        }
+        let _ = BringWindowToTop(target); // ignore-ok: a refused raise leaves the z-order as it was
+        let _ = SetForegroundWindow(target); // ignore-ok: Windows may refuse the foreground; the window stays usable by click
+        if attach {
+            let _ = AttachThreadInput(foreground_thread, current_thread, false); // ignore-ok: the attachment ends with the thread anyway
         }
     }
 }

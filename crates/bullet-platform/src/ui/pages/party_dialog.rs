@@ -1,181 +1,205 @@
-use std::sync::{Arc, Mutex};
+use std::cell::Cell;
+use std::rc::Rc;
+use std::sync::mpsc;
+use std::time::Duration;
 
+use slint::ComponentHandle;
 use tracing::{debug, warn};
-use windows::Win32::UI::WindowsAndMessaging::WM_APP;
-use windows::core::w;
 
-use super::dialog_host::{self, Dialog, DialogSpec};
+use super::runtime;
+use super::views::PartyDialog;
 use crate::error::PlatformError;
 
-const DIALOG_HTML: &str = include_str!("party_dialog_ui.html");
+const COPIED_FOR: Duration = Duration::from_millis(2200);
 
-const WM_DIALOG_PASTE: u32 = WM_APP + 1;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InlineAction {
+    Copy,
+    Paste,
+}
 
-fn escape_html(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PartyContent {
+    pub heading: &'static str,
+    pub description: &'static str,
+    pub label: &'static str,
+    pub placeholder: &'static str,
+    pub read_only: bool,
+    pub inline: InlineAction,
+    pub inline_label: &'static str,
+    pub confirm: &'static str,
+    pub cancel: &'static str,
+    pub copied: &'static str,
+    pub empty_error: &'static str,
+    pub code: String,
+}
+
+pub(crate) fn created_content(text: &crate::i18n::Text, code: &str) -> PartyContent {
+    PartyContent {
+        heading: text.party_dialog_create_title,
+        description: text.party_dialog_create_desc,
+        label: text.party_dialog_label_code,
+        placeholder: "",
+        read_only: true,
+        inline: InlineAction::Copy,
+        inline_label: text.party_dialog_btn_copy,
+        confirm: text.party_dialog_btn_ok,
+        cancel: "",
+        copied: text.party_dialog_copied,
+        empty_error: text.party_dialog_error_empty,
+        code: code.to_owned(),
+    }
+}
+
+pub(crate) fn join_content(text: &crate::i18n::Text, initial_code: Option<&str>) -> PartyContent {
+    PartyContent {
+        heading: text.party_dialog_join_title,
+        description: text.party_dialog_join_desc,
+        label: text.party_dialog_label_code,
+        placeholder: text.party_dialog_placeholder,
+        read_only: false,
+        inline: InlineAction::Paste,
+        inline_label: text.party_dialog_btn_paste,
+        confirm: text.party_dialog_btn_join,
+        cancel: text.party_dialog_btn_cancel,
+        copied: text.party_dialog_copied,
+        empty_error: text.party_dialog_error_empty,
+        code: initial_code.unwrap_or_default().to_owned(),
+    }
 }
 
 pub fn show_party_created_dialog(code: &str) -> Result<(), PlatformError> {
-    let text = crate::i18n::text();
-    run_dialog_modal(text.party_dialog_create_title, created_html(text, code)).map(|_| ())
-}
-
-pub(crate) fn created_html(text: &crate::i18n::Text, code: &str) -> String {
-    let inline_btn = format!(
-        "<button type=\"button\" class=\"btn-inline\" onclick=\"doCopy()\">{}</button>",
-        escape_html(text.party_dialog_btn_copy)
-    );
-    let footer_btns = format!(
-        "<button type=\"button\" class=\"btn btn-primary\" onclick=\"doSubmit()\">{}</button>",
-        escape_html(text.party_dialog_btn_ok)
-    );
-
-    DIALOG_HTML
-        .replace("{{lang}}", text.html_lang)
-        .replace("{{title}}", &escape_html(text.party_dialog_create_title))
-        .replace("{{desc}}", &escape_html(text.party_dialog_create_desc))
-        .replace("{{label}}", &escape_html(text.party_dialog_label_code))
-        .replace("{{initial_code}}", &escape_html(code))
-        .replace("{{placeholder}}", "")
-        .replace("{{readonly_attr}}", "readonly")
-        .replace("{{action_inline_button}}", &inline_btn)
-        .replace("{{footer_buttons}}", &footer_btns)
-        .replace("{{copied_text}}", &escape_html(text.party_dialog_copied))
-        .replace(
-            "{{error_empty}}",
-            &escape_html(text.party_dialog_error_empty),
-        )
+    run_modal(created_content(crate::i18n::text(), code)).map(|_| ())
 }
 
 pub fn show_party_join_dialog(initial_code: Option<&str>) -> Result<Option<String>, PlatformError> {
-    let text = crate::i18n::text();
-    run_dialog_modal(text.party_dialog_join_title, join_html(text, initial_code))
+    run_modal(join_content(crate::i18n::text(), initial_code))
 }
 
-pub(crate) fn join_html(text: &crate::i18n::Text, initial_code: Option<&str>) -> String {
-    let inline_btn = format!(
-        "<button type=\"button\" class=\"btn-inline\" onclick=\"doPaste()\">{}</button>",
-        escape_html(text.party_dialog_btn_paste)
-    );
-    let footer_btns = format!(
-        "<button type=\"button\" class=\"btn btn-secondary\" onclick=\"doCancel()\">{}</button>\
-         <button type=\"button\" class=\"btn btn-primary\" onclick=\"doSubmit()\">{}</button>",
-        escape_html(text.party_dialog_btn_cancel),
-        escape_html(text.party_dialog_btn_join)
-    );
-
-    DIALOG_HTML
-        .replace("{{lang}}", text.html_lang)
-        .replace("{{title}}", &escape_html(text.party_dialog_join_title))
-        .replace("{{desc}}", &escape_html(text.party_dialog_join_desc))
-        .replace("{{label}}", &escape_html(text.party_dialog_label_code))
-        .replace("{{initial_code}}", &escape_html(initial_code.unwrap_or("")))
-        .replace(
-            "{{placeholder}}",
-            &escape_html(text.party_dialog_placeholder),
-        )
-        .replace("{{readonly_attr}}", "")
-        .replace("{{action_inline_button}}", &inline_btn)
-        .replace("{{footer_buttons}}", &footer_btns)
-        .replace("{{copied_text}}", &escape_html(text.party_dialog_copied))
-        .replace(
-            "{{error_empty}}",
-            &escape_html(text.party_dialog_error_empty),
-        )
-}
-
-fn run_dialog_modal(title: &str, html: String) -> Result<Option<String>, PlatformError> {
-    let spec = DialogSpec {
-        class: w!("BulletPartyDialogClass"),
-        title,
-        size: (520, 280),
-        min_size: None,
-    };
-    let mut dialog = Dialog::create(&spec).inspect_err(|e| {
-        warn!(error = %e, "Party dialog could not be opened");
+fn run_modal(content: PartyContent) -> Result<Option<String>, PlatformError> {
+    let (answer_tx, answer_rx) = mpsc::channel();
+    runtime::run_on_ui(move || {
+        let answer = Answer::new(answer_tx);
+        if let Err(e) = open(&content, answer.clone()) {
+            warn!(error = %e, "The party dialog could not be opened");
+            answer.give(None);
+        }
     })?;
-    let hwnd = dialog.raw();
+    answer_rx
+        .recv()
+        .map_err(|_| PlatformError::Window("the party dialog closed without an answer".into()))
+}
 
-    let result: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    let result_for_ipc = Arc::clone(&result);
-    let pending_paste: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    let paste_for_ipc = Arc::clone(&pending_paste);
+#[derive(Clone)]
+pub(crate) struct Answer(Rc<Cell<Option<mpsc::Sender<Option<String>>>>>);
 
-    let webview = dialog
-        .webview(html, move |request| {
-            let body = request.body();
-            if body == "cancel" {
-                dialog_host::close(hwnd);
-            } else if let Some(code) = body.strip_prefix("submit:") {
-                if let Ok(mut slot) = result_for_ipc.lock() {
-                    *slot = Some(code.trim().to_string());
-                }
-                dialog_host::close(hwnd);
-            } else if let Some(code) = body.strip_prefix("copy:") {
-                if let Err(e) = crate::clipboard::set_text(code) {
-                    warn!(error = %e, "Party dialog: could not copy the room code to the clipboard");
-                }
-            } else if body == "request_paste" {
-                paste_from_clipboard(&paste_for_ipc, hwnd);
+impl Answer {
+    pub(crate) fn new(sender: mpsc::Sender<Option<String>>) -> Self {
+        Self(Rc::new(Cell::new(Some(sender))))
+    }
+
+    fn give(&self, value: Option<String>) {
+        if let Some(sender) = self.0.take() {
+            if sender.send(value).is_err() {
+                debug!("Nobody is waiting for the party dialog any more");
             }
-        })
-        .inspect_err(|e| warn!(error = %e, "Party dialog could not be opened"))?;
+        }
+    }
+}
 
-    dialog.show(false);
-    dialog.run(&webview, |message, _| {
-        if message == WM_DIALOG_PASTE {
-            apply_pending_paste(&webview, &pending_paste);
+pub(crate) fn wire(dialog: &PartyDialog, content: &PartyContent, answer: Answer) {
+    dialog.set_heading(content.heading.into());
+    dialog.set_description(content.description.into());
+    dialog.set_label(content.label.into());
+    dialog.set_placeholder(content.placeholder.into());
+    dialog.set_read_only(content.read_only);
+    dialog.set_inline_label(content.inline_label.into());
+    dialog.set_confirm_label(content.confirm.into());
+    dialog.set_cancel_label(content.cancel.into());
+    dialog.set_copied_label(content.copied.into());
+    dialog.set_empty_error(content.empty_error.into());
+    dialog.set_code(content.code.as_str().into());
+
+    let inline = content.inline;
+    let weak = dialog.as_weak();
+    dialog.on_inline_action(move || {
+        if let Some(dialog) = weak.upgrade() {
+            run_inline(&dialog, inline);
         }
     });
 
-    Ok(result.lock().ok().and_then(|slot| slot.clone()))
+    let weak = dialog.as_weak();
+    let on_submit = answer.clone();
+    dialog.on_submit(move |code| {
+        on_submit.give(Some(code.trim().to_owned()));
+        if let Some(dialog) = weak.upgrade() {
+            close(&dialog);
+        }
+    });
+
+    let weak = dialog.as_weak();
+    let on_cancel = answer.clone();
+    dialog.on_cancel(move || {
+        on_cancel.give(None);
+        if let Some(dialog) = weak.upgrade() {
+            close(&dialog);
+        }
+    });
+
+    dialog.window().on_close_requested(move || {
+        answer.give(None);
+        slint::CloseRequestResponse::HideWindow
+    });
 }
 
-fn paste_from_clipboard(pending: &Mutex<Option<String>>, hwnd: isize) {
-    let text = match crate::clipboard::get_text() {
-        Ok(Some(text)) => text,
-        Ok(None) => {
-            debug!("Party dialog: paste requested but the clipboard holds no text");
-            return;
+fn open(content: &PartyContent, answer: Answer) -> Result<(), slint::PlatformError> {
+    let dialog = PartyDialog::new()?;
+    wire(&dialog, content, answer);
+    dialog.show()?;
+    runtime::when_created(&dialog, |dialog, hwnd| {
+        crate::client_window::take_foreground(hwnd);
+        dialog.invoke_focus_field();
+    });
+    Ok(())
+}
+
+fn run_inline(dialog: &PartyDialog, action: InlineAction) {
+    match action {
+        InlineAction::Copy => {
+            let code = dialog.get_code();
+            if code.trim().is_empty() {
+                return;
+            }
+            if let Err(e) = crate::clipboard::set_text(code.trim()) {
+                warn!(error = %e, "Party dialog: could not copy the room code to the clipboard");
+                return;
+            }
+            dialog.set_copied(true);
+            let weak = dialog.as_weak();
+            slint::Timer::single_shot(COPIED_FOR, move || {
+                if let Some(dialog) = weak.upgrade() {
+                    dialog.set_copied(false);
+                }
+            });
         }
-        Err(e) => {
-            warn!(error = %e, "Party dialog: could not read the clipboard for paste");
-            return;
-        }
-    };
-    match pending.lock() {
-        Ok(mut slot) => *slot = Some(text),
-        Err(e) => {
-            warn!(error = %e, "Party dialog: paste hand-off is poisoned; paste dropped");
-            return;
-        }
+        InlineAction::Paste => match crate::clipboard::get_text() {
+            Ok(Some(text)) => {
+                dialog.set_code(text.trim().into());
+                dialog.set_show_error(false);
+                dialog.invoke_focus_field();
+            }
+            Ok(None) => debug!("Party dialog: paste requested but the clipboard holds no text"),
+            Err(e) => warn!(error = %e, "Party dialog: could not read the clipboard for paste"),
+        },
     }
-
-    dialog_host::post(hwnd, WM_DIALOG_PASTE);
 }
 
-fn apply_pending_paste(webview: &wry::WebView, pending: &Mutex<Option<String>>) {
-    let text = match pending.lock() {
-        Ok(mut slot) => slot.take(),
-        Err(e) => {
-            warn!(error = %e, "Party dialog: paste hand-off is poisoned; paste dropped");
-            return;
-        }
-    };
-    let Some(text) = text else { return };
-
-    let literal = match serde_json::to_string(&text) {
-        Ok(literal) => literal,
-        Err(e) => {
-            warn!(error = %e, "Party dialog: could not encode the pasted text");
-            return;
-        }
-    };
-    if let Err(e) = webview.evaluate_script(&format!("applyPasteFromRust({literal})")) {
-        warn!(error = %e, "Party dialog: could not deliver the pasted text to the page");
+fn close(dialog: &PartyDialog) {
+    if let Err(e) = dialog.hide() {
+        debug!(error = %e, "The party dialog was already closed");
     }
 }
+
+#[cfg(test)]
+#[path = "party_dialog_tests.rs"]
+mod tests;

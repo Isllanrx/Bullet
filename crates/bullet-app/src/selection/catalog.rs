@@ -1,152 +1,10 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use bullet_core::library::{ChampionLibrary, scan_champion};
-use bullet_core::overlay::OverlayTarget;
+pub use bullet_core::overlay::{Catalog, CatalogChroma, CatalogNotice, CatalogSkin, ModsPanel};
 use bullet_lcu::champion_assets::ChampionAssets;
-use serde::Serialize;
 use tracing::{debug, info, warn};
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct CatalogChroma {
-    pub id: u32,
-    pub name: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub color: Option<String>,
-
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub form: bool,
-
-    #[serde(skip)]
-    pub preview_path: Option<String>,
-
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub has_preview: bool,
-}
-
-impl CatalogChroma {
-    fn with_preview(mut self, path: Option<&str>) -> Self {
-        self.preview_path = path.filter(|p| p.starts_with('/')).map(str::to_owned);
-        self.has_preview = self.preview_path.is_some();
-        self
-    }
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct CatalogSkin {
-    pub id: u32,
-    pub name: String,
-
-    pub name_unknown: bool,
-    pub chromas: Vec<CatalogChroma>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tile: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct Catalog {
-    pub champion_id: u32,
-    pub champion_name: String,
-
-    #[serde(skip)]
-    pub alias: Option<String>,
-    pub skins: Vec<CatalogSkin>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub locale: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub quote: Option<String>,
-
-    pub mods: ModsPanel,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub notice: Option<CatalogNotice>,
-
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub classic: bool,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum CatalogNotice {
-    ToolsMissing,
-}
-
-#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ModsPanel {
-    pub available: bullet_core::mods::ModCatalog,
-    pub selection: bullet_core::mods::ModSelectionView,
-}
-
-impl Catalog {
-    #[must_use]
-    pub fn entry_count(&self) -> usize {
-        self.skins.iter().map(|s| 1 + s.chromas.len()).sum()
-    }
-
-    pub fn roll_random(&self, mut pick: impl FnMut(usize) -> usize) -> Option<OverlayTarget> {
-        let candidates: Vec<&CatalogSkin> = self
-            .skins
-            .iter()
-            .filter(|skin| !bullet_core::selection::is_base_skin(skin.id, self.champion_id))
-            .collect();
-        if candidates.is_empty() {
-            return None;
-        }
-        let skin = candidates[pick(candidates.len()) % candidates.len()];
-        let options = 1 + skin.chromas.len();
-        let entry = match pick(options) % options {
-            0 => skin.id,
-            n => skin.chromas[n - 1].id,
-        };
-        self.resolve_target(entry)
-    }
-
-    #[must_use]
-    pub fn resolve_target(&self, entry_id: u32) -> Option<OverlayTarget> {
-        for skin in &self.skins {
-            if skin.id == entry_id {
-                return Some(OverlayTarget {
-                    champion_id: self.champion_id,
-                    skin_id: skin.id,
-                    chroma_id: None,
-                });
-            }
-            if let Some(chroma) = skin.chromas.iter().find(|c| c.id == entry_id) {
-                return Some(OverlayTarget {
-                    champion_id: self.champion_id,
-                    skin_id: skin.id,
-                    chroma_id: Some(chroma.id),
-                });
-            }
-        }
-        None
-    }
-
-    #[must_use]
-    pub fn chroma_preview_paths(&self) -> Vec<(u32, String)> {
-        self.skins
-            .iter()
-            .flat_map(|s| s.chromas.iter())
-            .filter_map(|c| c.preview_path.clone().map(|path| (c.id, path)))
-            .collect()
-    }
-
-    #[must_use]
-    pub fn chroma_preview_path(&self, chroma_id: u32) -> Option<&str> {
-        self.skins
-            .iter()
-            .flat_map(|s| s.chromas.iter())
-            .find(|c| c.id == chroma_id)
-            .and_then(|c| c.preview_path.as_deref())
-    }
-}
 
 fn client_form(form: &bullet_lcu::champion_assets::QuestTier) -> CatalogChroma {
     CatalogChroma {
@@ -551,7 +409,7 @@ async fn lcu_client() -> Option<bullet_lcu::client::LcuClient> {
 
 const PREVIEW_FETCHES: usize = 4;
 
-pub type PreviewFetches = futures_util::stream::BoxStream<'static, (u32, Option<String>)>;
+pub type PreviewFetches = futures_util::stream::BoxStream<'static, (u32, Option<Arc<[u8]>>)>;
 
 #[must_use]
 pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
@@ -562,11 +420,11 @@ pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
                 .map(move |(id, path)| {
                     let client = client.clone();
                     async move {
-                        let uri = match client {
+                        let image = match client {
                             Some(client) => fetch_chroma_preview(&client, &path).await,
                             None => None,
                         };
-                        (id, uri)
+                        (id, image)
                     }
                 })
                 .buffer_unordered(PREVIEW_FETCHES)
@@ -577,9 +435,9 @@ pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
 async fn fetch_chroma_preview(
     client: &bullet_lcu::client::LcuClient,
     path: &str,
-) -> Option<String> {
+) -> Option<Arc<[u8]>> {
     match client.get_asset_bytes(path).await {
-        Ok(bytes) if !bytes.is_empty() => Some(tile_data_uri(path, &bytes)),
+        Ok(bytes) if !bytes.is_empty() => Some(Arc::from(bytes)),
         Ok(_) => None,
         Err(e) => {
             debug!(path, error = %e, "Chroma preview unavailable");
@@ -653,12 +511,12 @@ async fn attach_tiles(
                 .map(|path| (index, path))
         })
         .collect();
-    let tiles: Vec<(usize, String)> = futures_util::stream::iter(wanted)
+    let tiles: Vec<(usize, Arc<[u8]>)> = futures_util::stream::iter(wanted)
         .map(|(index, path)| {
             let client = client.clone();
             async move {
                 match client.get_asset_bytes(&path).await {
-                    Ok(bytes) if !bytes.is_empty() => Some((index, tile_data_uri(&path, &bytes))),
+                    Ok(bytes) if !bytes.is_empty() => Some((index, Arc::from(bytes))),
                     Ok(_) => None,
                     Err(e) => {
                         debug!(path, error = %e, "Skin tile unavailable");
@@ -676,23 +534,6 @@ async fn attach_tiles(
         catalog.skins[index].tile = Some(tile);
     }
     fetched
-}
-
-fn tile_data_uri(path: &str, bytes: &[u8]) -> String {
-    let mime = if path.ends_with(".jpg") || path.ends_with(".jpeg") {
-        "image/jpeg"
-    } else {
-        "image/png"
-    };
-    use base64::Engine;
-    format!(
-        "data:{mime};base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    )
-}
-
-pub fn catalog_json(catalog: &Catalog) -> Result<String, serde_json::Error> {
-    serde_json::to_string(catalog)
 }
 
 #[must_use]
