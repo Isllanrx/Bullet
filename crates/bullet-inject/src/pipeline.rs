@@ -155,13 +155,11 @@ impl InjectionPipeline {
         &self,
         mods: &[String],
         game_pid: u32,
-        game_tid: u32,
     ) -> Result<InjectionOutcome, InjectError> {
         self.publish(InjectionStatus::Pending);
 
         info!(
             pid = game_pid,
-            tid = game_tid,
             mods = ?mods,
             "Starting injection pipeline"
         );

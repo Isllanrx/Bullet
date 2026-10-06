@@ -694,26 +694,24 @@ impl InjectionTrigger {
         let mods = self.collect_mods(key).await?;
 
         let mut game_pid = None;
-        let mut game_tid = None;
         let discovery_started = tokio::time::Instant::now();
         let max_wait = Duration::from_secs(60);
 
         while discovery_started.elapsed() < max_wait && !token.is_cancelled() {
-            if let Ok(Some(pid)) =
+            let found = tokio::task::spawn_blocking(|| {
                 ProcessFinder::find_any_process(&bullet_platform::game_version::GAME_EXES)
-            {
-                if let Ok(Some(tid)) = ProcessFinder::find_first_thread_id(pid) {
-                    game_pid = Some(pid);
-                    game_tid = Some(tid);
-                    break;
-                }
+            })
+            .await;
+            if let Ok(Ok(Some(pid))) = found {
+                game_pid = Some(pid);
+                break;
             }
             tokio::time::sleep(GAME_PROCESS_POLL).await;
         }
 
-        let (pid, tid) = match (game_pid, game_tid) {
-            (Some(p), Some(t)) => (p, t),
-            _ => {
+        let pid = match game_pid {
+            Some(pid) => pid,
+            None => {
                 warn!("Timed out waiting for the game process to spawn");
                 set_injection_status(
                     &self.state_tx,
@@ -727,7 +725,6 @@ impl InjectionTrigger {
 
         info!(
             pid,
-            tid,
             discovery_ms = discovery_started.elapsed().as_millis(),
             "Target League game process discovered; executing injection pipeline"
         );
@@ -742,7 +739,7 @@ impl InjectionTrigger {
             entry_id = ?entry_id,
             "Late path: the loading-screen card can no longer be changed"
         );
-        let outcome = pipeline.execute(&mods, pid, tid).await;
+        let outcome = pipeline.execute(&mods, pid).await;
 
         match outcome {
             Ok(outcome) => {
