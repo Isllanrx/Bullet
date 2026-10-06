@@ -1,8 +1,8 @@
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use bullet_core::party::PartyStatus;
 use bullet_core::state::{StateReceiver, StateSender, set_party_hosting, set_party_status};
@@ -30,6 +30,29 @@ pub struct QueuedClicks {
     pub leave: bool,
 }
 
+#[derive(Debug, Default)]
+pub struct HostedRooms(Mutex<Vec<(u64, u64)>>);
+
+impl HostedRooms {
+    pub fn remember(&self, token: &PartyToken) {
+        if let Ok(mut rooms) = self.0.lock() {
+            rooms.push((token.host_member, token.issued_at));
+        }
+    }
+
+    #[must_use]
+    pub fn contains(&self, token: &PartyToken) -> bool {
+        self.0
+            .lock()
+            .is_ok_and(|rooms| rooms.contains(&(token.host_member, token.issued_at)))
+    }
+
+    #[must_use]
+    pub fn is_own_code(&self, code: &str) -> bool {
+        PartyToken::decode(code, unix_now()).is_ok_and(|token| self.contains(&token))
+    }
+}
+
 #[must_use]
 pub fn sort_queued_clicks(commands: impl IntoIterator<Item = PartyCommand>) -> QueuedClicks {
     commands
@@ -55,6 +78,7 @@ pub struct PartyManager {
     state_rx: StateReceiver,
     state_dir: PathBuf,
     created_dialog_open: Arc<AtomicBool>,
+    hosted: HostedRooms,
 }
 
 impl PartyManager {
@@ -65,6 +89,7 @@ impl PartyManager {
             state_rx,
             state_dir,
             created_dialog_open: Arc::new(AtomicBool::new(false)),
+            hosted: HostedRooms::default(),
         }
     }
 
@@ -201,10 +226,13 @@ impl PartyManager {
             info!("The party room window is already open; no second room is created");
             return;
         }
+        if running.is_some() {
+            info!("Party create ignored: already in a room; leave it first");
+            return;
+        }
         let Some(relay) = self.relay_or_explain() else {
             return;
         };
-        Self::stop(running).await;
 
         let token = match random_member_id().and_then(|host| PartyToken::generate(host, unix_now()))
         {
@@ -215,6 +243,7 @@ impl PartyManager {
             }
         };
         let code = token.encode();
+        self.hosted.remember(&token);
 
         let copied = tokio::task::spawn_blocking({
             let code = code.clone();
@@ -234,6 +263,10 @@ impl PartyManager {
     }
 
     async fn join(&self, running: &mut Option<Running>) {
+        if running.is_some() {
+            info!("Party join ignored: already in a room; leave it first");
+            return;
+        }
         let Some(relay) = self.relay_or_explain() else {
             return;
         };
@@ -253,7 +286,7 @@ impl PartyManager {
         let prefill = clipboard_text
             .as_deref()
             .map(str::trim)
-            .filter(|c| c.starts_with("BULLET1:"))
+            .filter(|c| c.starts_with("BULLET1:") && !self.hosted.is_own_code(c))
             .map(str::to_string);
 
         let dialog_prefill = prefill.clone();
@@ -298,8 +331,11 @@ impl PartyManager {
         };
 
         match PartyToken::decode(&code, unix_now()) {
+            Ok(token) if self.hosted.contains(&token) => {
+                info!("Party join refused: the code is a room this Bullet created");
+                notify(ui.party_join_title, ui.party_own_room.to_owned());
+            }
             Ok(token) => {
-                Self::stop(running).await;
                 set_party_hosting(&self.state_tx, false);
                 info!(
                     issued_at = token.issued_at,

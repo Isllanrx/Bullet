@@ -182,6 +182,7 @@ pub struct Text {
     pub party_join_clipboard_error: &'static str,
     pub party_joining: &'static str,
     pub party_invalid_code: &'static str,
+    pub party_own_room: &'static str,
 
     pub party_dialog_create_title: &'static str,
     pub party_dialog_create_desc: &'static str,
@@ -365,6 +366,7 @@ static PORTUGUESE: Text = Text {
     party_join_clipboard_error: "A área de transferência não pôde ser lida: {error}",
     party_joining: "Entrando na sala. O status aparece no menu da bandeja.",
     party_invalid_code: "Código de party inválido: {error}",
+    party_own_room: "Este é o código da sala que você criou. Envie-o para os amigos do seu time ou crie uma sala nova.",
 
     party_dialog_create_title: "Sala de Party Criada",
     party_dialog_create_desc: "Envie este código para seus amigos no mesmo time para verem suas skins:",
@@ -542,6 +544,7 @@ static SPANISH: Text = Text {
     party_join_clipboard_error: "No se pudo leer el portapapeles: {error}",
     party_joining: "Entrando en la sala. El estado aparece en el menú de la bandeja.",
     party_invalid_code: "Código de party no válido: {error}",
+    party_own_room: "Este es el código de la sala que creaste. Envíalo a los amigos de tu equipo o crea una sala nueva.",
 
     party_dialog_create_title: "Sala de Party Creada",
     party_dialog_create_desc: "Envía este código a tus amigos en el mismo equipo para sincronizar aspectos:",
@@ -718,6 +721,7 @@ static ENGLISH: Text = Text {
     party_join_clipboard_error: "The clipboard could not be read: {error}",
     party_joining: "Joining the room. The status shows in the tray menu.",
     party_invalid_code: "Invalid party code: {error}",
+    party_own_room: "This is the code of the room you created. Send it to your teammates or create a new room.",
 
     party_dialog_create_title: "Party Room Created",
     party_dialog_create_desc: "Send this code to your teammates so they see your custom skins:",
