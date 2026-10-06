@@ -1,9 +1,7 @@
-pub mod activation;
-pub mod autostart;
-pub mod elevation;
-pub mod fs;
-pub mod preferences;
-pub mod process;
-pub mod single_instance;
-pub mod user_profile;
-pub mod version;
+mod instance;
+mod storage;
+mod system;
+
+pub use instance::{activation, single_instance};
+pub use storage::{fs, preferences};
+pub use system::{autostart, elevation, process, user_profile, version};
