@@ -18,12 +18,30 @@ pub enum OverlayCommand {
     ImportMod { category: crate::mods::ModCategory },
 
     ChromaPreview { id: u32 },
+
+    FocusChampion { id: u32 },
+
+    TogglePreset,
+
+    SetProfile { name: String },
+
+    NewProfile,
+
+    DeleteProfile,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectionOrigin {
     Historic,
     Random,
+    Preset,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PresetsView {
+    pub profiles: Vec<String>,
+    pub active: usize,
+    pub preset_entry: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,11 +116,23 @@ pub struct Catalog {
     pub notice: Option<CatalogNotice>,
 
     pub classic: bool,
+
+    pub lobby: Vec<LobbyChampion>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LobbyChampion {
+    pub id: u32,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CatalogNotice {
     ToolsMissing,
+
+    LobbyWaiting,
+
+    LobbyChampions,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

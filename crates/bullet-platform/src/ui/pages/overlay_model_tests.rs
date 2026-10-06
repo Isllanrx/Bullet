@@ -35,6 +35,7 @@ fn catalog(skins: Vec<CatalogSkin>) -> Catalog {
         mods: ModsPanel::default(),
         notice: None,
         classic: false,
+        lobby: Vec::new(),
     }
 }
 

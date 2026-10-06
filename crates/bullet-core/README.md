@@ -24,6 +24,8 @@ known list of places that could have caused it.
 | `champions.rs` | Every champion: numeric id, the name used by its game archive, and its companion characters (Annie's Tibbers, Ivern's Daisy, and so on) |
 | `runtime/selection.rs`, `forms.rs` | What the user chose, including champions with alternate forms |
 | `domain/historic.rs` | The last skin used on each champion, so it can be selected again automatically |
+| `domain/presets.rs` | Skin presets pinned per champion, grouped in named profiles with one active at a time |
+| `domain/lobby.rs` | Champions picked in the lobby (Swiftplay, Quickplay, Brawl) and the skin kept for each |
 | `domain/mods.rs` | Custom mod categories (skins, maps, fonts, announcers, UI, voiceover, loading screens, VFX, SFX, others) and which of them allow only one active mod |
 | `domain/library.rs` | The skin library on disk and how an entry is found for a champion and skin |
 | `domain/overlay.rs` | Messages exchanged between Bullet and its selection window |

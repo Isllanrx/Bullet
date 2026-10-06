@@ -41,6 +41,8 @@ logic that decides **what** to inject and **when**.
 | `selection/catalog.rs` | Builds the list of skins and chromas for a champion, from the local library or from the client |
 | `selection/mods_store.rs` | Custom mod folders, the saved selection and preparing the selected mods |
 | `selection/historic_store.rs` | Remembers the last skin used on each champion |
+| `selection/preset_store.rs` | Saves the skin presets and profiles |
+| `selection/book_store.rs` | Reads and writes those saved books, setting an unreadable file aside instead of overwriting it |
 | `party/party_manager.rs` | Connects party mode to the app state and the tray |
 | `selection/skin_sync.rs` | Optional download of a skin library from a GitHub repository the user names in `BULLET_SKIN_SYNC` (`owner/repo`); there is no built-in source |
 | `game/live_game.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors). A client left in `Reconnect` after the game process is gone counts as a finished match, so the log of a crashed game is read too; only reads, never touches the game |

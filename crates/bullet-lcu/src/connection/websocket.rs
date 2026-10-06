@@ -12,6 +12,8 @@ pub const TOPIC_GAMEFLOW: &str = "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase"
 
 pub const TOPIC_CHAMP_SELECT: &str = "OnJsonApiEvent_lol-champ-select_v1_session";
 
+pub const TOPIC_LOBBY: &str = "OnJsonApiEvent_lol-lobby_v2_lobby";
+
 #[derive(Debug, Clone)]
 pub struct BackoffManager {
     initial: Duration,
@@ -147,6 +149,16 @@ pub fn dispatch_event_to_state(state_tx: &StateSender, event: &LcuEvent) {
                 }
             }
         }
+        TOPIC_LOBBY => {
+            if event.payload.data.is_null() || event.payload.event_type == "Delete" {
+                crate::lobby::apply_lobby_to_state(state_tx, None);
+                return;
+            }
+            match serde_json::from_value::<crate::lobby::LobbySession>(event.payload.data.clone()) {
+                Ok(lobby) => crate::lobby::apply_lobby_to_state(state_tx, Some(&lobby)),
+                Err(e) => warn!(error = %e, "Could not read the lobby from the event"),
+            }
+        }
         _ => {}
     }
 }
@@ -188,6 +200,23 @@ mod tests {
         let (tx, rx) = new_state_channel();
         dispatch_event_to_state(&tx, &event);
         assert_eq!(rx.borrow().phase, GamePhase::ChampSelect);
+    }
+
+    #[test]
+    fn lobby_events_open_and_close_the_lobby_picks() {
+        let (tx, rx) = new_state_channel();
+        set_phase(&tx, GamePhase::Lobby);
+        let created = r#"[8, "OnJsonApiEvent_lol-lobby_v2_lobby", {"uri": "/lol-lobby/v2/lobby", "eventType": "Update",
+            "data": {"gameConfig": {"queueId": 480, "gameMode": "SWIFTPLAY", "mapId": 11},
+                     "localMember": {"playerSlots": [{"championId": 238, "skinId": 238000}]}}}]"#;
+        let event = LcuEvent::parse(created).expect("frame").expect("event");
+        dispatch_event_to_state(&tx, &event);
+        assert_eq!(rx.borrow().champion_id, Some(238));
+
+        let deleted = r#"[8, "OnJsonApiEvent_lol-lobby_v2_lobby", {"uri": "/lol-lobby/v2/lobby", "eventType": "Delete", "data": null}]"#;
+        let event = LcuEvent::parse(deleted).expect("frame").expect("event");
+        dispatch_event_to_state(&tx, &event);
+        assert!(rx.borrow().lobby.is_none());
     }
 
     #[test]

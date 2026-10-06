@@ -15,8 +15,8 @@ use crate::client::{DEFAULT_LCU_TIMEOUT, LcuClient};
 use crate::error::LcuError;
 use crate::lockfile::Lockfile;
 use crate::websocket::{
-    BackoffManager, LcuEvent, TOPIC_CHAMP_SELECT, TOPIC_GAMEFLOW, dispatch_event_to_state,
-    make_subscribe_frame,
+    BackoffManager, LcuEvent, TOPIC_CHAMP_SELECT, TOPIC_GAMEFLOW, TOPIC_LOBBY,
+    dispatch_event_to_state, make_subscribe_frame,
 };
 
 #[derive(Debug)]
@@ -189,6 +189,18 @@ impl LcuObserver {
                 info!(phase = ?initial_phase, "Initial LCU gameflow phase synced");
                 set_phase(&self.state_tx, initial_phase);
 
+                if matches!(
+                    initial_phase,
+                    GamePhase::Lobby | GamePhase::Matchmaking | GamePhase::ReadyCheck
+                ) {
+                    match rest_client.get_lobby().await {
+                        Ok(lobby) => {
+                            crate::lobby::apply_lobby_to_state(&self.state_tx, lobby.as_ref())
+                        }
+                        Err(e) => warn!(error = %e, "Could not read the lobby on connect"),
+                    }
+                }
+
                 if initial_phase == GamePhase::ChampSelect {
                     if let Ok(session) = rest_client.get_champ_select_session().await {
                         info!("Initial champ select session populated");
@@ -237,18 +249,16 @@ impl LcuObserver {
 
         let sub_gameflow = make_subscribe_frame(TOPIC_GAMEFLOW);
         let sub_champ_select = make_subscribe_frame(TOPIC_CHAMP_SELECT);
+        let sub_lobby = make_subscribe_frame(TOPIC_LOBBY);
 
-        ws_stream
-            .send(Message::Text(sub_gameflow.into()))
-            .await
-            .map_err(|e| LcuError::WebSocket(e.to_string()))?;
+        for frame in [sub_gameflow, sub_champ_select, sub_lobby] {
+            ws_stream
+                .send(Message::Text(frame.into()))
+                .await
+                .map_err(|e| LcuError::WebSocket(e.to_string()))?;
+        }
 
-        ws_stream
-            .send(Message::Text(sub_champ_select.into()))
-            .await
-            .map_err(|e| LcuError::WebSocket(e.to_string()))?;
-
-        info!("Subscribed to gameflow and champ-select LCU event streams");
+        info!("Subscribed to gameflow, champ-select and lobby LCU event streams");
         set_lcu_connected(&self.state_tx, true);
 
         loop {

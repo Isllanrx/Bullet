@@ -229,6 +229,10 @@ pub(crate) fn run_catalog_demo(champion_id: u32) {
                 bullet_core::overlay::OverlayCommand::ChromaPreview { id } => {
                     println!("  hover -> preview do chroma {id}")
                 }
+                bullet_core::overlay::OverlayCommand::FocusChampion { id } => {
+                    println!("  sala -> mostrar campeao {id}")
+                }
+                other => println!("  presets -> {other:?}"),
             }
         }
         std::thread::sleep(Duration::from_millis(200));
@@ -323,6 +327,10 @@ pub(crate) fn run_ipc_probe(champion_id: u32) {
             Ok(OverlayCommand::ChromaPreview { id }) => {
                 println!("  recebido no Rust: preview do chroma {id}")
             }
+            Ok(OverlayCommand::FocusChampion { id }) => {
+                println!("  recebido no Rust: mostrar campeao {id} da sala")
+            }
+            Ok(other) => println!("  recebido no Rust: {other:?}"),
             Err(_) => std::thread::sleep(Duration::from_millis(100)),
         }
     }
