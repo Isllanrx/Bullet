@@ -7,7 +7,7 @@ use tracing::{error, info, warn};
 use crate::dll_validator::validate_dll_hash;
 use crate::error::InjectError;
 use crate::overlay::{OverlayConfig, OverlayManager};
-use crate::overlay_process::OverlayProcess;
+use crate::overlay_process::{OverlayProcess, PatcherSignal};
 
 pub const DEFAULT_BUILD_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -40,12 +40,6 @@ async fn wait_out_loading_game() {
         tokio::time::sleep(LOADING_GAME_POLL).await;
     }
 }
-
-pub const HOOK_CONFIRMED_STATUS: &str = "Waiting for exit";
-
-pub const HOOK_PATCHING_STATUS: &str = "Patching";
-
-pub const PATCHER_ARMED_STATUS: &str = "Waiting for league match to start";
 
 pub const DEFAULT_ARM_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -257,10 +251,7 @@ impl InjectionPipeline {
         };
 
         match overlay
-            .wait_for_line(
-                |line| line.contains(PATCHER_ARMED_STATUS),
-                DEFAULT_ARM_TIMEOUT,
-            )
+            .wait_for(PatcherSignal::Armed, DEFAULT_ARM_TIMEOUT)
             .await
         {
             Ok(_) => {
@@ -423,14 +414,11 @@ impl InjectionPipeline {
             return InjectionStatus::Unconfirmed;
         }
 
-        let result = overlay
-            .wait_for_line(|line| line.contains(HOOK_CONFIRMED_STATUS), budget)
-            .await;
+        let result = overlay.wait_for(PatcherSignal::Hooked, budget).await;
 
         match result {
-            Ok(line) => {
+            Ok(()) => {
                 info!(
-                    status_line = %line.text,
                     elapsed_ms = waited.elapsed().as_millis(),
                     "Hook confirmed by the patcher before resuming the game"
                 );

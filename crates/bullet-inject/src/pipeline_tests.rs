@@ -148,73 +148,88 @@ async fn test_pipeline_fails_loudly_when_the_overlay_cannot_be_built() {
     std::fs::remove_dir_all(&temp_dir).ok();
 }
 
-fn fake_runoverlay(dir: &std::path::Path, script: &str) -> (PipelineConfig, Vec<String>) {
-    let config = temp_config(dir, dir.join("dll"), String::new());
-    let args = vec!["/C".to_string(), script.to_string()];
-    (config, args)
+async fn fake_host(
+    name: &str,
+    script: &[&str],
+    hook_timeout: Duration,
+) -> (InjectionPipeline, OverlayProcess) {
+    let dir = std::env::temp_dir().join(format!("bullet_fake_host_{name}_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let host = dir.join("fake_host.cmd");
+    let body: String = std::iter::once("@echo off")
+        .chain(script.iter().copied())
+        .map(|line| format!("{line}\r\n"))
+        .collect();
+    std::fs::write(&host, body).expect("fake host script");
+    let mut config = temp_config(&dir, host, String::new());
+    config.hook_timeout = hook_timeout;
+    let pipeline = InjectionPipeline::new(config, None);
+    let overlay = pipeline.spawn_patcher().await.expect("spawn fake host");
+    (pipeline, overlay)
 }
 
-fn cmd_exe() -> PathBuf {
-    PathBuf::from(
-        std::env::var("COMSPEC").unwrap_or_else(|_| r"C:\Windows\System32\cmd.exe".into()),
-    )
-}
+const STALL: &str = "ping -n 4 127.0.0.1 >nul";
 
 #[tokio::test]
-async fn test_hook_confirmed_only_on_the_patcher_ready_line() {
-    let dir = std::env::temp_dir();
-    let (mut config, args) = fake_runoverlay(
-        &dir,
-        "echo Status: Waiting for league match to start&echo Status: Patching&echo Status: Waiting for exit&ping -n 4 127.0.0.1 >nul",
-    );
-    config.hook_timeout = Duration::from_secs(10);
-
-    let config_timeout = config.hook_timeout;
-    let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+async fn test_hook_confirmed_only_when_the_host_reports_injected() {
+    let budget = Duration::from_secs(10);
+    let (pipeline, mut overlay) = fake_host(
+        "confirmed",
+        &[
+            "echo status 0.01 injecting scanning for the game",
+            "echo dll 1.00 1 2 INFO ltk_patcher_dll: redirected wad: Zed.wad.client",
+            "echo status 1.10 injected dll attached",
+            STALL,
+        ],
+        budget,
+    )
+    .await;
 
     assert_eq!(
-        pipeline.confirm_hook(&mut overlay, config_timeout).await,
+        pipeline.confirm_hook(&mut overlay, budget).await,
         InjectionStatus::Confirmed
     );
     overlay.shutdown().await;
 }
 
 #[tokio::test]
-async fn test_progress_lines_alone_are_not_a_confirmation() {
-    let dir = std::env::temp_dir();
-    let (mut config, args) = fake_runoverlay(
-        &dir,
-        "echo Status: Waiting for league match to start&echo Status: Patching&ping -n 6 127.0.0.1 >nul",
-    );
-    config.hook_timeout = Duration::from_millis(700);
-
-    let config_timeout = config.hook_timeout;
-    let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+async fn test_arming_and_legacy_text_alone_are_not_a_confirmation() {
+    let budget = Duration::from_millis(700);
+    let (pipeline, mut overlay) = fake_host(
+        "progress",
+        &[
+            "echo status 0.01 injecting scanning for the game",
+            "echo Status: Waiting for exit",
+            "ping -n 6 127.0.0.1 >nul",
+        ],
+        budget,
+    )
+    .await;
 
     assert_eq!(
-        pipeline.confirm_hook(&mut overlay, config_timeout).await,
+        pipeline.confirm_hook(&mut overlay, budget).await,
         InjectionStatus::Unconfirmed,
-        "reaching 'Patching' is progress, not a hook"
+        "arming is progress, not a hook"
     );
     overlay.shutdown().await;
 }
 
 #[tokio::test]
 async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
-    let dir = std::env::temp_dir();
-    let (mut config, args) =
-        fake_runoverlay(&dir, "echo Status: Waiting for league match to start");
-    config.hook_timeout = Duration::from_secs(3);
-
-    let config_timeout = config.hook_timeout;
-    let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+    let budget = Duration::from_secs(5);
+    let (pipeline, mut overlay) = fake_host(
+        "dying",
+        &[
+            "echo status 0.01 injecting scanning for the game",
+            "ping -n 2 127.0.0.1 >nul",
+        ],
+        budget,
+    )
+    .await;
 
     assert!(
         matches!(
-            pipeline.confirm_hook(&mut overlay, config_timeout).await,
+            pipeline.confirm_hook(&mut overlay, budget).await,
             InjectionStatus::Failed { .. }
         ),
         "an overlay process that died cannot be reported as merely unconfirmed"
@@ -223,11 +238,7 @@ async fn test_overlay_dying_early_is_a_failure_not_an_unconfirmed() {
 
 #[tokio::test]
 async fn test_a_spent_late_budget_ends_unconfirmed() {
-    let dir = std::env::temp_dir();
-    let (config, args) = fake_runoverlay(&dir, "ping -n 4 127.0.0.1 >nul");
-
-    let pipeline = InjectionPipeline::new(config, None);
-    let mut overlay = OverlayProcess::spawn(&cmd_exe(), &args).expect("spawn fake");
+    let (pipeline, mut overlay) = fake_host("spent", &[STALL], Duration::from_secs(10)).await;
 
     let started = std::time::Instant::now();
     let status = pipeline.confirm_hook(&mut overlay, Duration::ZERO).await;
