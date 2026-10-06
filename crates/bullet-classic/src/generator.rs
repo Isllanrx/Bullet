@@ -1021,50 +1021,32 @@ pub fn champion_aliases(game_dir: &Path) -> Vec<String> {
     aliases
 }
 
-pub fn prewarm_companions<G>(game_dir: &Path, cache_dir: &Path, gate: G)
-where
-    G: Fn() -> PrewarmGate + Send + 'static,
-{
-    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if RUNNING.swap(true, std::sync::atomic::Ordering::AcqRel) {
-        return;
-    }
-    let game_dir = game_dir.to_path_buf();
-    let cache_dir = cache_dir.to_path_buf();
-    let spawned = std::thread::Builder::new()
-        .name("bullet-companion-prewarm".into())
-        .spawn(move || {
-            let started = std::time::Instant::now();
-            let aliases = champion_aliases(&game_dir);
-            let mut indexed = 0usize;
-            'champions: for alias in &aliases {
-                loop {
-                    match gate() {
-                        PrewarmGate::Go => break,
-                        PrewarmGate::Wait => std::thread::sleep(PREWARM_WAIT),
-                        PrewarmGate::Stop => break 'champions,
-                    }
-                }
-                match StandardChampion::open(&game_dir, alias) {
-                    Ok(champion) => {
-                        champion.with_cache_dir(&cache_dir).scanned_names(true);
-                        indexed += 1;
-                    }
-                    Err(e) => debug!(alias, error = %e, "Champion not indexed ahead of time"),
-                }
+pub fn prewarm_companions(game_dir: &Path, cache_dir: &Path, gate: impl Fn() -> PrewarmGate) {
+    let started = std::time::Instant::now();
+    let aliases = champion_aliases(game_dir);
+    let mut indexed = 0usize;
+    'champions: for alias in &aliases {
+        loop {
+            match gate() {
+                PrewarmGate::Go => break,
+                PrewarmGate::Wait => std::thread::sleep(PREWARM_WAIT),
+                PrewarmGate::Stop => break 'champions,
             }
-            info!(
-                champions = aliases.len(),
-                indexed,
-                elapsed_s = started.elapsed().as_secs(),
-                "Companion characters indexed ahead of champion select"
-            );
-            RUNNING.store(false, std::sync::atomic::Ordering::Release);
-        });
-    if let Err(e) = spawned {
-        RUNNING.store(false, std::sync::atomic::Ordering::Release);
-        warn!(error = %e, "Companion prewarm not started; each champion is indexed when picked");
+        }
+        match StandardChampion::open(game_dir, alias) {
+            Ok(champion) => {
+                champion.with_cache_dir(cache_dir).scanned_names(true);
+                indexed += 1;
+            }
+            Err(e) => debug!(alias, error = %e, "Champion not indexed ahead of time"),
+        }
     }
+    info!(
+        champions = aliases.len(),
+        indexed,
+        elapsed_s = started.elapsed().as_secs(),
+        "Companion characters indexed ahead of champion select"
+    );
 }
 
 #[derive(Debug)]
