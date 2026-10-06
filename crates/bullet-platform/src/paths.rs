@@ -106,11 +106,10 @@ fn install_path_from_settings(text: &str) -> Option<PathBuf> {
 
 #[must_use]
 pub fn discover_game_dir() -> Option<PathBuf> {
-    for exe in [
-        "League of Legends.exe",
-        "LeagueClientUx.exe",
-        "LeagueClient.exe",
-    ] {
+    for exe in crate::game_version::GAME_EXES
+        .into_iter()
+        .chain(["LeagueClientUx.exe", "LeagueClient.exe"])
+    {
         if let Ok(Some(path)) = crate::process::ProcessFinder::find_process_path(exe) {
             if let Some(valid) = path.parent().and_then(normalize_game_dir) {
                 return Some(valid);
@@ -123,18 +122,16 @@ pub fn discover_game_dir() -> Option<PathBuf> {
 }
 
 pub fn is_valid_game_dir(path: &Path) -> bool {
-    path.join("League of Legends.exe").is_file() && path.join("DATA").is_dir()
+    crate::game_version::game_exe(path).is_file() && path.join("DATA").is_dir()
 }
 
 pub fn normalize_game_dir(path: &Path) -> Option<PathBuf> {
     if is_valid_game_dir(path) {
         return Some(path.to_path_buf());
     }
-    let sub = path.join("Game");
-    if is_valid_game_dir(&sub) {
-        return Some(sub);
-    }
-    None
+    [path.join("Game"), path.with_file_name("Game")]
+        .into_iter()
+        .find(|candidate| is_valid_game_dir(candidate))
 }
 
 #[cfg(test)]
@@ -169,6 +166,26 @@ mod tests {
         if let Ok(install) = install_dir() {
             assert_eq!(candidates.first(), Some(&install.join("tools")));
         }
+    }
+
+    #[test]
+    fn test_a_wegame_install_with_sibling_folders_and_the_tm_executable_is_found() {
+        let temp = std::env::temp_dir().join(format!("bullet_test_wegame_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp); // ignore-ok: fixture may not exist yet
+        let client = temp.join("LeagueClient");
+        let game = temp.join("Game");
+        std::fs::create_dir_all(&client).expect("client dir");
+        std::fs::create_dir_all(game.join("DATA")).expect("game DATA");
+        std::fs::write(game.join("League of Legends (TM) Client.exe"), b"exe").expect("game exe");
+
+        assert!(is_valid_game_dir(&game));
+        assert_eq!(normalize_game_dir(&client), Some(game.clone()));
+        assert_eq!(
+            crate::game_version::game_exe(&game),
+            game.join("League of Legends (TM) Client.exe")
+        );
+
+        let _ = std::fs::remove_dir_all(&temp); // ignore-ok: cleanup fixture after test
     }
 
     #[test]

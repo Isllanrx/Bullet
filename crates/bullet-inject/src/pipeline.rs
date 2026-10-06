@@ -11,17 +11,17 @@ use crate::overlay_process::OverlayProcess;
 
 pub const DEFAULT_BUILD_TIMEOUT: Duration = Duration::from_secs(300);
 
-pub const GAME_PROCESS_NAME: &str = "League of Legends.exe";
-
 pub const SAFE_HOOK_WINDOW: Duration = Duration::from_secs(2);
 
 const LOADING_GAME_POLL: Duration = Duration::from_millis(500);
 
 #[must_use]
 pub fn game_already_loading() -> Option<(u32, Duration)> {
-    let pid = bullet_platform::process::ProcessFinder::find_process_by_name(GAME_PROCESS_NAME)
-        .ok()
-        .flatten()?;
+    let pid = bullet_platform::process::ProcessFinder::find_any_process(
+        &bullet_platform::game_version::GAME_EXES,
+    )
+    .ok()
+    .flatten()?;
     let age = bullet_platform::process::ProcessFinder::process_age(pid)?;
     (age > SAFE_HOOK_WINDOW).then_some((pid, age))
 }

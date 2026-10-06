@@ -6,7 +6,16 @@ use thiserror::Error;
 
 pub const GAME_PATCH_FILE: &str = "game_patch.json";
 
-pub const GAME_EXE: &str = "League of Legends.exe";
+pub const GAME_EXES: [&str; 2] = ["League of Legends.exe", "League of Legends (TM) Client.exe"];
+
+#[must_use]
+pub fn game_exe(game_dir: &Path) -> PathBuf {
+    GAME_EXES
+        .iter()
+        .map(|name| game_dir.join(name))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| game_dir.join(GAME_EXES[0]))
+}
 
 const DOS_HEADER_LEN: usize = 64;
 
@@ -116,7 +125,7 @@ pub fn save(state_dir: &Path, build: GameBuild) -> Result<(), GameVersionError> 
 }
 
 pub fn check(state_dir: &Path, game_dir: &Path) -> Result<BuildCheck, GameVersionError> {
-    let current = read_time_date_stamp(&game_dir.join(GAME_EXE))?;
+    let current = read_time_date_stamp(&game_exe(game_dir))?;
     let previous = match load(state_dir) {
         Ok(previous) => previous,
         Err(GameVersionError::Malformed { .. }) => None,
@@ -255,7 +264,7 @@ mod tests {
     fn test_the_build_is_recorded_then_compared() {
         let state = temp_dir("state");
         let game = temp_dir("game");
-        std::fs::write(game.join(GAME_EXE), synthetic_pe(STAMP)).expect("game exe");
+        std::fs::write(game.join(GAME_EXES[0]), synthetic_pe(STAMP)).expect("game exe");
 
         assert_eq!(
             check(&state, &game).expect("first"),
@@ -266,7 +275,7 @@ mod tests {
             BuildCheck::Unchanged { stamp: STAMP }
         );
 
-        std::fs::write(game.join(GAME_EXE), synthetic_pe(STAMP + 1)).expect("patched exe");
+        std::fs::write(game.join(GAME_EXES[0]), synthetic_pe(STAMP + 1)).expect("patched exe");
         assert_eq!(
             check(&state, &game).expect("after patch"),
             BuildCheck::Changed {
@@ -290,7 +299,7 @@ mod tests {
         let state = temp_dir("malformed");
         let game = temp_dir("malformed_game");
         std::fs::write(state.join(GAME_PATCH_FILE), b"{not json").expect("record");
-        std::fs::write(game.join(GAME_EXE), synthetic_pe(STAMP)).expect("game exe");
+        std::fs::write(game.join(GAME_EXES[0]), synthetic_pe(STAMP)).expect("game exe");
 
         assert!(matches!(
             load(&state),
