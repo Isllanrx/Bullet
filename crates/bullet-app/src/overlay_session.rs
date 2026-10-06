@@ -602,8 +602,8 @@ impl OverlaySession {
             bullet_platform::dialog::pick_file(
                 owner,
                 title,
-                "Mods (*.fantome, *.zip)",
-                "*.fantome;*.zip",
+                "Mods (*.fantome, *.zip, *.modpkg)",
+                "*.fantome;*.zip;*.modpkg",
             )
         })
         .await;

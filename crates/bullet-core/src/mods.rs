@@ -169,9 +169,11 @@ fn child_dir_ci(dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 fn is_archive(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("fantome") || e.eq_ignore_ascii_case("zip"))
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        ["fantome", "zip", "modpkg"]
+            .iter()
+            .any(|ext| e.eq_ignore_ascii_case(ext))
+    })
 }
 
 fn read_description(path: &Path, package: ModPackage) -> Option<String> {

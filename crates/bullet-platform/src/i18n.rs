@@ -338,7 +338,7 @@ static PORTUGUESE: Text = Text {
 
     import_title: "Bullet — importar mod",
     import_refused: "O arquivo não foi importado:\n{reason}",
-    import_unsupported_extension: "só é possível importar mods .fantome e .zip",
+    import_unsupported_extension: "só é possível importar mods .fantome, .zip e .modpkg",
     import_not_a_mod: "não é um pacote de mod ({error})",
     import_no_manifest: "falta o manifesto META/info.json",
     import_no_content: "o pacote não tem conteúdo em WAD/ nem em RAW/",
@@ -474,7 +474,7 @@ static SPANISH: Text = Text {
 
     import_title: "Bullet — importar mod",
     import_refused: "El archivo no se importó:\n{reason}",
-    import_unsupported_extension: "solo se pueden importar mods .fantome y .zip",
+    import_unsupported_extension: "solo se pueden importar mods .fantome, .zip y .modpkg",
     import_not_a_mod: "no es un paquete de mod ({error})",
     import_no_manifest: "falta el manifiesto META/info.json",
     import_no_content: "el paquete no tiene contenido en WAD/ ni en RAW/",
@@ -609,7 +609,7 @@ static ENGLISH: Text = Text {
 
     import_title: "Bullet — import mod",
     import_refused: "The file was not imported:\n{reason}",
-    import_unsupported_extension: "only .fantome and .zip mods can be imported",
+    import_unsupported_extension: "only .fantome, .zip and .modpkg mods can be imported",
     import_not_a_mod: "not a mod package ({error})",
     import_no_manifest: "the META/info.json manifest is missing",
     import_no_content: "the package has no WAD/ or RAW/ content",

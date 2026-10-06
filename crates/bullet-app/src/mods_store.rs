@@ -53,7 +53,9 @@ fn report_misplaced(own: &Path) {
             let path = entry.path();
             let is_archive = path.is_file()
                 && path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-                    e.eq_ignore_ascii_case("fantome") || e.eq_ignore_ascii_case("zip")
+                    ["fantome", "zip", "modpkg"]
+                        .iter()
+                        .any(|ext| e.eq_ignore_ascii_case(ext))
                 });
             is_archive || (path.is_dir() && is_valid_mod_dir(&path))
         })
@@ -74,6 +76,13 @@ pub fn targeted_aliases(entry: &ModEntry) -> BTreeSet<String> {
     use bullet_wad::fantome::{wad_mount_alias, wad_name_in_path, wad_names_in_archive};
 
     let names = match entry.package {
+        ModPackage::Archive if is_modpkg_file(&entry.path) => match read_modpkg(&entry.path) {
+            Ok(package) => package.wad_names(),
+            Err(e) => {
+                debug!(mod_path = %entry.path.display(), error = %e, "Mod package could not be listed");
+                BTreeSet::new()
+            }
+        },
         ModPackage::Archive => match std::fs::File::open(&entry.path) {
             Ok(file) => match wad_names_in_archive(std::io::BufReader::new(file)) {
                 Ok(names) => names,
@@ -220,7 +229,9 @@ pub enum ImportRefusal {
 impl std::fmt::Display for ImportRefusal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnsupportedExtension => write!(f, "only .fantome and .zip mods can be imported"),
+            Self::UnsupportedExtension => {
+                write!(f, "only .fantome, .zip and .modpkg mods can be imported")
+            }
             Self::NotAModPackage(e) => write!(f, "not a mod package: {e}"),
             Self::NoManifest => write!(f, "missing META/info.json manifest"),
             Self::NoContent => write!(f, "the package has no WAD/ or RAW/ content"),
@@ -260,26 +271,35 @@ pub fn import_archive(
         .extension()
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase)
-        .filter(|e| e == "fantome" || e == "zip")
+        .filter(|e| e == "fantome" || e == "zip" || e == "modpkg")
         .ok_or(ImportRefusal::UnsupportedExtension)?;
 
     let open = || {
         std::fs::File::open(source)
             .map_err(|e| ImportRefusal::Io(format!("cannot open the file: {e}")))
     };
-    let shape = bullet_wad::fantome::mod_archive_shape(open()?)
-        .map_err(|e| ImportRefusal::NotAModPackage(e.to_string()))?;
-    if !shape.manifest {
-        return Err(ImportRefusal::NoManifest);
-    }
-    if !shape.content {
-        return Err(ImportRefusal::NoContent);
+    let modpkg = extension == "modpkg";
+    if modpkg {
+        let package =
+            read_modpkg(source).map_err(|e| ImportRefusal::NotAModPackage(e.to_string()))?;
+        if package.wad_names().is_empty() {
+            return Err(ImportRefusal::NoContent);
+        }
+    } else {
+        let shape = bullet_wad::fantome::mod_archive_shape(open()?)
+            .map_err(|e| ImportRefusal::NotAModPackage(e.to_string()))?;
+        if !shape.manifest {
+            return Err(ImportRefusal::NoManifest);
+        }
+        if !shape.content {
+            return Err(ImportRefusal::NoContent);
+        }
     }
 
     let mut dir = own_root.join(category.folder());
     if category == ModCategory::Skin {
-        let names_a_champion =
-            bullet_wad::fantome::wad_names_in_archive(std::io::BufReader::new(open()?))
+        let names_a_champion = modpkg
+            || bullet_wad::fantome::wad_names_in_archive(std::io::BufReader::new(open()?))
                 .map(|names| !names.is_empty())
                 .unwrap_or(false);
         if !names_a_champion {
@@ -369,6 +389,45 @@ fn archive_stamp(path: &Path) -> String {
     }
 }
 
+fn is_modpkg_file(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 8];
+    std::fs::File::open(path).is_ok_and(|mut file| file.read_exact(&mut head).is_ok())
+        && bullet_wad::modpkg::is_modpkg(&head)
+}
+
+fn read_modpkg(path: &Path) -> Result<bullet_wad::modpkg::ModPkg, bullet_wad::error::WadError> {
+    let file = std::fs::File::open(path).map_err(|source| bullet_wad::error::WadError::FileIo {
+        path: path.display().to_string(),
+        source,
+    })?;
+    bullet_wad::modpkg::ModPkg::read_index(std::io::BufReader::new(file))
+}
+
+fn unpack_modpkg(path: &Path, name: &str, into: &Path) -> Result<usize, String> {
+    let failed = |e: &dyn std::fmt::Display| format!("mod package '{}': {e}", path.display());
+    let package = read_modpkg(path).map_err(|e| failed(&e))?;
+    let file = std::fs::File::open(path).map_err(|e| failed(&e))?;
+    let wads = package
+        .base_wads(std::io::BufReader::new(file))
+        .map_err(|e| failed(&e))?;
+    let wad_dir = into.join("WAD");
+    std::fs::create_dir_all(&wad_dir).map_err(|e| failed(&e))?;
+    std::fs::create_dir_all(into.join("META")).map_err(|e| failed(&e))?;
+    let manifest = serde_json::json!({ "Name": name }).to_string();
+    std::fs::write(into.join("META").join("info.json"), manifest).map_err(|e| failed(&e))?;
+    for (stem, entries) in &wads {
+        let mut writer = bullet_wad::WadWriter::default();
+        for (hash, entry) in entries {
+            writer.insert(*hash, entry.clone());
+        }
+        let bytes = writer.to_bytes().map_err(|e| failed(&e))?;
+        std::fs::write(wad_dir.join(format!("{stem}.wad.client")), bytes)
+            .map_err(|e| failed(&e))?;
+    }
+    Ok(wads.len() + 1)
+}
+
 fn stage_one(entry: &ModEntry, mods_dir: &Path) -> Result<String, String> {
     match entry.package {
         ModPackage::Directory => {
@@ -408,11 +467,14 @@ fn stage_one(entry: &ModEntry, mods_dir: &Path) -> Result<String, String> {
                     .map_err(|e| format!("could not clear '{}': {e}", dst.display()))?;
             }
 
-            let file = std::fs::File::open(&entry.path)
-                .map_err(|e| format!("could not open '{}': {e}", entry.path.display()))?;
-            let files =
+            let files = if is_modpkg_file(&entry.path) {
+                unpack_modpkg(&entry.path, &entry.name, &partial)?
+            } else {
+                let file = std::fs::File::open(&entry.path)
+                    .map_err(|e| format!("could not open '{}': {e}", entry.path.display()))?;
                 safe_extract_zip(std::io::BufReader::new(file), &partial, &CUSTOM_MOD_LIMITS)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| e.to_string())?
+            };
 
             if !is_valid_mod_dir(&partial) {
                 // ignore-ok: removing our own rejected extraction; the refusal itself is returned.

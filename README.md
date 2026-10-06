@@ -92,8 +92,9 @@ scratch in Rust with one goal: the skin you chose is the skin you get in every g
   champion.
 - **Skins you own keep their name.** An owned skin is registered with the client, so your loading card shows
   its real name.
-- **Custom mods.** `.fantome` mods in ten categories (skins, maps, fonts, announcers, UI, voiceover, loading
-  screens, VFX, SFX, others), checked against the current patch before use.
+- **Custom mods.** `.fantome`, `.zip` and `.modpkg` mods (the files RuneForge and DivineSkins offer) in ten
+  categories (skins, maps, fonts, announcers, UI, voiceover, loading screens, VFX, SFX, others), checked against
+  the current patch before use. A mod made for an older patch gets its outdated property types converted.
 - **Classic Rift.** Legacy champion models, generated from your installed game.
 - **Party mode.** Friends on your team see each other's skins, through an end-to-end encrypted relay.
 - **Always up to date.** Skins are generated from the game you have installed, so a patch never leaves you with
@@ -257,7 +258,8 @@ Windows.
 
 ### Custom mods
 
-Drop `.fantome` mods into the category folders under `%LOCALAPPDATA%\Bullet\custom_mods`. The categories are
+Drop `.fantome`, `.zip` or `.modpkg` mods into the category folders under `%LOCALAPPDATA%\Bullet\custom_mods`,
+or import them from the **Mods** tab. The categories are
 `skins`, `maps`, `fonts`, `announcers`, `ui`, `voiceover`, `loading_screen`, `vfx`, `sfx` and `others`. Then
 select them in the **Mods** tab of Bullet's window. You can pick at most one skin, one map, one font and one
 announcer at a time. The other categories can be combined.
