@@ -19,6 +19,12 @@ export struct SkinCard {
     chromas: [ChromaGem],
 }
 
+export struct LobbyChoice {
+    id: int,
+    name: string,
+    active: bool,
+}
+
 export struct SkinRow {
     cards: [SkinCard],
 }
@@ -48,12 +54,17 @@ export struct OverlayLabels {
     tab-mods: string,
     historic-tag: string,
     random-tag: string,
+    preset-tag: string,
+    pin: string,
+    unpin: string,
+    profile-new: string,
+    profile-delete: string,
     connected: string,
     import-mod: string,
     open-folder: string,
 }
 
-export enum SelectionOrigin { none, historic, random }
+export enum SelectionOrigin { none, historic, random, preset }
 
 component Chamfer inherits Path {
     in property <length> cut: 9px;
@@ -205,7 +216,7 @@ component Card inherits Rectangle {
                         padding-top: 1px;
                         padding-bottom: 1px;
                         Text {
-                            text: (root.origin == SelectionOrigin.historic ? root.labels.historic-tag : root.labels.random-tag).to-uppercase();
+                            text: (root.origin == SelectionOrigin.historic ? root.labels.historic-tag : root.origin == SelectionOrigin.preset ? root.labels.preset-tag : root.labels.random-tag).to-uppercase();
                             color: Theme.gold;
                             font-size: Theme.text-xs;
                             letter-spacing: 0.4px;
@@ -384,6 +395,46 @@ component HeaderButton inherits Rectangle {
     accessible-action-default => { root.clicked(); }
 }
 
+component PinButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 30px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: root.active ? Theme.gold : touch.has-hover && root.enabled ? Theme.gold-dim : Theme.control-line;
+    background: root.active ? Theme.gold.with-alpha(0.18) : Theme.panel;
+    opacity: root.enabled ? 1 : 0.45;
+    animate border-color { duration: 120ms; }
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 13px;
+        height: 13px;
+        viewbox-width: 13;
+        viewbox-height: 13;
+        stroke: root.active ? Theme.gold-bright : Theme.muted;
+        stroke-width: 1.3px;
+        fill: root.active ? Theme.gold : transparent;
+        commands: "M 4 1 L 9 1 L 8 5 L 10.5 7.5 L 2.5 7.5 L 5 5 Z M 6.5 7.5 L 6.5 12.5";
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.active;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+}
+
 component Dice inherits Rectangle {
     in property <string> label;
     callback clicked();
@@ -431,6 +482,12 @@ export component OverlayWindow inherits Window {
     in property <bool> has-portrait;
     in property <string> portrait-initial;
     in property <string> notice;
+    in property <[LobbyChoice]> lobby-champions;
+    in property <[string]> profiles;
+    in-out property <int> profile-index;
+    in property <bool> pinned;
+    in property <bool> can-pin;
+    in property <bool> can-delete-profile;
     in property <bool> mods-tab;
     in property <string> mods-count;
     in property <[SkinRow]> rows;
@@ -462,6 +519,11 @@ export component OverlayWindow inherits Window {
     callback import-mod(int);
     callback open-mods-folder();
     callback gem-hovered(ChromaGem, length, length, bool);
+    callback focus-champion(int);
+    callback pin-clicked();
+    callback profile-chosen(int);
+    callback profile-added();
+    callback profile-removed();
     callback columns-changed(int);
     callback scrolled();
     callback drag();
@@ -615,6 +677,47 @@ export component OverlayWindow inherits Window {
                 count: root.mods-count;
                 active: root.mods-tab;
                 clicked => { root.show-tab(true); }
+            }
+        }
+        if !root.mods-tab: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            ComboBox {
+                model: root.profiles;
+                current-index <=> root.profile-index;
+                horizontal-stretch: 1;
+                selected => { root.profile-chosen(self.current-index); }
+            }
+            PinButton {
+                label: root.pinned ? root.labels.unpin : root.labels.pin;
+                active: root.pinned;
+                enabled: root.can-pin;
+                clicked => { root.pin-clicked(); }
+            }
+            HeaderButton {
+                label: root.labels.profile-new;
+                icon: "M 5.5 1 L 5.5 10 M 1 5.5 L 10 5.5";
+                clicked => { root.profile-added(); }
+            }
+            if root.can-delete-profile: HeaderButton {
+                label: root.labels.profile-delete;
+                icon: "M 1 2.5 L 10 2.5 M 4 2.5 L 4 1 L 7 1 L 7 2.5 M 2 2.5 L 2.8 10 L 8.2 10 L 9 2.5";
+                clicked => { root.profile-removed(); }
+            }
+        }
+        if root.lobby-champions.length > 1: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            for choice in root.lobby-champions: Tab {
+                text: choice.name;
+                active: choice.active;
+                clicked => { root.focus-champion(choice.id); }
             }
         }
         if root.notice != "": HorizontalLayout {

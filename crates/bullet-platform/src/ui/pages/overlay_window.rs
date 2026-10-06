@@ -5,7 +5,7 @@ use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 
 use bullet_core::mods::ModSelectionView;
-use bullet_core::overlay::{Catalog, ModsPanel, OverlayCommand, SelectionOrigin};
+use bullet_core::overlay::{Catalog, ModsPanel, OverlayCommand, PresetsView, SelectionOrigin};
 use slint::winit_030::{WinitWindowAccessor, winit};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -17,7 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use super::overlay_model as model;
 use super::runtime;
-use super::views::{self, ChromaGem, OverlayLabels, SkinCard, SkinRow};
+use super::views::{self, ChromaGem, LobbyChoice, OverlayLabels, SkinCard, SkinRow};
 use crate::client_window::{
     ClientWindowState, WindowRect, client_window_state, overlay_placement, overlay_placement_on,
 };
@@ -62,6 +62,7 @@ struct Overlay {
     tiles: HashMap<u32, slint::Image>,
     previews: HashMap<u32, slint::Image>,
     preview_for: Option<u32>,
+    presets: PresetsView,
     expanded: Option<slint::LogicalSize>,
 }
 
@@ -117,6 +118,14 @@ impl OverlayController {
         self.post(move |overlay| {
             overlay.selected = entry_id;
             overlay.origin = entry_id.and(origin);
+            overlay.render_selection();
+        });
+    }
+
+    pub fn set_presets(&self, presets: PresetsView) {
+        self.post(move |overlay| {
+            overlay.presets = presets;
+            overlay.render_presets();
             overlay.render_selection();
         });
     }
@@ -310,6 +319,26 @@ fn wire(view: &views::OverlayWindow) {
             }
         });
     });
+    view.on_pin_clicked(|| with_overlay(|overlay| overlay.send(OverlayCommand::TogglePreset)));
+    view.on_profile_chosen(|index| {
+        with_overlay(|overlay| {
+            let name = usize::try_from(index)
+                .ok()
+                .and_then(|index| overlay.presets.profiles.get(index).cloned());
+            if let Some(name) = name {
+                overlay.send(OverlayCommand::SetProfile { name });
+            }
+        });
+    });
+    view.on_profile_added(|| with_overlay(|overlay| overlay.send(OverlayCommand::NewProfile)));
+    view.on_profile_removed(|| {
+        with_overlay(|overlay| overlay.send(OverlayCommand::DeleteProfile));
+    });
+    view.on_focus_champion(|id| {
+        if let Ok(id) = u32::try_from(id) {
+            with_overlay(|overlay| overlay.send(OverlayCommand::FocusChampion { id }));
+        }
+    });
     view.on_scrolled(|| with_overlay(Overlay::hide_preview));
     view.on_columns_changed(|columns| {
         with_overlay(|overlay| {
@@ -366,6 +395,7 @@ impl Overlay {
             tiles: HashMap::new(),
             previews: HashMap::new(),
             preview_for: None,
+            presets: PresetsView::default(),
             expanded: None,
         }
     }
@@ -468,6 +498,11 @@ impl Overlay {
             tab_mods: text.overlay_tab_mods.into(),
             historic_tag: text.overlay_historic_tag.into(),
             random_tag: text.overlay_random_tag.into(),
+            preset_tag: text.overlay_preset_tag.into(),
+            pin: text.overlay_pin.into(),
+            unpin: text.overlay_unpin.into(),
+            profile_new: text.overlay_profile_new.into(),
+            profile_delete: text.overlay_profile_delete.into(),
             connected: text.overlay_connected.into(),
             import_mod: text.overlay_import_mod.into(),
             open_folder: text.overlay_open_folder.into(),
@@ -496,6 +531,16 @@ impl Overlay {
             .set_portrait(portrait.cloned().unwrap_or_default());
         self.view
             .set_notice(model::notice(&self.catalog, text).into());
+        let choices: Vec<LobbyChoice> = model::lobby_choices(&self.catalog)
+            .into_iter()
+            .map(|(id, name, active)| LobbyChoice {
+                id: i32::try_from(id).unwrap_or(-1),
+                name: name.into(),
+                active,
+            })
+            .collect();
+        self.view
+            .set_lobby_champions(ModelRc::new(VecModel::from(choices)));
         let (footer, quote) =
             model::footer(&self.catalog, self.language == Language::Portuguese, text);
         self.view.set_footer_right(footer.into());
@@ -571,6 +616,9 @@ impl Overlay {
 
     fn render_selection(&self) {
         let to_int = |id: Option<u32>| id.and_then(|id| i32::try_from(id).ok()).unwrap_or(-1);
+        self.view.set_can_pin(self.selected.is_some());
+        self.view
+            .set_pinned(self.selected.is_some() && self.presets.preset_entry == self.selected);
         self.view.set_selected_id(to_int(self.selected));
         self.view.set_selected_skin(to_int(
             self.selected
@@ -579,8 +627,23 @@ impl Overlay {
         self.view.set_origin(match self.origin {
             Some(SelectionOrigin::Historic) => views::SelectionOrigin::Historic,
             Some(SelectionOrigin::Random) => views::SelectionOrigin::Random,
+            Some(SelectionOrigin::Preset) => views::SelectionOrigin::Preset,
             None => views::SelectionOrigin::None,
         });
+    }
+
+    fn render_presets(&self) {
+        let text = self.text();
+        let names: Vec<SharedString> = self
+            .presets
+            .profiles
+            .iter()
+            .map(|name| model::profile_label(name, text).into())
+            .collect();
+        self.view.set_profiles(ModelRc::new(VecModel::from(names)));
+        self.view
+            .set_profile_index(i32::try_from(self.presets.active).unwrap_or(0));
+        self.view.set_can_delete_profile(self.presets.active > 0);
     }
 
     fn show_preview(&mut self, gem: &ChromaGem, x: f32, y: f32) {

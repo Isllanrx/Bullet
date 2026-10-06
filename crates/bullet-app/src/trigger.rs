@@ -155,7 +155,7 @@ impl InjectionTrigger {
                             "Game entered in-game phase; completing the injection"
                         );
                         active_overlay = self.handle_game_start(&state, armed.take(), &token).await;
-                    } else if state.phase.is_champ_select() && !injected_session {
+                    } else if (state.phase.is_champ_select() || arms_in_lobby(&state)) && !injected_session {
                         let wanted = wanted_skin(&state);
 
                         let current = armed
@@ -183,7 +183,7 @@ impl InjectionTrigger {
                             }
                         }
 
-                        let divergence = armed.as_ref().and_then(|a| {
+                        let divergence = armed.as_ref().filter(|a| !a.key.lobby).and_then(|a| {
                             let registered = a.lcu_skin?;
                             let live = state.selected_skin_id?;
                             (live != registered && lcu_divergence_seen != Some(live))
@@ -271,12 +271,16 @@ impl InjectionTrigger {
             champ_id,
             entry_id,
             mods,
+            second,
+            lobby,
             ..
         } = key;
 
         info!(
             champ_id,
             entry_id = ?entry_id,
+            second = ?second,
+            lobby,
             mods_fingerprint = mods,
             "Preparing the overlay for the chosen skin and mods, before the game starts"
         );
@@ -284,6 +288,10 @@ impl InjectionTrigger {
         let registration = async {
             match entry_id {
                 Some(_) if is_classic(champ_id) => None,
+                Some(_) if lobby => {
+                    self.register_in_lobby(&key.picks()).await;
+                    None
+                }
                 Some(entry_id) => self.register_in_champ_select(champ_id, entry_id).await,
                 None => None,
             }
@@ -406,13 +414,14 @@ impl InjectionTrigger {
 
         let (champion_id, live_skin_id) = self.reread_selection(state).await;
 
-        let (target, mods, party) = {
+        let (target, mods, party, lobby) = {
             let state = self.state_rx.borrow();
             let (party, _) = party_skins(&state);
             (
                 state.overlay_target.clone(),
                 state.mods.clone(),
                 bullet_core::party::party_fingerprint(&party),
+                state.lobby.clone(),
             )
         };
 
@@ -430,6 +439,28 @@ impl InjectionTrigger {
             }
             Self::release(armed).await;
             return None;
+        };
+
+        let armed_in_lobby = armed
+            .as_ref()
+            .map(|a| a.key)
+            .filter(|key| key.lobby && key.covers(champ_id));
+        if let Some(armed_key) = armed_in_lobby {
+            info!(
+                champ_id,
+                entry_id = ?armed_key.entry_for(champ_id),
+                armed_for = ?armed_key.picks(),
+                "Injecting the skin picked in the lobby for the champion this match gave"
+            );
+            bullet_core::state::focus_lobby_champion(&self.state_tx, champ_id);
+            if let Some(armed) = armed {
+                return self.confirm_armed(armed, champ_id, started_at).await;
+            }
+        }
+
+        let target = match &lobby {
+            Some(lobby) => lobby.target_for(champ_id).cloned().or(target),
+            None => target,
         };
 
         let entry_id = match &target {
@@ -515,7 +546,7 @@ impl InjectionTrigger {
 
         info!(
             champ_id,
-            entry_id = armed.key.entry_id,
+            entry_id = ?armed.key.entry_for(champ_id),
             status = ?status,
             armed_before_game = armed.armed_before_game,
             registered_lcu_skin = ?armed.lcu_skin,
@@ -640,6 +671,31 @@ impl InjectionTrigger {
         }
     }
 
+    async fn register_in_lobby(&self, picks: &[(u32, u32)]) {
+        let Some(client) = self.lcu_client().await else {
+            return;
+        };
+        let owned = match client.get_owned_skin_ids().await {
+            Ok(owned) => owned,
+            Err(e) => {
+                warn!(error = %e, "Owned skins unavailable; registering the base skins in the lobby");
+                std::collections::HashSet::new()
+            }
+        };
+        let skins: Vec<(u32, u32)> = picks
+            .iter()
+            .map(|&(champ_id, entry_id)| {
+                (
+                    champ_id,
+                    bullet_lcu::skin_registration::skin_to_register(champ_id, entry_id, &owned),
+                )
+            })
+            .collect();
+        if let Err(e) = client.set_lobby_slot_skins(&skins).await {
+            warn!(error = %e, skins = ?skins, "Could not register the skins in the lobby slots");
+        }
+    }
+
     async fn lcu_client(&self) -> Option<bullet_lcu::client::LcuClient> {
         bullet_lcu::client::LcuClient::discover()
             .await
@@ -719,6 +775,40 @@ struct ArmKey {
     classic_slot: Option<u32>,
 
     party: u64,
+
+    second: Option<(u32, u32)>,
+
+    lobby: bool,
+}
+
+impl ArmKey {
+    fn covers(&self, champ_id: u32) -> bool {
+        self.champ_id == champ_id || self.second.is_some_and(|(second, _)| second == champ_id)
+    }
+
+    fn entry_for(&self, champ_id: u32) -> Option<u32> {
+        if champ_id == self.champ_id {
+            self.entry_id
+        } else {
+            self.second
+                .filter(|(second, _)| *second == champ_id)
+                .map(|(_, entry_id)| entry_id)
+        }
+    }
+
+    fn picks(&self) -> Vec<(u32, u32)> {
+        self.entry_id
+            .map(|entry_id| (self.champ_id, entry_id))
+            .into_iter()
+            .chain(self.second)
+            .collect()
+    }
+}
+
+fn lobby_mods_fingerprint(mods: &bullet_core::mods::ModSelection, champions: &[u32]) -> u64 {
+    champions.iter().fold(0, |hash, champion| {
+        hash.rotate_left(7) ^ mods.fingerprint(Some(*champion))
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -772,6 +862,42 @@ fn build_key(
         mods,
         classic_slot,
         party,
+        second: None,
+        lobby: false,
+    })
+}
+
+fn arms_in_lobby(state: &bullet_core::state::AppState) -> bool {
+    state.lobby.is_some() && state.phase.is_before_champ_select()
+}
+
+fn lobby_arm_key(state: &bullet_core::state::AppState) -> Option<ArmKey> {
+    let lobby = state.lobby.as_ref()?;
+    let mut chosen = lobby
+        .chosen_in_slot_order()
+        .into_iter()
+        .map(|target| (target.champion_id, target.package_entry_id()))
+        .filter(|&(champ_id, entry_id)| {
+            !is_classic(champ_id) && !bullet_core::selection::is_base_skin(entry_id, champ_id)
+        });
+    let first = chosen.next();
+    let second = chosen.next();
+    let champions = lobby.champions();
+    let champ_id = first
+        .map(|(champ_id, _)| champ_id)
+        .or_else(|| champions.first().copied())?;
+    let mods = lobby_mods_fingerprint(&state.mods, &champions);
+    if first.is_none() && mods == 0 {
+        return None;
+    }
+    Some(ArmKey {
+        champ_id,
+        entry_id: first.map(|(_, entry)| entry),
+        mods,
+        classic_slot: None,
+        party: 0,
+        second,
+        lobby: true,
     })
 }
 
@@ -825,6 +951,12 @@ enum WantedSkin {
 }
 
 fn wanted_skin(state: &bullet_core::state::AppState) -> WantedSkin {
+    if arms_in_lobby(state) {
+        return match lobby_arm_key(state) {
+            Some(key) => WantedSkin::Skin(key),
+            None => WantedSkin::Nothing,
+        };
+    }
     let Some(champ_id) = state.champion_id else {
         let nothing_at_all = state.overlay_target.is_none() && state.mods.fingerprint(None) == 0;
         return if nothing_at_all {

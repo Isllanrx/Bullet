@@ -121,6 +121,11 @@ pub(crate) fn empty_texts(catalog: &Catalog, search: &str, text: &Text) -> (Stri
             text.overlay_no_results_big.to_owned(),
             fill(text.overlay_no_results_sub, "term", search),
         )
+    } else if catalog.notice == Some(CatalogNotice::LobbyWaiting) {
+        (
+            text.overlay_lobby_waiting_big.to_owned(),
+            text.overlay_lobby_waiting_sub.to_owned(),
+        )
     } else if !catalog.champion_name.is_empty() {
         (
             fill(
@@ -153,8 +158,36 @@ pub(crate) fn footer(catalog: &Catalog, portuguese: bool, text: &Text) -> (Strin
 pub(crate) fn notice(catalog: &Catalog, text: &Text) -> &'static str {
     match catalog.notice {
         Some(CatalogNotice::ToolsMissing) => text.overlay_tools_missing,
-        None => "",
+        Some(CatalogNotice::LobbyChampions) => text.overlay_lobby_champions,
+        Some(CatalogNotice::LobbyWaiting) | None => "",
     }
+}
+
+#[must_use]
+pub(crate) fn profile_label(name: &str, text: &Text) -> String {
+    if name == bullet_core::presets::DEFAULT_PROFILE {
+        text.overlay_profile_default.to_owned()
+    } else {
+        name.to_owned()
+    }
+}
+
+#[must_use]
+pub(crate) fn lobby_choices(catalog: &Catalog) -> Vec<(u32, String, bool)> {
+    if catalog.lobby.len() < 2 {
+        return Vec::new();
+    }
+    catalog
+        .lobby
+        .iter()
+        .map(|champion| {
+            (
+                champion.id,
+                champion.name.clone(),
+                champion.id == catalog.champion_id,
+            )
+        })
+        .collect()
 }
 
 #[must_use]

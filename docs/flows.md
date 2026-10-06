@@ -6,7 +6,8 @@
 Client enters champion select
   └─ bullet-lcu publishes the phase and the team roster
      └─ the selection window opens next to the client; the player picks a skin
-        · the last skin used on that champion is restored when nothing else is chosen
+        · when nothing else is chosen, the champion's preset in the active profile is restored, or else
+          the last skin used on it
         · when the champion locks in (finalization) with no skin chosen, no skin picked in the client and
           no explicit "Clear", a random skin is rolled (control panel option, on by default)
         └─ the trigger settles the choice (100 ms for the first pick, 900 ms after a change)
@@ -46,6 +47,52 @@ next one (a reconnect) instead; the late path leaves the match with the default 
 from the skin id the server received. The client refuses to register a skin you do not own, so the card
 shows the champion's default name while the skin's art still loads from the overlay. Showing the skin's name
 would require writing to game memory, which Bullet deliberately does not do.
+
+### Modes where champions are picked in the lobby
+
+Swiftplay (queue 480), Quickplay (490) and Brawl have no champion select: the player picks a champion for each
+position in the lobby and the match starts straight after the queue pops. Bullet recognises them by the queue id
+(480, 490) or the game mode (`SWIFTPLAY`, `BRAWL`) the lobby reports; player slots left over in another queue
+never turn a draft or ARAM lobby into one. A lobby's picks are kept through the match even when the client deletes
+the lobby as the game starts, and dropped between matches.
+
+```text
+Client opens a lobby that picks champions
+  └─ bullet-lcu publishes the queue and the champions in the player slots (lobby events, and a read on connect)
+     └─ the selection window opens with the lobby, before any queue
+        · no champion yet: it says to pick them in the lobby
+        · two champions: one tab each; a skin is kept per champion, and saved skins are restored for both
+        └─ the trigger arms one patcher with the skins of both champions, already in the lobby
+           └─ each skin is registered in its player slot (owned as itself, unowned as the default)
+Queue pops, match starts
+  └─ the live champion is read from the gameflow session
+     └─ the armed patcher covers it, whichever position the match gave; its skin loads
+```
+
+### Saved skins: presets, profiles and history
+
+| Source | Set by | Restored when |
+| --- | --- | --- |
+| Preset | The pin button next to the search box, for the chosen skin | Champion select or lobby, nothing chosen and the default skin in the client |
+| History | Every confirmed injection | Same, when the champion has no preset in the active profile |
+| Random | The dice, or the control panel option at lock-in | Lock-in (or queueing in a lobby mode) with nothing chosen |
+
+A profile is a named set of presets (for example one for ranked and one for fun). The profile row lists them with
+the default first; the plus button creates an empty one and switches to it, and the bin deletes the active one.
+Switching profiles replaces a skin that was restored automatically; a skin picked by hand stays. Presets live in
+`state\presets.json`, history in `state\historic.json`.
+
+### Game modes
+
+Every mode with a champion select (draft, blind, ranked, ARAM and its variants, Arena, URF, ARURF, One for All,
+Ultimate Spellbook, Nexus Blitz, co-op, custom, Practice Tool) uses the flow above. Swarm also has a champion
+select, but whether its champions load the regular champion archives could not be checked while the mode is out
+of rotation (the game ships a mode's map only while it is live). The local player is
+found by their cell, so Arena's duos and One for All's shared pick are handled, and a champion changed after
+lock-in (ARAM bench, One for All) drops the old skin and restores the new champion's. Paths that a map archive
+holds are changed in whichever map the installed game ships (Summoner's Rift, Howling Abyss, Arena and rotating
+maps alike). The `Lobby queue` log line records each queue's id, game mode and map, which is what proves a mode
+in a real match.
 
 ## 2. Custom mods
 

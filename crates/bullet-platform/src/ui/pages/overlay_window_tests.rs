@@ -104,6 +104,7 @@ fn catalog() -> Catalog {
         mods,
         notice: None,
         classic: false,
+        lobby: Vec::new(),
     }
 }
 
@@ -425,4 +426,103 @@ fn minimizing_folds_the_window_to_its_header_and_restoring_brings_the_size_back(
     press(&view, text.overlay_restore);
     assert!(!view.get_collapsed());
     assert_eq!(view.window().size(), before);
+}
+
+#[test]
+fn a_lobby_with_two_champions_offers_a_tab_for_each_and_switching_asks_for_it() {
+    let (view, mut commands) = open_overlay();
+    let mut lobby = catalog();
+    lobby.lobby = vec![
+        bullet_core::overlay::LobbyChampion {
+            id: 238,
+            name: "Zed".into(),
+        },
+        bullet_core::overlay::LobbyChampion {
+            id: 103,
+            name: "Ahri".into(),
+        },
+    ];
+    lobby.notice = Some(bullet_core::overlay::CatalogNotice::LobbyChampions);
+    with_overlay(|overlay| overlay.set_catalog(lobby));
+
+    let tabs: Vec<(i32, bool)> = view
+        .get_lobby_champions()
+        .iter()
+        .map(|choice| (choice.id, choice.active))
+        .collect();
+    assert_eq!(tabs, vec![(238, true), (103, false)]);
+    assert_eq!(
+        view.get_notice(),
+        Language::English.text().overlay_lobby_champions
+    );
+
+    drain(&mut commands);
+    press(&view, "Ahri");
+    assert_eq!(
+        drain(&mut commands),
+        vec![OverlayCommand::FocusChampion { id: 103 }]
+    );
+}
+
+#[test]
+fn a_lobby_without_champions_says_where_to_pick_them() {
+    let (view, _commands) = open_overlay();
+    with_overlay(|overlay| {
+        overlay.set_catalog(Catalog {
+            locale: Some("en_US".into()),
+            notice: Some(bullet_core::overlay::CatalogNotice::LobbyWaiting),
+            ..Catalog::default()
+        })
+    });
+    let text = Language::English.text();
+    assert_eq!(view.get_empty_big(), text.overlay_lobby_waiting_big);
+    assert!(view.get_lobby_champions().row_count() == 0);
+    assert_eq!(view.get_notice(), "");
+}
+
+#[test]
+fn the_pin_lights_for_the_champions_preset_and_profiles_list_the_default_first() {
+    let (view, mut commands) = open_overlay();
+    let controller_presets = PresetsView {
+        profiles: vec![String::new(), "Ranked".into()],
+        active: 1,
+        preset_entry: Some(238_071),
+    };
+    with_overlay(|overlay| {
+        overlay.presets = controller_presets;
+        overlay.render_presets();
+        overlay.render_selection();
+    });
+    let text = Language::English.text();
+    let names: Vec<String> = view.get_profiles().iter().map(|n| n.to_string()).collect();
+    assert_eq!(
+        names,
+        vec![text.overlay_profile_default.to_owned(), "Ranked".to_owned()]
+    );
+    assert_eq!(view.get_profile_index(), 1);
+    assert!(view.get_can_delete_profile());
+    assert!(!view.get_can_pin(), "nothing chosen yet");
+
+    press(&view, "Obsidiana");
+    assert!(view.get_can_pin());
+    assert!(
+        view.get_pinned(),
+        "the chosen chroma is this profile's preset"
+    );
+    drain(&mut commands);
+
+    press(&view, text.overlay_unpin);
+    press(&view, text.overlay_profile_new);
+    press(&view, text.overlay_profile_delete);
+    assert_eq!(
+        drain(&mut commands),
+        vec![
+            OverlayCommand::TogglePreset,
+            OverlayCommand::NewProfile,
+            OverlayCommand::DeleteProfile
+        ]
+    );
+
+    press(&view, "Esmeralda");
+    assert!(!view.get_pinned());
 }

@@ -70,6 +70,11 @@ impl GamePhase {
     }
 
     #[must_use]
+    pub fn is_before_champ_select(self) -> bool {
+        matches!(self, Self::Lobby | Self::Matchmaking | Self::ReadyCheck)
+    }
+
+    #[must_use]
     pub fn is_champ_select(self) -> bool {
         matches!(self, Self::ChampSelect | Self::Finalization)
     }
@@ -105,5 +110,8 @@ mod tests {
         assert!(GamePhase::TerminatedInError.is_between_matches());
         assert!(!GamePhase::WaitingForStats.is_between_matches());
         assert!(!GamePhase::TerminatedInError.is_in_game());
+        assert!(GamePhase::Matchmaking.is_before_champ_select());
+        assert!(!GamePhase::ChampSelect.is_before_champ_select());
+        assert!(!GamePhase::None.is_before_champ_select());
     }
 }

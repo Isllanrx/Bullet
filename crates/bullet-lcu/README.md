@@ -29,6 +29,7 @@ WebSocket event stream. This crate is Bullet's only way of knowing what is happe
 | `session/champ_select.rs` | Champion select session: both teams, picks, selected skins, when the phase is really over |
 | `session/live_selection.rs` | The final, authoritative read of champion and skin, used right before building the overlay; covers ARAM, Arena and rotating modes |
 | `session/skin_registration.rs` | Which skin id to register with the client and how |
+| `session/lobby.rs` | The lobby: its queue (id, game mode, map), whether champions are picked in it, the picked champions, and registering skins in the player slots |
 | `session/champion_assets.rs` | Skin and chroma lists from the client, used to fill the selection window when no local library exists |
 
 ## Design notes

@@ -6,14 +6,34 @@ impl InjectionTrigger {
             return self.classic_mods(key).await;
         }
 
-        let mut mods = match key.entry_id {
-            Some(entry_id) => self.prepare_mods(key.champ_id, entry_id).await?,
-            None => Vec::new(),
-        };
+        let mut mods = Vec::new();
+        for (champ_id, entry_id) in key.picks() {
+            match self.prepare_mods(champ_id, entry_id).await {
+                Some(prepared) => mods.extend(prepared),
+                None if !key.lobby => return None,
+                None => warn!(
+                    champ_id,
+                    entry_id,
+                    "The skin for this lobby champion could not be prepared; it will look stock"
+                ),
+            }
+        }
 
         if key.mods != 0 {
-            let selection = self.state_rx.borrow().mods.clone();
-            if selection.fingerprint(Some(key.champ_id)) != key.mods {
+            let (selection, champions) = {
+                let state = self.state_rx.borrow();
+                let champions: Vec<u32> = match state.lobby.as_ref().filter(|_| key.lobby) {
+                    Some(lobby) => lobby.champions(),
+                    None => vec![key.champ_id],
+                };
+                (state.mods.clone(), champions)
+            };
+            let current = if key.lobby {
+                lobby_mods_fingerprint(&selection, &champions)
+            } else {
+                selection.fingerprint(Some(key.champ_id))
+            };
+            if current != key.mods {
                 debug!(
                     champ_id = key.champ_id,
                     "Mod selection changed since the build was scheduled"
@@ -22,12 +42,19 @@ impl InjectionTrigger {
             let roots = self.paths.mod_roots.clone();
             let mods_dir = self.paths.mods_dir.clone();
             let game_dir = self.effective_game_dir(None);
-            let champion = Some(key.champ_id);
             let staged = tokio::task::spawn_blocking(move || {
-                let catalog = bullet_core::mods::scan_catalog(&roots, champion, &|_| true);
-                let staged = bullet_app::mods_store::stage_selected(
-                    &catalog, &selection, champion, &mods_dir,
-                );
+                let mut staged: Vec<String> = Vec::new();
+                for champion in champions {
+                    let champion = Some(champion);
+                    let catalog = bullet_core::mods::scan_catalog(&roots, champion, &|_| true);
+                    for name in bullet_app::mods_store::stage_selected(
+                        &catalog, &selection, champion, &mods_dir,
+                    ) {
+                        if !staged.contains(&name) {
+                            staged.push(name);
+                        }
+                    }
+                }
 
                 drop_incompatible_mods(staged, &mods_dir, &game_dir)
             })

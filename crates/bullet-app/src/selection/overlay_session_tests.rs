@@ -26,10 +26,18 @@ fn a_quiet_client_does_not_invalidate_the_pick() {
     assert!(!target_is_stale(None, Some(238)));
 }
 
+fn in_phase(phase: GamePhase, lobby: bool) -> AppState {
+    AppState {
+        phase,
+        lobby: lobby.then(bullet_core::lobby::LobbyPicks::default),
+        ..AppState::default()
+    }
+}
+
 #[test]
 fn the_overlay_shows_only_during_champ_select() {
-    assert!(wanted_for_phase(&GamePhase::ChampSelect));
-    assert!(wanted_for_phase(&GamePhase::Finalization));
+    assert!(wanted_for_state(&in_phase(GamePhase::ChampSelect, false)));
+    assert!(wanted_for_state(&in_phase(GamePhase::Finalization, false)));
     for phase in [
         GamePhase::None,
         GamePhase::Lobby,
@@ -40,10 +48,40 @@ fn the_overlay_shows_only_during_champ_select() {
         GamePhase::EndOfGame,
     ] {
         assert!(
-            !wanted_for_phase(&phase),
+            !wanted_for_state(&in_phase(phase, false)),
             "the overlay must stay off screen in {phase:?} — never over the game"
         );
     }
+}
+
+#[test]
+fn a_lobby_that_picks_champions_shows_the_overlay_until_the_match_starts() {
+    for phase in [
+        GamePhase::Lobby,
+        GamePhase::Matchmaking,
+        GamePhase::ReadyCheck,
+    ] {
+        assert!(wanted_for_state(&in_phase(phase, true)), "{phase:?}");
+    }
+    for phase in [
+        GamePhase::GameStart,
+        GamePhase::InProgress,
+        GamePhase::EndOfGame,
+    ] {
+        assert!(
+            !wanted_for_state(&in_phase(phase, true)),
+            "never over the game: {phase:?}"
+        );
+    }
+    assert!(!last_call_for_a_skin(&in_phase(GamePhase::Lobby, true)));
+    assert!(last_call_for_a_skin(&in_phase(
+        GamePhase::Matchmaking,
+        true
+    )));
+    assert!(!last_call_for_a_skin(&in_phase(
+        GamePhase::Matchmaking,
+        false
+    )));
 }
 
 fn zed_catalog() -> Catalog {
@@ -73,6 +111,7 @@ fn zed_catalog() -> Catalog {
         mods: Default::default(),
         notice: None,
         classic: false,
+        lobby: Vec::new(),
     }
 }
 

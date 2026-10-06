@@ -144,6 +144,7 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
         mods: ModsPanel::default(),
         notice: None,
         classic: false,
+        lobby: Vec::new(),
     }
 }
 
@@ -312,6 +313,7 @@ pub fn build_classic_catalog(
 
         champion_name,
         classic: true,
+        lobby: Vec::new(),
 
         alias: None,
         skins,
@@ -442,6 +444,26 @@ async fn fetch_chroma_preview(
         Ok(_) => Err(format!("{path} answered with no bytes")),
         Err(e) => Err(format!("{path}: {e}")),
     }
+}
+
+pub async fn lobby_champions(ids: &[u32]) -> Vec<bullet_core::overlay::LobbyChampion> {
+    let client = lcu_client().await;
+    let client = client.as_ref();
+    futures_util::future::join_all(ids.iter().map(|&id| async move {
+        let name = match client {
+            Some(client) => match client.get_champion_assets(id).await {
+                Ok(assets) if !assets.name.is_empty() => assets.name,
+                Ok(_) => format!("#{id}"),
+                Err(e) => {
+                    debug!(champion_id = id, error = %e, "Lobby champion name unavailable");
+                    format!("#{id}")
+                }
+            },
+            None => format!("#{id}"),
+        };
+        bullet_core::overlay::LobbyChampion { id, name }
+    }))
+    .await
 }
 
 async fn fetch_assets(champion_id: u32) -> Option<(ChampionAssets, bullet_lcu::client::LcuClient)> {
