@@ -41,6 +41,8 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.panel_ltk_download, "version"),
             (text.ltk_new_title, "version"),
             (text.missing_tools_body, "version"),
+            (text.injector_auto_body, "version"),
+            (text.injector_auto_failed, "error"),
             (text.broken_tools_body, "version"),
         ] {
             assert!(

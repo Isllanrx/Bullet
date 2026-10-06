@@ -37,18 +37,25 @@ to the workflow and the commit that produced it.
 - `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`, the injection backend. The DLL refuses game builds newer
   than a fixed timestamp (`0x6ac1f970`, 2026-10-04 07:00 UTC). The limit applies to the game build, not to
   the clock. Its bytes are never modified and its signature is never stripped.
-- They are not included in the installer. Users take them from an official LTK Manager release or from the
-  convenience mirror linked in the README. Either way, only the audited hashes are accepted, so a tampered
-  download is refused.
+- They are not included in the installer or in `bullet.exe`. Bullet can download them at the user's request
+  from the official LTK Manager repository at the newest release tag whose files match the audited hashes
+  (`injector_install.rs`); users can also take them from an LTK Manager release or the convenience mirror
+  linked in the README. Either way, only the audited hashes are accepted, so a tampered download is refused.
 - None of them may be loaded from another product's folder. If one is missing, the user is told the exact
   path Bullet expected.
 
 ## Invariants in the code
 
-- Nothing is written to the game folder.
+- Nothing is written to the game folder (`Game/`).
 - Extracting a `.fantome` or zip checks every entry path component by component, refuses symlinks, and
   limits total size and entry count to stop zip bombs.
-- Bullet never runs elevated. External resources are released by owning guards.
+- Bullet runs unelevated. The one exception is the injector copy: when Windows denies writing to the
+  `tools` folder, Bullet starts itself elevated with `--install-injector <staging> <tools>`. That instance
+  reads the staged files once, verifies their SHA-256 against the audited hashes on the bytes it will write,
+  accepts only Bullet's own `tools` folders as the target, writes the two files and exits. It never starts
+  the app. External resources are released by owning guards.
+- The only file Bullet changes in the League install is one key of `Config/LeagueClientSettings.yaml`
+  (`install.crash_reporting.enabled: false`), and only while **Light match loading** is on.
 - State files are written atomically, and a file handle is closed before its file is replaced (Windows keeps
   open files locked).
 - Updates are announced, never applied: Bullet reads the tag of the latest published release from the GitHub

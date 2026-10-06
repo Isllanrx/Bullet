@@ -15,6 +15,11 @@ const INSTANCE_NAME: &str = "bullet";
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some(bullet_app::injector_install::INSTALL_FLAG) {
+        std::process::exit(install_injector_elevated(&args[2..]));
+    }
+
     let state_dir_path = state_dir().unwrap_or_else(|_| std::env::temp_dir().join("Bullet_state"));
 
     let mut lock_failure = None;
@@ -714,6 +719,77 @@ async fn compatible_ltk_version(state_dir: &std::path::Path) -> Option<String> {
 
 const STARTUP_LTK_LOOKUP: std::time::Duration = std::time::Duration::from_secs(10);
 
+fn install_injector_elevated(args: &[String]) -> i32 {
+    let [staging, tools] = args else {
+        return 2;
+    };
+    let tools = std::path::PathBuf::from(tools);
+    let install_dir = bullet_platform::paths::install_dir().ok();
+    let exe = std::env::current_exe().ok();
+    if !bullet_app::injector_install::is_bullet_tools_folder(
+        &tools,
+        install_dir.as_deref(),
+        exe.as_deref(),
+    ) {
+        return 3;
+    }
+    match bullet_app::injector_install::install(
+        trigger::AUDITED_INJECTOR,
+        std::path::Path::new(staging),
+        &tools,
+    ) {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
+}
+
+enum AutoInstall {
+    Installed,
+    Declined,
+    Failed(String),
+}
+
+async fn install_injector_automatically(
+    tools: &std::path::Path,
+    state_dir: &std::path::Path,
+    version: &str,
+) -> AutoInstall {
+    use bullet_app::injector_install::{InstallError, elevated_parameters, install, stage};
+    use bullet_platform::elevation::{ElevatedRun, run_elevated};
+
+    let staging = match stage(trigger::AUDITED_INJECTOR, version, state_dir).await {
+        Ok(staging) => staging,
+        Err(e) => return AutoInstall::Failed(e.to_string()),
+    };
+    let outcome = match install(trigger::AUDITED_INJECTOR, &staging, tools) {
+        Ok(()) => AutoInstall::Installed,
+        Err(InstallError::Denied) => {
+            info!(tools = %tools.display(), "Asking Windows for permission to copy the injector into the tools folder");
+            let parameters = elevated_parameters(&staging, tools);
+            let elevated = match std::env::current_exe() {
+                Ok(exe) => tokio::task::spawn_blocking(move || run_elevated(&exe, &parameters))
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|run| run.map_err(|e| e.to_string())),
+                Err(e) => Err(e.to_string()),
+            };
+            match elevated {
+                Ok(ElevatedRun::Finished(0)) => AutoInstall::Installed,
+                Ok(ElevatedRun::Finished(code)) => {
+                    AutoInstall::Failed(format!("the elevated copy ended with code {code}"))
+                }
+                Ok(ElevatedRun::Declined) => AutoInstall::Declined,
+                Err(e) => AutoInstall::Failed(e),
+            }
+        }
+        Err(e) => AutoInstall::Failed(e.to_string()),
+    };
+    if let Err(e) = std::fs::remove_dir_all(&staging) {
+        debug!(staging = %staging.display(), error = %e, "Injector staging folder not removed");
+    }
+    outcome
+}
+
 async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path::Path) -> bool {
     use bullet_app::startup::{InjectorRefusal, injector_refusal};
 
@@ -748,10 +824,45 @@ async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path
         compatible = compatible.as_deref().unwrap_or("unknown"),
         "Pointing the user at the LTK Manager release that carries the audited injector"
     );
+    let mut failure = None;
+    if let Some(version) = compatible.as_deref() {
+        let offer = bullet_platform::i18n::fill(text.injector_auto_body, "version", version);
+        if bullet_platform::shell::message_box_question(text.injector_auto_title, &offer) {
+            match install_injector_automatically(&paths.tools_dir, state_dir, version).await {
+                AutoInstall::Installed => {
+                    let still_refused = injector_refusal(
+                        &paths.ltk_host_exe,
+                        trigger::AUDITED_LTK_HOST_HASH,
+                        &paths.ltk_dll_path,
+                        trigger::AUDITED_LTK_DLL_HASH,
+                    );
+                    if still_refused.is_none() {
+                        info!(version, tools = %paths.tools_dir.display(), "Injector installed from the LTK Manager release on GitHub");
+                        return false;
+                    }
+                    warn!(refusal = ?still_refused, "The installed injector is still refused");
+                }
+                AutoInstall::Declined => {
+                    info!("The user declined the permission to copy the injector")
+                }
+                AutoInstall::Failed(e) => {
+                    warn!(error = %e, "The injector could not be installed automatically");
+                    failure = Some(e);
+                }
+            }
+        }
+    }
     let version = compatible
         .clone()
         .unwrap_or_else(|| text.ltk_version_unknown.to_owned());
     let body = bullet_platform::i18n::fill(body, "version", &version);
+    let body = match failure {
+        Some(e) => format!(
+            "{}\n\n{body}",
+            bullet_platform::i18n::fill(text.injector_auto_failed, "error", &e)
+        ),
+        None => body,
+    };
     let page = bullet_app::ltk_release::release_page(compatible.as_deref());
     if let Err(e) = bullet_platform::shell::open_web_page(&page) {
         warn!(error = %e, page = %page, "Could not open the LTK Manager release page");

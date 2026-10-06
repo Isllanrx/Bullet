@@ -119,7 +119,7 @@ What that means in practice:
 
 | | How Bullet gets there |
 | --- | --- |
-| **Security** | Runs without administrator rights. Never writes to the game folder. Loads its injector only after checking its SHA-256 against an audited build. No telemetry. Party mode data is end-to-end encrypted, so the relay cannot read it. |
+| **Security** | Runs without administrator rights (elevation is requested only to copy the injector into `tools`). Never writes to the game folder. Loads its injector only after checking its SHA-256 against an audited build. No telemetry. Party mode data is end-to-end encrypted, so the relay cannot read it. |
 | **Robustness** | The overlay keeps every untouched byte exactly as the game shipped it, which is what patch 16.19 requires. Mods broken by a patch are dropped before they can crash the loading screen. Bullet never suspends or touches the game process; it only prepares files the game reads. Every error is logged with its cause. |
 | **Performance** | Written in Rust with no garbage collector or interpreter. The index of the game's archives is built in the background at startup. Built overlays are reused while the game build is unchanged, and entries identical to the game's are left out. |
 | **Dynamic** | Finds the game on any drive or region, follows the client's language, re-reads your champion right before building (ARAM swaps, trades, last-second locks), and rebuilds itself after every patch with no manual update of skin packages. |
@@ -159,7 +159,8 @@ included in Bullet's installer. There are two ways to get them; both end with th
 
 | Option | How | Best for |
 | --- | --- | --- |
-| **Official** (recommended) | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Getting the files straight from their authors |
+| **Automatic** (easiest) | Start Bullet. When the files are missing or outdated, it offers to download them from the LTK Manager release on League Toolkit's official GitHub, checks their SHA-256 and copies them into `tools`. Windows asks for administrator permission only for that copy | Most users |
+| **Official, by hand** | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Offline machines, or if you prefer to copy them yourself |
 
 Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anything that is not the audited
 build.
@@ -359,7 +360,9 @@ C:\Program Files\Bullet\              installed program (read-only for users)
 ### What Bullet does to keep you safe
 
 - It runs as a normal user. Only the installer, and copying the injector into `Program Files`, need
-  administrator permission.
+  administrator permission. For the automatic copy, Bullet downloads and checks the files without
+  elevation, then starts a short elevated copy of itself that checks the SHA-256 again and writes only the two
+  audited files into its own `tools` folder.
 - It only loads its injector from its own folders, never from another product's. Before loading it, Bullet
   checks the file's SHA-256 hash against the one built into Bullet. A file that has been swapped is refused
   and logged.

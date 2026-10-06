@@ -105,7 +105,7 @@ inject→core+platform+wad, party→core, app→all.
 | The overlay is built natively and byte-faithful: unchanged entries keep the game's exact compressed bytes, and every cloned WAD keeps the game's header (signature and checksum) | Patch 16.19 rejects a map WAD rewritten with another header or recompressed as corrupt (`Map11.wad.client`) |
 | A path a map WAD also holds changes in every WAD that holds it | Changing only one side is the "Inconsistent" crash; leaving it out left Zed's shadow on its default look |
 | A WAD whose mod only replaces entries is the game file copied byte for byte plus the new entries; the copy is reused until the game file changes and prepared when the champion locks | Rewriting a 2.5 GB map takes 24 s; without suspension the game would start before the patcher is armed |
-| Bullet runs unelevated (`asInvoker`) | Least privilege; proven to work in a match |
+| Bullet runs unelevated (`asInvoker`); only `--install-injector` runs elevated, re-verifies the audited hashes and copies two files into Bullet's own `tools` | Least privilege; proven to work in a match |
 | Third-party binaries only from Bullet's own folder, SHA-256 checked against `AUDITED_*_HASH` in `bullet-app::trigger` | Hash is the trust anchor; the byte-patched "2040" DLL failed in a match and is refused |
 | `bullet-wad` stays our own parser (no `cdragon-*`) | Full control over all five entry types and bounds checks |
 | Party: relay only, no P2P, XChaCha20-Poly1305 blobs, nothing identifying in clear, anti-spoof against the real roster | Privacy and safety of other players |
