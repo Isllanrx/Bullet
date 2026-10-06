@@ -41,7 +41,7 @@ and the crate READMEs, in English, without internal references.
   Bullet running **unelevated**.
 - Blind, ARAM, Swiftplay, Arena, rotating modes and reconnect are implemented but **not yet proven in game**.
 - Party mode works against the public relay; not yet proven with several players in one match.
-- **The LTK DLL refuses game builds newer than 2026-10-04 07:00Z** (`0x6ac1f970`, checked on the game exe's
+- **The LTK DLL refuses game builds newer than 2026-10-18 07:00Z** (`0x6ad46e70`, LTK Manager 1.27.0, checked on the game exe's
   `TimeDateStamp`). A refreshed DLL is needed for the first patch built after that.
 - Known gaps: large custom mods are slow to build inside champion select; skin packages are generated per
   patch; no "disable mods" option on the reconnect screen yet.
@@ -90,7 +90,8 @@ and the crate READMEs, in English, without internal references.
   - WeGame layouts are found.
   - The compatible LTK Manager release is found at run time (panel line, tray notice). Startup offers to
     install the audited injector from GitHub with an elevated copy that re-verifies the hashes.
-  - LTK Manager 1.26.1 still ships the DLL that expired on 2026-10-04.
+  - Audited injector moved to LTK Manager 1.27.0 (patch 26.20, signed by the same publisher, valid until
+    2026-10-18); LTK now ships a DLL per patch, so each release needs this audit.
   - Modules were grouped into segment folders in every crate and in `xtask` (`docs/architecture.md`).
   - The native patcher experiment lives on `experiment/native-patcher`, not on dev.
   - The interface moved from WebView2/HTML to Slint (ADR-035): overlay, control panel, About and party dialog
@@ -152,7 +153,7 @@ in `docs/architecture.md` ("Source layout"). New modules go into the folder of t
     Never patch the DLL bytes or strip its signature. **Never bundle it:** the LTK Patcher License forbids
     redistributing League Toolkit's signed binaries outside an official LTK Manager release, so users copy
     host + DLL from that release into `tools\` (the README also links a convenience mirror, `tools.zip` on
-    chosen by the maintainer). The audited hashes match **LTK Manager 1.21.0 through 1.26.1**
+    chosen by the maintainer). The audited hashes match **LTK Manager 1.27.0**
     (`src-tauri/resources/`, installed to `%LOCALAPPDATA%\LTK Manager`). Changing `AUDITED_*_HASH` means
     updating the version and hashes in the README's "Step 2 — Add the injector".
 11. **Never perform git commit or git push without explicit user approval.** Code modifications are made,

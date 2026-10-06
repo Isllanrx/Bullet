@@ -35,7 +35,7 @@ to the workflow and the commit that produced it.
 ## Non-Rust dependencies
 
 - `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`, the injection backend. The DLL refuses game builds newer
-  than a fixed timestamp (`0x6ac1f970`, 2026-10-04 07:00 UTC). The limit applies to the game build, not to
+  than a fixed timestamp (`0x6ad46e70`, 2026-10-18 07:00 UTC, for the LTK Manager 1.27.0 build). The limit applies to the game build, not to
   the clock. Its bytes are never modified and its signature is never stripped.
 - They are not included in the installer or in `bullet.exe`. Bullet can download them at the user's request
   from the official LTK Manager repository at the newest release tag whose files match the audited hashes
