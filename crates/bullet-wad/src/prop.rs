@@ -653,6 +653,41 @@ pub fn serialize_prop_file(file: &PropFile) -> Result<Vec<u8>, WadError> {
     Ok(out)
 }
 
+#[must_use]
+pub fn is_prop(data: &[u8]) -> bool {
+    matches!(data.get(0..4), Some(magic) if magic == PROP_SIGNATURE || magic == PTCH_SIGNATURE)
+}
+
+pub fn record_field_shapes(data: &[u8], shapes: &mut tree::FieldShapes) -> Result<(), WadError> {
+    for entry in parse_prop_file(data)?.entries {
+        shapes.record(entry.class_hash, &tree::parse_fields(&entry.body)?);
+    }
+    Ok(())
+}
+
+pub fn strings_to_files(
+    data: &[u8],
+    shapes: &tree::FieldShapes,
+) -> Result<Option<(Vec<u8>, usize)>, WadError> {
+    if data.get(0..4) != Some(PROP_SIGNATURE.as_slice()) {
+        return Ok(None);
+    }
+    let mut file = parse_prop_file(data)?;
+    let mut retyped = 0;
+    for entry in &mut file.entries {
+        let mut fields = tree::parse_fields(&entry.body)?;
+        let changed = shapes.strings_to_files(entry.class_hash, &mut fields);
+        if changed > 0 {
+            entry.body = tree::write_fields(&fields)?;
+            retyped += changed;
+        }
+    }
+    if retyped == 0 {
+        return Ok(None);
+    }
+    Ok(Some((serialize_prop_file(&file)?, retyped)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

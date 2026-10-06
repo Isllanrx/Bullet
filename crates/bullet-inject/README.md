@@ -28,7 +28,7 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 | File | Purpose |
 | --- | --- |
 | `mod_compat.rs` | Finds broken references inside a mod before it is used |
-| `overlay_builder.rs` | Builds the overlay from the installed game and the selected mods |
+| `overlay_builder.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
 | `overlay_cache.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
 | `overlay.rs` | Overlay configuration and locations |
 | `ltk_host.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |

@@ -5,9 +5,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bullet_wad::hash::{content_checksum, mount_name, relative_path_hash, wad_path_hash};
+use bullet_wad::prop::tree::FieldShapes;
+use bullet_wad::prop::{is_prop, parse_prop_links, record_field_shapes, strings_to_files};
 use bullet_wad::wad::{CompressionType, WadFile};
 use bullet_wad::writer::{
     WadWriter, WriteOutcome, WriterEntry, base_stamp_path, optimal_raw, optimal_stored,
+    prop_payload,
 };
 use tracing::{debug, info, warn};
 
@@ -193,6 +196,10 @@ pub fn build(
         if cancelled() {
             return Err(stop());
         }
+    }
+
+    for index in &mut queue {
+        retype_stale_bins(&game, index)?;
     }
 
     let mut overlay: BTreeMap<String, OverlayWad> = BTreeMap::new();
@@ -400,6 +407,87 @@ fn index_mod(mod_dir: &Path, name: &str) -> Result<ModIndex, InjectError> {
         name: name.to_owned(),
         mounts,
     })
+}
+
+fn retype_stale_bins(game: &GameIndexMap, index: &mut ModIndex) -> Result<(), InjectError> {
+    for (mount, mod_mount) in &mut index.mounts {
+        let bins: Vec<(u64, Vec<u8>)> = mod_mount
+            .entries
+            .iter()
+            .filter_map(|(hash, entry)| prop_payload(entry).map(|bytes| (*hash, bytes)))
+            .collect();
+        let Some(game_wad) = game.get(mount) else {
+            continue;
+        };
+        if bins.is_empty() {
+            continue;
+        }
+        let shapes = game_field_shapes(game_wad, mount, bins.iter().map(|(hash, _)| *hash))
+            .map_err(|e| {
+                InjectError::Overlay(format!(
+                    "could not read the game's property types from '{}': {e}",
+                    game_wad.path.display()
+                ))
+            })?;
+        let mut retyped = 0;
+        for (hash, bytes) in bins {
+            match strings_to_files(&bytes, &shapes) {
+                Ok(Some((fixed, count))) => {
+                    let entry = optimal_raw(fixed).map_err(|e| {
+                        InjectError::Overlay(format!("could not repack a retyped bin: {e}"))
+                    })?;
+                    mod_mount.entries.insert(hash, entry);
+                    retyped += count;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    debug!(mod_name = %index.name, mount = %mount, path_hash = format!("{hash:016x}"), error = %e, "Mod bin not checked against the game's property types")
+                }
+            }
+        }
+        if retyped > 0 {
+            info!(
+                mod_name = %index.name,
+                mount = %mount,
+                properties = retyped,
+                "Mod properties written as text were converted to the file references the game now expects"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn game_field_shapes(
+    game_wad: &GameWad,
+    mount: &str,
+    mod_bins: impl Iterator<Item = u64>,
+) -> Result<FieldShapes, bullet_wad::error::WadError> {
+    let wad = WadFile::open(&game_wad.path)?;
+    let mut shapes = FieldShapes::default();
+    let mut pending: Vec<u64> = mod_bins
+        .chain([wad_path_hash(&format!(
+            "data/characters/{mount}/animations/skin0.bin"
+        ))])
+        .collect();
+    let mut seen = HashSet::new();
+    while let Some(hash) = pending.pop() {
+        if !seen.insert(hash) {
+            continue;
+        }
+        let Some(data) = wad.read(hash)? else {
+            continue;
+        };
+        if !is_prop(&data) {
+            continue;
+        }
+        record_field_shapes(&data, &mut shapes)?;
+        pending.extend(
+            parse_prop_links(&data)?
+                .iter()
+                .map(|link| wad_path_hash(link)),
+        );
+    }
+    Ok(shapes)
 }
 
 fn read_mod_wad(path: &Path) -> Result<BTreeMap<u64, WriterEntry>, bullet_wad::error::WadError> {
