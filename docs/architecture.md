@@ -66,8 +66,12 @@ under a flat path (`bullet_platform::fs`, `bullet_wad::prop`), so callers never 
    the injector tools (from Bullet's own folder, hash-checked) are located. When the tools are missing or not
    the audited build, Bullet offers to download them from the compatible LTK Manager release and copies them
    with a verified, elevated copy of itself; otherwise it opens the download page and stops.
-5. **Warm-up.** The index of the game's archives is built on a background thread so champion select never
-   waits for it.
+5. **Warm-up.** One prewarm thread loads the index of the game's archives from `game_index.bin` in the state
+   folder (rebuilt from the WADs' tables of contents only when a WAD's size or modification time changed),
+   then checks each champion's companion cache from the WAD's metadata alone and scans only the stale ones,
+   in on-disk order and in Windows background mode. Reads that hit a spinning disk are done once, in order,
+   by one thread: on a 5,400 rpm drive with a cold file cache this warm-up takes under a second instead of
+   14-19 s.
 6. **Game build.** The game executable's build timestamp is read. After a patch, cached overlays and locale
    data are discarded. If the injector DLL does not support this build, the user is told immediately.
 7. **Services.** The supervised tasks start: client observer, selection window session, party mode, the
