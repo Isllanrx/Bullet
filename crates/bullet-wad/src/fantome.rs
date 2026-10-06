@@ -84,7 +84,7 @@ pub fn mod_archive_shape<R: Read + Seek>(reader: R) -> Result<ModArchiveShape, W
         content: false,
     };
     for i in 0..archive.len() {
-        let mut file = archive
+        let file = archive
             .by_index(i)
             .map_err(|e| WadError::InvalidFantome(format!("zip read error: {e}")))?;
         if file.is_dir() {
@@ -98,7 +98,8 @@ pub fn mod_archive_shape<R: Read + Seek>(reader: R) -> Result<ModArchiveShape, W
             shape.content = true;
         } else if name.eq_ignore_ascii_case("META/info.json") && file.size() <= MAX_MANIFEST {
             let mut text = String::new();
-            if file.read_to_string(&mut text).is_ok() {
+            let size = file.size();
+            if file.take(size).read_to_string(&mut text).is_ok() {
                 shape.manifest =
                     serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
                         .is_ok_and(|v| v.is_object());

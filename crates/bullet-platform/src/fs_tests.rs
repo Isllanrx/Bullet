@@ -104,3 +104,42 @@ fn test_mirror_tree_links_files_and_leaves_the_source_intact() {
 
     let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
 }
+
+#[test]
+fn test_an_entry_with_a_wrong_crc_is_still_extracted_whole() {
+    let content = b"mod files written by a tool that gets the crc wrong";
+    let mut zip_bytes = Vec::new();
+    {
+        let mut writer = ZipWriter::new(Cursor::new(&mut zip_bytes));
+        let stored =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("WAD/Zed.wad.client", stored).unwrap();
+        writer.write_all(content).unwrap();
+        writer.finish().unwrap();
+    }
+    let crc = zip::ZipArchive::new(Cursor::new(&zip_bytes))
+        .unwrap()
+        .by_index(0)
+        .unwrap()
+        .crc32()
+        .to_le_bytes();
+    let wrong = (u32::from_le_bytes(crc) ^ 0xFFFF_FFFF).to_le_bytes();
+    let mut patched = 0;
+    for at in 0..zip_bytes.len() - 3 {
+        if zip_bytes[at..at + 4] == crc {
+            zip_bytes[at..at + 4].copy_from_slice(&wrong);
+            patched += 1;
+        }
+    }
+    assert_eq!(patched, 2, "local header and central directory");
+
+    let dest = std::env::temp_dir().join(format!("bullet_test_bad_crc_{}", std::process::id()));
+    let count = safe_extract_zip(Cursor::new(&zip_bytes), &dest, &ExtractLimits::default())
+        .expect("a wrong crc does not refuse the archive");
+    assert_eq!(count, 1);
+    assert_eq!(
+        std::fs::read(dest.join("WAD/Zed.wad.client")).unwrap(),
+        content
+    );
+    let _ = std::fs::remove_dir_all(&dest); // ignore-ok: cleanup test directory
+}

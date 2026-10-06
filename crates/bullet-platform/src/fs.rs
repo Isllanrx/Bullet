@@ -240,6 +240,7 @@ pub fn safe_extract_zip<R: Read + Seek>(
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
+        let declared_size = file.size();
         let raw_name = file.name();
 
         let clean_relative = validate_archive_path(Path::new(raw_name))?;
@@ -292,9 +293,10 @@ pub fn safe_extract_zip<R: Read + Seek>(
 
         let mut buffer = [0u8; 64 * 1024];
         let mut entry_bytes: u64 = 0;
+        let mut content = (&mut file).take(declared_size);
 
         loop {
-            let bytes_read = file.read(&mut buffer).map_err(|e| PlatformError::Io {
+            let bytes_read = content.read(&mut buffer).map_err(|e| PlatformError::Io {
                 context: format!("read error while extracting '{}'", clean_relative.display()),
                 source: e,
             })?;
@@ -345,6 +347,17 @@ pub fn safe_extract_zip<R: Read + Seek>(
                     ),
                     source: e,
                 })?;
+        }
+
+        if entry_bytes != declared_size {
+            let _ = std::fs::remove_file(&target_file_path); // ignore-ok: removing a truncated extraction; the refusal is what gets reported
+            return Err(PlatformError::Io {
+                context: format!(
+                    "'{}' is truncated: {entry_bytes} of {declared_size} bytes",
+                    clean_relative.display()
+                ),
+                source: std::io::ErrorKind::UnexpectedEof.into(),
+            });
         }
 
         extracted_count += 1;
