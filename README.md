@@ -21,10 +21,6 @@
 </p>
 
 <p align="center">
-  <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
-</p>
-
-<p align="center">
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><b>Download</b></a> ·
   <a href="https://discord.gg/e2dH2nUjd9"><b>Discord community</b></a> ·
   <a href="https://github.com/Isllanrx/Bullet/issues"><b>Report a bug</b></a>
@@ -527,6 +523,10 @@ an advantage in the game.
   harm other players, services or accounts.
 - Bullet is not affiliated with, endorsed by or sponsored by Riot Games. League of Legends and all related
   names and assets are trademarks of Riot Games, Inc.
+
+<p align="center">
+  <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
+</p>
 
 ## License
 
