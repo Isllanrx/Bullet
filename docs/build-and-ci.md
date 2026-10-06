@@ -189,8 +189,9 @@ The second form works offline with the Sigstore bundle published next to the ins
   also asks the linker for the PE checksum.
 - The LTK injector is **not** packaged. Its license does not allow other projects to redistribute League
   Toolkit's signed binaries, so users copy `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` from an official
-  LTK Manager release into `Program Files\Bullet\tools`. Bullet only accepts them if their SHA-256 matches the
-  audited hashes in `bullet_app::trigger`. `xtask` reads the same constants for the install audit.
+  LTK Manager release into `Program Files\Bullet\tools`. Bullet only accepts them when both carry a valid
+  signature from League Toolkit's publisher (`bullet_inject::trust`); `cargo xtask install-audit` runs the same
+  check.
 - `cargo xtask installer` passes the workspace version to Inno Setup (`installer/bullet.iss`) and produces
   `Bullet-Setup-<version>-x64.exe`. With `--prebuilt` it packages the `dist\bullet.exe` already there instead
   of rebuilding it, so the release can sign the binary before it goes into the installer.

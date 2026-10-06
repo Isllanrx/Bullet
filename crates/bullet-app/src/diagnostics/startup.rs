@@ -3,28 +3,23 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, PartialEq, Eq)]
 pub enum InjectorRefusal {
     Missing,
-    NotAudited(Vec<(PathBuf, String)>),
+    NotTrusted(Vec<(PathBuf, String)>),
 }
 
 #[must_use]
-pub fn injector_refusal(
-    host: &Path,
-    host_hash: &str,
-    dll: &Path,
-    dll_hash: &str,
-) -> Option<InjectorRefusal> {
+pub fn injector_refusal(host: &Path, dll: &Path) -> Option<InjectorRefusal> {
     if !host.is_file() || !dll.is_file() {
         return Some(InjectorRefusal::Missing);
     }
-    let refused: Vec<(PathBuf, String)> = [(host, host_hash), (dll, dll_hash)]
+    let refused: Vec<(PathBuf, String)> = [host, dll]
         .into_iter()
-        .filter_map(|(file, hash)| {
-            bullet_inject::dll_validator::validate_binary_hashes(file, &[hash])
+        .filter_map(|file| {
+            bullet_inject::trust::verify_injector_file(file)
                 .err()
                 .map(|e| (file.to_path_buf(), e.to_string()))
         })
         .collect();
-    (!refused.is_empty()).then_some(InjectorRefusal::NotAudited(refused))
+    (!refused.is_empty()).then_some(InjectorRefusal::NotTrusted(refused))
 }
 
 #[cfg(test)]
@@ -47,10 +42,6 @@ mod tests {
         (dir, host_path, dll_path)
     }
 
-    fn hash(bytes: &[u8]) -> String {
-        bullet_inject::dll_validator::compute_sha256(bytes)
-    }
-
     #[test]
     fn test_a_missing_file_refuses_the_start() {
         for (name, host, dll) in [
@@ -60,7 +51,7 @@ mod tests {
         ] {
             let (dir, host_path, dll_path) = tools(name, host, dll);
             assert_eq!(
-                injector_refusal(&host_path, &hash(b"host"), &dll_path, &hash(b"dll")),
+                injector_refusal(&host_path, &dll_path),
                 Some(InjectorRefusal::Missing),
                 "{name}"
             );
@@ -69,12 +60,12 @@ mod tests {
     }
 
     #[test]
-    fn test_files_that_are_not_the_audited_build_refuse_the_start() {
-        let (dir, host_path, dll_path) = tools("bad", Some(b"host"), Some(b"patched dll"));
-        match injector_refusal(&host_path, &hash(b"host"), &dll_path, &hash(b"dll")) {
-            Some(InjectorRefusal::NotAudited(files)) => {
-                assert_eq!(files.len(), 1, "only the DLL differs");
-                assert_eq!(files[0].0, dll_path);
+    fn test_unsigned_files_refuse_the_start_and_both_are_named() {
+        let (dir, host_path, dll_path) = tools("unsigned", Some(b"host"), Some(b"patched dll"));
+        match injector_refusal(&host_path, &dll_path) {
+            Some(InjectorRefusal::NotTrusted(files)) => {
+                let named: Vec<&PathBuf> = files.iter().map(|(file, _)| file).collect();
+                assert_eq!(named, vec![&host_path, &dll_path]);
             }
             other => panic!("expected a refusal, got {other:?}"),
         }
@@ -82,12 +73,15 @@ mod tests {
     }
 
     #[test]
-    fn test_the_audited_files_start() {
-        let (dir, host_path, dll_path) = tools("good", Some(b"host"), Some(b"dll"));
+    #[ignore = "needs the LTK injector in Bullet's tools folder"]
+    fn test_the_publishers_signed_files_start() {
+        let tools = Path::new(r"C:\Program Files\Bullet\tools");
         assert_eq!(
-            injector_refusal(&host_path, &hash(b"host"), &dll_path, &hash(b"dll")),
+            injector_refusal(
+                &tools.join("ltk_patcher_host.exe"),
+                &tools.join("ltk_patcher_dll.dll")
+            ),
             None
         );
-        let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
     }
 }

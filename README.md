@@ -158,26 +158,27 @@ included in Bullet's installer. There are two ways to get them; both end with th
 
 | Option | How | Best for |
 | --- | --- | --- |
-| **Automatic** (easiest) | Start Bullet. When the files are missing or outdated, it offers to download them from the LTK Manager release on League Toolkit's official GitHub, checks their SHA-256 and copies them into `tools`. Windows asks for administrator permission only for that copy | Most users |
+| **Automatic** (easiest) | Start Bullet. When the files are missing or outdated, it offers to download them from the newest LTK Manager release on League Toolkit's official GitHub, checks League Toolkit's digital signature on both and copies them into `tools`. Windows asks for administrator permission only for that copy | Most users |
 | **Official, by hand** | Install [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) and copy the files from it (steps A–C below) | Offline machines, or if you prefer to copy them yourself |
 
-Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anything that is not the audited
-build.
+Whichever you use, Bullet checks both files' Authenticode signature at startup and refuses anything not signed
+by League Toolkit's publisher (Natoken LLC). A file with one byte changed loses its signature and is refused.
 
 > [!IMPORTANT]
-> Bullet only accepts the **exact build** it has audited. Use **LTK Manager 1.27.0**: it ships that build
-> (built for game patch 26.20; earlier releases carry a build whose DLL no longer accepts the current game,
-> which Bullet refuses).
+> Use the **newest LTK Manager release**. Each release ships a DLL built for one game patch, and an older DLL
+> refuses game builds made after its date.
 >
-> Bullet also checks this by itself. The **LTK injector** line in the control panel names the newest LTK
-> Manager release that carries the audited files, and if Bullet refuses its injector at startup it opens that
-> release's download page. When LTK Manager publishes a new injector, a notification tells you about it. Keep
-> your current files until a Bullet update accepts the new one.
+> Bullet follows this by itself. Every six hours it lists LTK Manager's releases, checks the signature of each new
+> release's injector and reads the game-build limit inside the DLL. The **LTK injector** line in the control
+> panel names the newest signed release; when its DLL differs from yours, a notification tells you and the
+> panel shows **Install injector**, which downloads, verifies and copies both files (Windows asks for
+> administrator permission only for the copy). A release whose files are not signed by League Toolkit is shown
+> as a warning and never installed.
 
 #### A. Get LTK Manager
 
-1. Open the [LTK Manager 1.27.0 release](https://github.com/LeagueToolkit/ltk-manager/releases/tag/v1.27.0)
-   and download `LTK.Manager_1.27.0_x64-setup.exe`.
+1. Open the [latest LTK Manager release](https://github.com/LeagueToolkit/ltk-manager/releases/latest)
+   and download its `LTK.Manager_<version>_x64-setup.exe`.
 2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
 3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
    Bullet is running: two injectors at once will conflict.
@@ -200,7 +201,7 @@ Open PowerShell **as administrator** (Start menu → type `PowerShell` → **Run
 $from = Join-Path $env:LOCALAPPDATA 'LTK Manager'
 $to   = Join-Path $env:ProgramFiles 'Bullet\tools'
 Copy-Item (Join-Path $from 'ltk_patcher_host.exe'), (Join-Path $from 'ltk_patcher_dll.dll') $to -Force
-Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
+Get-AuthenticodeSignature (Join-Path $to 'ltk_patcher_*') | Format-Table Status, SignerCertificate, Path -AutoSize
 ```
 
 #### Direct download (alternative)
@@ -209,15 +210,15 @@ Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Ha
 2. Press `Win + R`, type `C:\Program Files\Bullet\tools` and press Enter.
 3. Copy the two extracted files into that folder. Windows asks for administrator permission; choose
    **Continue**.
-4. Check the hashes in step C below before starting Bullet. If they differ, delete the files and use the
-   official option instead.
+4. Check the signatures in step C below before starting Bullet. If either is not valid, delete the files and
+   use the official option instead.
 
 Or in PowerShell **as administrator**, from the folder where you downloaded the zip:
 
 ```powershell
 $to = Join-Path $env:ProgramFiles 'Bullet\tools'
 Expand-Archive .\tools.zip -DestinationPath $to -Force
-Get-FileHash (Join-Path $to 'ltk_patcher_*') -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
+Get-AuthenticodeSignature (Join-Path $to 'ltk_patcher_*') | Format-Table Status, SignerCertificate, Path -AutoSize
 ```
 
 These files belong to League Toolkit and are covered by the
@@ -227,15 +228,12 @@ download is a convenience mirror; it is not an official League Toolkit release.
 #### C. Check the files
 
 Optional for the official option, recommended for the direct download. The folder
-`C:\Program Files\Bullet\tools` should now contain both files, with these SHA-256 hashes:
+`C:\Program Files\Bullet\tools` should now contain both files. In File Explorer, right-click each one →
+**Properties** → **Digital Signatures**: the signer must be **Natoken LLC** and the signature valid. The
+PowerShell commands above show the same (`Status` = `Valid`).
 
-| File | SHA-256 |
-| --- | --- |
-| `ltk_patcher_host.exe` | `23fa1aaeda1a0c743da44227f179084e1fb81c7cd262144a3c8604ffc49d3bc1` |
-| `ltk_patcher_dll.dll` | `6d419057e6667994ba752ad0fb089b363db98267618644d7f7b6632441a21d74` |
-
-You do not have to check them by hand: Bullet checks both at startup. If one is missing or is a different
-build, Bullet tells you and shows the exact path it expected. If you used LTK Manager, you can uninstall it
+You do not have to check them by hand: Bullet checks both at startup. If one is missing or not signed by
+League Toolkit, Bullet tells you and shows the exact path it expected. If you used LTK Manager, you can uninstall it
 afterwards; the copies in Bullet's folder keep working.
 
 ### Step 3 — Start Bullet
@@ -473,7 +471,7 @@ with safety nets in case the approval was a mistake.
 | [`dependabot.yml`](.github/dependabot.yml) | Weekly and monthly | Proposes updates for actions, crates and relay dependencies |
 
 Every action is pinned to an exact commit, and every job starts read-only. Auto-merge never merges a commit
-pushed after the approval or a change to the workflows, the installer, the trusted hashes or the injector
+pushed after the approval or a change to the workflows, the installer, the injector trust check or the injector
 code paths. Those are merged by hand. A new build always starts as a pre-release and only becomes the release
 users are pointed at after it has been tested in a real match.
 

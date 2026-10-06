@@ -15,7 +15,7 @@ const ACTIONS: [PanelAction; 16] = [
     PanelAction::OpenTools,
     PanelAction::OpenLogs,
     PanelAction::OpenRelease,
-    PanelAction::OpenLtk,
+    PanelAction::InstallInjector,
     PanelAction::MarkProblem,
     PanelAction::ExportDiagnostics,
     PanelAction::About,
@@ -177,7 +177,7 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
     let state = PanelSnapshot {
         in_room: false,
         ltk_line: Some("LTK Manager 1.27 has a new injector.".into()),
-        ltk_download: Some("Get LTK Manager 1.27".into()),
+        ltk_download: Some("Install injector 1.27".into()),
         ..snapshot()
     };
     render(&window, &state);
@@ -187,7 +187,7 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
 
     let clicks = [
         (text.panel_update_download, PanelAction::OpenRelease),
-        ("Get LTK Manager 1.27", PanelAction::OpenLtk),
+        ("Install injector 1.27", PanelAction::InstallInjector),
         (text.menu_random_skin, PanelAction::ToggleRandomSkin),
         (text.menu_light_loading, PanelAction::ToggleLightLoading),
         (text.menu_auto_accept, PanelAction::ToggleAutoAccept),

@@ -184,8 +184,6 @@ pub fn is_dll_failure(level: &str, message: &str) -> bool {
     lower.contains("failed") || lower.contains("disabling overlay") || is_end_of_life(message)
 }
 
-pub const LTK_DLL_GAME_BUILD_LIMIT: u32 = 0x6ad4_6e70;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DllSupport {
     Supported,
@@ -196,11 +194,11 @@ pub enum DllSupport {
 }
 
 #[must_use]
-pub fn dll_support(stamp: u32, now: u64) -> DllSupport {
-    if stamp > LTK_DLL_GAME_BUILD_LIMIT {
+pub fn dll_support(stamp: u32, limit: u32, now: u64) -> DllSupport {
+    if stamp > limit {
         return DllSupport::Refused;
     }
-    let days_left = (i64::from(LTK_DLL_GAME_BUILD_LIMIT) - now as i64).div_euclid(86_400);
+    let days_left = (i64::from(limit) - now as i64).div_euclid(86_400);
     if days_left <= 7 {
         DllSupport::SupportedUntilNextPatch { days_left }
     } else {
@@ -247,23 +245,26 @@ mod tests {
 
     #[test]
     fn test_dll_support_is_decided_by_the_game_build_not_the_clock() {
-        let limit = LTK_DLL_GAME_BUILD_LIMIT;
+        let limit = 0x6ad4_6e70;
         let far = u64::from(limit) - 30 * 86_400;
 
-        assert_eq!(dll_support(limit - 12 * 86_400, far), DllSupport::Supported);
+        assert_eq!(
+            dll_support(limit - 12 * 86_400, limit, far),
+            DllSupport::Supported
+        );
 
         assert_eq!(
-            dll_support(limit - 12 * 86_400, u64::from(limit) - 3 * 86_400),
+            dll_support(limit - 12 * 86_400, limit, u64::from(limit) - 3 * 86_400),
             DllSupport::SupportedUntilNextPatch { days_left: 3 }
         );
 
         assert!(matches!(
-            dll_support(limit - 12 * 86_400, u64::from(limit) + 10 * 86_400),
+            dll_support(limit - 12 * 86_400, limit, u64::from(limit) + 10 * 86_400),
             DllSupport::SupportedUntilNextPatch { days_left } if days_left < 0
         ));
 
-        assert_ne!(dll_support(limit, far), DllSupport::Refused);
-        assert_eq!(dll_support(limit + 1, far), DllSupport::Refused);
+        assert_ne!(dll_support(limit, limit, far), DllSupport::Refused);
+        assert_eq!(dll_support(limit + 1, limit, far), DllSupport::Refused);
     }
 
     #[test]

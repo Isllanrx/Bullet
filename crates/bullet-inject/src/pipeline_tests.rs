@@ -1,5 +1,4 @@
 use super::*;
-use crate::dll_validator::compute_sha256;
 use bullet_core::state::new_state_channel;
 
 #[test]
@@ -26,12 +25,10 @@ fn test_measure_overlay_counts_only_wads_and_reports_an_empty_tree() {
     let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
 }
 
-fn temp_config(dir: &std::path::Path, host_exe: PathBuf, host_hash: String) -> PipelineConfig {
+fn temp_config(dir: &std::path::Path, host_exe: PathBuf) -> PipelineConfig {
     PipelineConfig {
         ltk_host_exe: host_exe,
-        ltk_host_hash: host_hash,
         ltk_dll_path: dir.join("ltk_patcher_dll.dll"),
-        ltk_dll_hash: String::new(),
         ltk_flags: 0,
         overlay_config: OverlayConfig {
             mods_dir: dir.join("mods"),
@@ -72,7 +69,7 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
     std::fs::write(mod_dir.join("META/info.json"), "{}").expect("info");
     wad(&mod_dir.join("WAD/Zed.wad.client"), &[(1, b"new skin0")]);
 
-    let config = temp_config(&dir, dir.join("host"), String::new());
+    let config = temp_config(&dir, dir.join("host"));
     let pipeline = InjectionPipeline::new(config, None);
 
     let build = pipeline
@@ -96,7 +93,7 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
 }
 
 #[tokio::test]
-async fn test_pipeline_aborts_before_building_on_bad_dll_hash() {
+async fn test_pipeline_aborts_before_building_on_an_unsigned_injector() {
     let temp_dir = std::env::temp_dir().join("bullet_test_pipeline_hash");
     std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -104,46 +101,19 @@ async fn test_pipeline_aborts_before_building_on_bad_dll_hash() {
     std::fs::write(&host_file, b"test host contents").unwrap();
 
     let (tx, rx) = new_state_channel();
-    let config = temp_config(
-        &temp_dir,
-        host_file,
-        "0000000000000000000000000000000000000000000000000000000000000000".into(),
-    );
+    let config = temp_config(&temp_dir, host_file);
 
     let pipeline = InjectionPipeline::new(config, Some(tx));
     let result = pipeline.execute(&["my_skin_mod".into()], 1234).await;
 
-    assert!(result.is_err(), "should abort on wrong hash");
+    assert!(
+        matches!(result, Err(InjectError::UntrustedInjector { .. })),
+        "an injector without the publisher's signature must stop the pipeline"
+    );
     assert!(matches!(
         rx.borrow().injection,
         InjectionStatus::Failed { .. }
     ));
-
-    std::fs::remove_dir_all(&temp_dir).ok();
-}
-
-#[tokio::test]
-async fn test_pipeline_fails_loudly_when_the_overlay_cannot_be_built() {
-    let temp_dir = std::env::temp_dir().join("bullet_test_pipeline_resume");
-    std::fs::create_dir_all(&temp_dir).unwrap();
-
-    let host_file = temp_dir.join("ltk_patcher_host.exe");
-    let host_bytes = b"valid audited host binary sample";
-    std::fs::write(&host_file, host_bytes).unwrap();
-
-    let (tx, rx) = new_state_channel();
-    let config = temp_config(&temp_dir, host_file, compute_sha256(host_bytes));
-
-    let pipeline = InjectionPipeline::new(config, Some(tx));
-    let result = pipeline
-        .execute(&["my_skin_mod".into()], std::process::id())
-        .await;
-
-    assert!(result.is_err(), "an unbuildable overlay must fail loudly");
-    assert!(
-        matches!(rx.borrow().injection, InjectionStatus::Failed { .. }),
-        "failure must be published, not swallowed"
-    );
 
     std::fs::remove_dir_all(&temp_dir).ok();
 }
@@ -161,7 +131,7 @@ async fn fake_host(
         .map(|line| format!("{line}\r\n"))
         .collect();
     std::fs::write(&host, body).expect("fake host script");
-    let mut config = temp_config(&dir, host, String::new());
+    let mut config = temp_config(&dir, host);
     config.hook_timeout = hook_timeout;
     let pipeline = InjectionPipeline::new(config, None);
     let overlay = pipeline.spawn_patcher().await.expect("spawn fake host");

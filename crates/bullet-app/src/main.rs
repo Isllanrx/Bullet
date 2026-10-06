@@ -273,7 +273,9 @@ async fn main() -> Result<()> {
         });
     }
 
+    let installed_dll = bullet_app::ltk_release::InstalledDllCache::default();
     let game_build = report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
+    report_ltk_dll_support(game_build, installed_dll.read(&paths.ltk_dll_path));
 
     let required_tools = trigger::required_tool_files(&paths);
 
@@ -348,10 +350,32 @@ async fn main() -> Result<()> {
             ReleaseNotices {
                 bullet: update_notice.clone(),
                 ltk: ltk_notice.clone(),
+                installed: InstalledInjector {
+                    dll: paths.ltk_dll_path.clone(),
+                    cache: installed_dll.clone(),
+                },
             },
         );
         panel_links = Some(links.clone());
-        let tray_ltk_notice = ltk_notice.clone();
+        let (install_tx, mut install_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+        let install_tray = tray_controller.clone();
+        let install_notice = ltk_notice.clone();
+        let install_tools = paths.tools_dir.clone();
+        let install_state = state_dir_path.clone();
+        supervisor.spawn("injector-install", move |child_token| async move {
+            loop {
+                tokio::select! {
+                    _ = child_token.cancelled() => break,
+                    request = install_rx.recv() => {
+                        if request.is_none() {
+                            break;
+                        }
+                        install_from_panel(&install_notice, &install_tools, &install_state, &install_tray).await;
+                        while install_rx.try_recv().is_ok() {}
+                    }
+                }
+            }
+        });
 
         bullet_platform::welcome::show_welcome_window();
 
@@ -364,7 +388,7 @@ async fn main() -> Result<()> {
             links: links.clone(),
             mark_state,
             mark_live,
-            ltk_notice: tray_ltk_notice,
+            install_tx,
         };
 
         supervisor.spawn("tray-events", move |child_token| async move {
@@ -409,13 +433,14 @@ async fn main() -> Result<()> {
 
             let ltk_tray = tray_controller.clone();
             let ltk_check = bullet_app::ltk_release::LtkCheck {
-                audited: trigger::AUDITED_INJECTOR,
                 state_dir: state_dir_path.clone(),
+                installed_dll: paths.ltk_dll_path.clone(),
+                installed: installed_dll.clone(),
                 notice: ltk_notice.clone(),
-                notify: Box::new(move |status| {
+                notify: Box::new(move |version| {
                     let text = bullet_platform::i18n::text();
                     ltk_tray.notify(
-                        &bullet_platform::i18n::fill(text.ltk_new_title, "version", &status.latest),
+                        &bullet_platform::i18n::fill(text.ltk_new_title, "version", version),
                         text.ltk_new_body,
                     );
                 }),
@@ -593,14 +618,13 @@ fn tray_status(
 }
 
 async fn compatible_ltk_version(state_dir: &std::path::Path) -> Option<String> {
-    let audited = trigger::AUDITED_INJECTOR;
     let online = bullet_app::update_check::is_enabled(
         std::env::var(bullet_core::env::UPDATE_CHECK)
             .ok()
             .as_deref(),
     );
     let cached = || {
-        bullet_app::ltk_release::load_verdicts(state_dir, audited)
+        bullet_app::ltk_release::load_verdicts(state_dir)
             .status_from_cache()
             .and_then(|s| s.compatible)
     };
@@ -609,7 +633,7 @@ async fn compatible_ltk_version(state_dir: &std::path::Path) -> Option<String> {
     }
     match tokio::time::timeout(
         STARTUP_LTK_LOOKUP,
-        bullet_app::ltk_release::compatible_version(audited, state_dir),
+        bullet_app::ltk_release::compatible_version(state_dir),
     )
     .await
     {
@@ -637,11 +661,7 @@ fn install_injector_elevated(args: &[String]) -> i32 {
     ) {
         return 3;
     }
-    match bullet_app::injector_install::install(
-        trigger::AUDITED_INJECTOR,
-        std::path::Path::new(staging),
-        &tools,
-    ) {
+    match bullet_app::injector_install::install(std::path::Path::new(staging), &tools) {
         Ok(()) => 0,
         Err(_) => 1,
     }
@@ -661,11 +681,11 @@ async fn install_injector_automatically(
     use bullet_app::injector_install::{InstallError, elevated_parameters, install, stage};
     use bullet_platform::elevation::{ElevatedRun, run_elevated};
 
-    let staging = match stage(trigger::AUDITED_INJECTOR, version, state_dir).await {
+    let staging = match stage(version, state_dir).await {
         Ok(staging) => staging,
         Err(e) => return AutoInstall::Failed(e.to_string()),
     };
-    let outcome = match install(trigger::AUDITED_INJECTOR, &staging, tools) {
+    let outcome = match install(&staging, tools) {
         Ok(()) => AutoInstall::Installed,
         Err(InstallError::Denied) => {
             info!(tools = %tools.display(), "Asking Windows for permission to copy the injector into the tools folder");
@@ -698,12 +718,7 @@ async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path
     use bullet_app::startup::{InjectorRefusal, injector_refusal};
 
     let text = bullet_platform::i18n::text();
-    let (title, body) = match injector_refusal(
-        &paths.ltk_host_exe,
-        trigger::AUDITED_LTK_HOST_HASH,
-        &paths.ltk_dll_path,
-        trigger::AUDITED_LTK_DLL_HASH,
-    ) {
+    let (title, body) = match injector_refusal(&paths.ltk_host_exe, &paths.ltk_dll_path) {
         None => return false,
         Some(InjectorRefusal::Missing) => {
             warn!(
@@ -712,12 +727,12 @@ async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path
             );
             (text.missing_tools_title, text.missing_tools_body)
         }
-        Some(InjectorRefusal::NotAudited(files)) => {
+        Some(InjectorRefusal::NotTrusted(files)) => {
             for (file, error) in &files {
                 warn!(
                     file = %file.display(),
                     error = %error,
-                    "Bullet stopped at startup: an injector file is not the audited build"
+                    "Bullet stopped at startup: an injector file is not signed by its publisher"
                 );
             }
             (text.broken_tools_title, text.broken_tools_body)
@@ -726,7 +741,7 @@ async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path
     let compatible = compatible_ltk_version(state_dir).await;
     info!(
         compatible = compatible.as_deref().unwrap_or("unknown"),
-        "Pointing the user at the LTK Manager release that carries the audited injector"
+        "Pointing the user at the newest LTK Manager release with a signed injector"
     );
     let mut failure = None;
     if let Some(version) = compatible.as_deref() {
@@ -734,12 +749,7 @@ async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path
         if bullet_platform::shell::message_box_question(text.injector_auto_title, &offer) {
             match install_injector_automatically(&paths.tools_dir, state_dir, version).await {
                 AutoInstall::Installed => {
-                    let still_refused = injector_refusal(
-                        &paths.ltk_host_exe,
-                        trigger::AUDITED_LTK_HOST_HASH,
-                        &paths.ltk_dll_path,
-                        trigger::AUDITED_LTK_DLL_HASH,
-                    );
+                    let still_refused = injector_refusal(&paths.ltk_host_exe, &paths.ltk_dll_path);
                     if still_refused.is_none() {
                         info!(version, tools = %paths.tools_dir.display(), "Injector installed from the LTK Manager release on GitHub");
                         return false;
@@ -786,6 +796,48 @@ async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path
 struct ReleaseNotices {
     bullet: bullet_app::update_check::UpdateNotice,
     ltk: bullet_app::ltk_release::LtkNotice,
+    installed: InstalledInjector,
+}
+
+struct InstalledInjector {
+    dll: std::path::PathBuf,
+    cache: bullet_app::ltk_release::InstalledDllCache,
+}
+
+async fn install_from_panel(
+    notice: &bullet_app::ltk_release::LtkNotice,
+    tools: &std::path::Path,
+    state_dir: &std::path::Path,
+    tray: &bullet_platform::tray::TrayController,
+) {
+    let text = bullet_platform::i18n::text();
+    let Some(version) = notice.status().and_then(|s| s.compatible) else {
+        warn!(
+            "Injector install requested, but no LTK Manager release with a signed injector is known yet"
+        );
+        return;
+    };
+    info!(version = %version, "Installing the injector requested from the control panel");
+    match install_injector_automatically(tools, state_dir, &version).await {
+        AutoInstall::Installed => {
+            info!(version = %version, tools = %tools.display(), "Injector installed from the LTK Manager release on GitHub");
+            tray.notify(
+                &bullet_platform::i18n::fill(text.injector_installed_title, "version", &version),
+                text.injector_installed_body,
+            );
+        }
+        AutoInstall::Declined => {
+            info!("The user declined the permission to copy the injector");
+            tray.notify(text.injector_auto_title, text.injector_install_declined);
+        }
+        AutoInstall::Failed(e) => {
+            warn!(error = %e, version = %version, "The injector could not be installed from the control panel");
+            tray.notify(
+                text.injector_auto_title,
+                &bullet_platform::i18n::fill(text.injector_auto_failed, "error", &e),
+            );
+        }
+    }
 }
 
 fn panel_links_for(
@@ -826,6 +878,7 @@ fn panel_links_for(
             elevated,
             update: notices.bullet.available().map(|latest| latest.to_string()),
             ltk: notices.ltk.status(),
+            installed_dll: notices.installed.cache.read(&notices.installed.dll),
         };
         bullet_app::control_panel::snapshot(&facts, bullet_platform::i18n::text())
     };
@@ -877,32 +930,42 @@ fn report_game_build(
             return None;
         }
     };
-    report_ltk_dll_support(stamp);
     Some(stamp)
 }
 
-fn report_ltk_dll_support(stamp: u32) {
-    use bullet_inject::ltk_host::{DllSupport, LTK_DLL_GAME_BUILD_LIMIT, dll_support};
+fn report_ltk_dll_support(
+    stamp: Option<u32>,
+    installed: Option<bullet_app::ltk_release::InstalledDll>,
+) {
+    use bullet_inject::ltk_host::{DllSupport, dll_support};
 
+    let Some(stamp) = stamp else { return };
+    let Some(limit) = installed.and_then(|dll| dll.build_limit) else {
+        warn!(
+            game_build = stamp,
+            "The patcher DLL's game build limit could not be read; Bullet cannot tell whether it accepts this build"
+        );
+        return;
+    };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    match dll_support(stamp, now) {
+    match dll_support(stamp, limit, now) {
         DllSupport::Supported => debug!(
             game_build = stamp,
-            dll_limit = LTK_DLL_GAME_BUILD_LIMIT,
+            dll_limit = limit,
             "The patcher DLL accepts the installed game build"
         ),
         DllSupport::SupportedUntilNextPatch { days_left } => warn!(
             game_build = stamp,
-            dll_limit = LTK_DLL_GAME_BUILD_LIMIT,
+            dll_limit = limit,
             days_left,
             "The patcher DLL accepts this game build, but refuses builds made after its limit: the next game patch needs a refreshed DLL"
         ),
         DllSupport::Refused => error!(
             game_build = stamp,
-            dll_limit = LTK_DLL_GAME_BUILD_LIMIT,
-            "The installed game build is newer than the patcher DLL accepts; no skin can load until Bullet ships a refreshed DLL"
+            dll_limit = limit,
+            "The installed game build is newer than the patcher DLL accepts; no skin can load until a refreshed DLL is installed"
         ),
     }
 }
@@ -955,7 +1018,7 @@ struct TrayActions {
     links: bullet_platform::panel::PanelLinks,
     mark_state: bullet_core::state::StateReceiver,
     mark_live: bullet_app::live_game::LiveGame,
-    ltk_notice: bullet_app::ltk_release::LtkNotice,
+    install_tx: tokio::sync::mpsc::UnboundedSender<()>,
 }
 
 impl TrayActions {
@@ -1079,12 +1142,9 @@ impl TrayActions {
                     warn!(error = %e, page = %page, "Could not open the release page");
                 }
             }
-            bullet_platform::tray::TrayEvent::OpenLtkRelease => {
-                let compatible = self.ltk_notice.status().and_then(|s| s.compatible);
-                let page = bullet_app::ltk_release::release_page(compatible.as_deref());
-                if let Err(e) = bullet_platform::shell::open_web_page(&page) {
-                    warn!(error = %e, page = %page, "Could not open the LTK Manager release page");
-                }
+            bullet_platform::tray::TrayEvent::InstallInjector => {
+                // ignore-ok: the install task is gone only when the app is shutting down
+                let _ = self.install_tx.send(());
             }
             bullet_platform::tray::TrayEvent::ToggleAutostart => {
                 match bullet_platform::autostart::toggle() {

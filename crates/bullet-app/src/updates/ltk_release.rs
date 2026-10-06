@@ -30,30 +30,28 @@ pub const INJECTOR_FILES: [&str; 2] = [
     bullet_inject::ltk_host::DLL_FILE,
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuditedInjector {
-    pub host_sha256: &'static str,
-    pub dll_sha256: &'static str,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Injector {
-    Audited,
-    New,
+    Trusted { dll_sha256: String },
+    Untrusted,
 }
 
 impl Injector {
-    fn as_str(self) -> &'static str {
+    fn render(&self) -> String {
         match self {
-            Self::Audited => "audited",
-            Self::New => "new",
+            Self::Trusted { dll_sha256 } => format!("trusted {dll_sha256}"),
+            Self::Untrusted => "untrusted".to_owned(),
         }
     }
 
-    fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "audited" => Some(Self::Audited),
-            "new" => Some(Self::New),
+    fn parse(words: &[&str]) -> Option<Self> {
+        match words {
+            ["trusted", dll] if dll.len() == 64 && dll.chars().all(|c| c.is_ascii_hexdigit()) => {
+                Some(Self::Trusted {
+                    dll_sha256: dll.to_ascii_lowercase(),
+                })
+            }
+            ["untrusted"] => Some(Self::Untrusted),
             _ => None,
         }
     }
@@ -62,8 +60,20 @@ impl Injector {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LtkStatus {
     pub latest: String,
-    pub latest_injector: Injector,
+    pub latest_trusted: bool,
     pub compatible: Option<String>,
+    pub compatible_dll: Option<String>,
+}
+
+impl LtkStatus {
+    #[must_use]
+    pub fn offers_update_over(&self, installed_dll_sha256: Option<&str>) -> Option<&str> {
+        let dll = self.compatible_dll.as_deref()?;
+        let installed = installed_dll_sha256.unwrap_or_default();
+        (!dll.eq_ignore_ascii_case(installed))
+            .then_some(self.compatible.as_deref())
+            .flatten()
+    }
 }
 
 #[must_use]
@@ -103,35 +113,15 @@ pub fn published_versions(body: &str) -> Result<Vec<String>, String> {
     Ok(versions.into_iter().map(|(_, raw)| raw).collect())
 }
 
-#[must_use]
-pub fn classify(audited: AuditedInjector, host_sha256: &str, dll_sha256: &str) -> Injector {
-    if host_sha256.eq_ignore_ascii_case(audited.host_sha256)
-        && dll_sha256.eq_ignore_ascii_case(audited.dll_sha256)
-    {
-        Injector::Audited
-    } else {
-        Injector::New
-    }
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Verdicts {
-    fingerprint: String,
     by_version: BTreeMap<String, Injector>,
 }
 
 impl Verdicts {
     #[must_use]
-    pub fn new(audited: AuditedInjector) -> Self {
-        Self {
-            fingerprint: fingerprint(audited),
-            by_version: BTreeMap::new(),
-        }
-    }
-
-    #[must_use]
-    pub fn get(&self, version: &str) -> Option<Injector> {
-        self.by_version.get(version).copied()
+    pub fn get(&self, version: &str) -> Option<&Injector> {
+        self.by_version.get(version)
     }
 
     pub fn insert(&mut self, version: &str, injector: Injector) {
@@ -141,15 +131,16 @@ impl Verdicts {
     #[must_use]
     pub fn status(&self, newest_first: &[String]) -> Option<LtkStatus> {
         let latest = newest_first.first()?;
-        let latest_injector = self.get(latest)?;
-        let compatible = newest_first
-            .iter()
-            .find(|v| self.get(v) == Some(Injector::Audited))
-            .cloned();
+        let latest_trusted = matches!(self.get(latest)?, Injector::Trusted { .. });
+        let compatible = newest_first.iter().find_map(|v| match self.get(v) {
+            Some(Injector::Trusted { dll_sha256 }) => Some((v.clone(), dll_sha256.clone())),
+            _ => None,
+        });
         Some(LtkStatus {
             latest: latest.clone(),
-            latest_injector,
-            compatible,
+            latest_trusted,
+            compatible_dll: compatible.as_ref().map(|(_, dll)| dll.clone()),
+            compatible: compatible.map(|(version, _)| version),
         })
     }
 
@@ -166,26 +157,23 @@ impl Verdicts {
     }
 
     fn render(&self) -> String {
-        let mut out = format!("{}\n", self.fingerprint);
+        let mut out = format!("{}\n", fingerprint());
         for (version, injector) in &self.by_version {
-            out.push_str(&format!("{version} {}\n", injector.as_str()));
+            out.push_str(&format!("{version} {}\n", injector.render()));
         }
         out
     }
 
-    fn parse(raw: &str, audited: AuditedInjector) -> Self {
+    fn parse(raw: &str) -> Self {
         let mut lines = raw.lines();
-        let mut verdicts = Self::new(audited);
-        if lines.next().map(str::trim) != Some(verdicts.fingerprint.as_str()) {
+        let mut verdicts = Self::default();
+        if lines.next().map(str::trim) != Some(fingerprint().as_str()) {
             return verdicts;
         }
         for line in lines {
-            let mut parts = line.split_whitespace();
-            if let (Some(version), Some(injector), None) =
-                (parts.next(), parts.next(), parts.next())
-            {
-                if let (Some(_), Some(injector)) =
-                    (Version::parse(version), Injector::parse(injector))
+            let words: Vec<&str> = line.split_whitespace().collect();
+            if let [version, rest @ ..] = words.as_slice() {
+                if let (Some(_), Some(injector)) = (Version::parse(version), Injector::parse(rest))
                 {
                     verdicts.insert(version, injector);
                 }
@@ -195,19 +183,15 @@ impl Verdicts {
     }
 }
 
-fn fingerprint(audited: AuditedInjector) -> String {
-    format!(
-        "{}:{}",
-        audited.host_sha256.to_ascii_lowercase(),
-        audited.dll_sha256.to_ascii_lowercase()
-    )
+fn fingerprint() -> String {
+    format!("signed-by {}", bullet_inject::trust::LTK_PUBLISHER)
 }
 
 #[must_use]
-pub fn load_verdicts(state_dir: &Path, audited: AuditedInjector) -> Verdicts {
+pub fn load_verdicts(state_dir: &Path) -> Verdicts {
     std::fs::read_to_string(state_dir.join(VERDICTS_FILE))
-        .map(|raw| Verdicts::parse(&raw, audited))
-        .unwrap_or_else(|_| Verdicts::new(audited))
+        .map(|raw| Verdicts::parse(&raw))
+        .unwrap_or_default()
 }
 
 pub fn save_verdicts(state_dir: &Path, verdicts: &Verdicts) {
@@ -217,6 +201,47 @@ pub fn save_verdicts(state_dir: &Path, verdicts: &Verdicts) {
         false,
     ) {
         warn!(error = %e, "Could not record the LTK Manager release check; it will run again next launch");
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledDll {
+    pub sha256: String,
+    pub build_limit: Option<u32>,
+}
+
+impl InstalledDll {
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        Self {
+            sha256: bullet_inject::dll_validator::compute_sha256(bytes),
+            build_limit: bullet_inject::trust::dll_build_limit(bytes),
+        }
+    }
+}
+
+type DllStamp = (std::time::SystemTime, u64);
+
+#[derive(Debug, Clone, Default)]
+pub struct InstalledDllCache(Arc<Mutex<Option<(DllStamp, InstalledDll)>>>);
+
+impl InstalledDllCache {
+    #[must_use]
+    pub fn read(&self, dll: &Path) -> Option<InstalledDll> {
+        let meta = std::fs::metadata(dll).ok()?;
+        let stamp = (meta.modified().ok()?, meta.len());
+        if let Ok(slot) = self.0.lock() {
+            if let Some((known, installed)) = slot.as_ref() {
+                if *known == stamp {
+                    return Some(installed.clone());
+                }
+            }
+        }
+        let installed = InstalledDll::from_bytes(&std::fs::read(dll).ok()?);
+        if let Ok(mut slot) = self.0.lock() {
+            *slot = Some((stamp, installed.clone()));
+        }
+        Some(installed)
     }
 }
 
@@ -251,10 +276,11 @@ impl LtkNotice {
 }
 
 pub struct LtkCheck {
-    pub audited: AuditedInjector,
     pub state_dir: PathBuf,
+    pub installed_dll: PathBuf,
+    pub installed: InstalledDllCache,
     pub notice: LtkNotice,
-    pub notify: Box<dyn Fn(&LtkStatus) + Send>,
+    pub notify: Box<dyn Fn(&str) + Send>,
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
@@ -303,15 +329,6 @@ async fn resource(client: &reqwest::Client, version: &str, file: &str) -> Result
     get(client, &url, "application/vnd.github.raw").await
 }
 
-async fn resource_sha256(
-    client: &reqwest::Client,
-    version: &str,
-    file: &str,
-) -> Result<String, String> {
-    let bytes = resource(client, version, file).await?;
-    Ok(bullet_inject::dll_validator::compute_sha256(&bytes))
-}
-
 pub async fn download_injector(version: &str) -> Result<Vec<(&'static str, Vec<u8>)>, String> {
     let client = http_client()?;
     let mut files = Vec::with_capacity(INJECTOR_FILES.len());
@@ -321,54 +338,71 @@ pub async fn download_injector(version: &str) -> Result<Vec<(&'static str, Vec<u
     Ok(files)
 }
 
-async fn inspect(
-    client: &reqwest::Client,
-    audited: AuditedInjector,
-    version: &str,
-) -> Result<Injector, String> {
-    let host = resource_sha256(client, version, INJECTOR_FILES[0]).await?;
-    let dll = resource_sha256(client, version, INJECTOR_FILES[1]).await?;
-    Ok(classify(audited, &host, &dll))
+async fn inspect(client: &reqwest::Client, version: &str) -> Result<Injector, String> {
+    let dir = std::env::temp_dir().join(format!(
+        "bullet_ltk_inspect_{}_{version}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let mut dll_sha256 = String::new();
+    let mut trusted = true;
+    for name in INJECTOR_FILES {
+        let bytes = resource(client, version, name).await?;
+        let path = dir.join(name);
+        std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+        if let Err(e) = bullet_inject::trust::verify_injector_file(&path) {
+            info!(version, file = name, reason = %e, "An LTK Manager release carries an injector Bullet does not trust");
+            trusted = false;
+        }
+        if name == INJECTOR_FILES[1] {
+            dll_sha256 = bullet_inject::dll_validator::compute_sha256(&bytes);
+        }
+    }
+    if let Err(e) = std::fs::remove_dir_all(&dir) {
+        debug!(error = %e, "LTK inspection folder not removed");
+    }
+    Ok(if trusted {
+        Injector::Trusted { dll_sha256 }
+    } else {
+        Injector::Untrusted
+    })
 }
 
 async fn refresh(
     client: &reqwest::Client,
-    audited: AuditedInjector,
     verdicts: &mut Verdicts,
 ) -> Result<Option<LtkStatus>, String> {
     let versions = release_versions(client).await?;
     let mut inspected = 0;
     for version in &versions {
-        let injector = match verdicts.get(version) {
-            Some(known) => known,
+        let trusted = match verdicts.get(version) {
+            Some(known) => matches!(known, Injector::Trusted { .. }),
             None if inspected < MAX_INSPECTIONS_PER_CHECK => {
                 inspected += 1;
-                let injector = inspect(client, audited, version).await?;
+                let injector = inspect(client, version).await?;
+                let trusted = matches!(injector, Injector::Trusted { .. });
                 verdicts.insert(version, injector);
-                injector
+                trusted
             }
             None => break,
         };
-        if injector == Injector::Audited {
+        if trusted {
             break;
         }
     }
     Ok(verdicts.status(&versions))
 }
 
-pub async fn compatible_version(audited: AuditedInjector, state_dir: &Path) -> Option<String> {
-    let mut verdicts = load_verdicts(state_dir, audited);
+pub async fn compatible_version(state_dir: &Path) -> Option<String> {
+    let mut verdicts = load_verdicts(state_dir);
     let refreshed = match http_client() {
-        Ok(client) => refresh(&client, audited, &mut verdicts).await,
+        Ok(client) => refresh(&client, &mut verdicts).await,
         Err(e) => Err(e),
     };
+    save_verdicts(state_dir, &verdicts);
     match refreshed {
-        Ok(status) => {
-            save_verdicts(state_dir, &verdicts);
-            status.and_then(|s| s.compatible)
-        }
+        Ok(status) => status.and_then(|s| s.compatible),
         Err(e) => {
-            save_verdicts(state_dir, &verdicts);
             debug!(error = %e, "LTK Manager releases could not be checked; using the last known result");
             verdicts.status_from_cache().and_then(|s| s.compatible)
         }
@@ -390,7 +424,7 @@ pub async fn run(check: LtkCheck, state_rx: StateReceiver, token: CancellationTo
             return;
         }
     };
-    let mut verdicts = load_verdicts(&check.state_dir, check.audited);
+    let mut verdicts = load_verdicts(&check.state_dir);
     if let Some(status) = verdicts.status_from_cache() {
         check.notice.set(status);
     }
@@ -398,28 +432,32 @@ pub async fn run(check: LtkCheck, state_rx: StateReceiver, token: CancellationTo
         return;
     }
     loop {
-        match refresh(&client, check.audited, &mut verdicts).await {
+        match refresh(&client, &mut verdicts).await {
             Ok(Some(status)) => {
                 save_verdicts(&check.state_dir, &verdicts);
                 if check.notice.status().as_ref() != Some(&status) {
                     info!(
                         latest = %status.latest,
-                        latest_injector = status.latest_injector.as_str(),
+                        latest_trusted = status.latest_trusted,
                         compatible = status.compatible.as_deref().unwrap_or("none"),
-                        "LTK Manager releases checked against the audited injector"
+                        "LTK Manager releases checked against the publisher's signature"
                     );
                     check.notice.set(status.clone());
                 }
-                if status.latest_injector == Injector::New
-                    && !already_notified(&check.state_dir, &status.latest)
-                {
-                    while is_busy(state_rx.borrow().phase) {
-                        if !pause(&token, BUSY_RETRY).await {
-                            return;
+                let installed = check
+                    .installed
+                    .read(&check.installed_dll)
+                    .map(|dll| dll.sha256);
+                if let Some(version) = status.offers_update_over(installed.as_deref()) {
+                    if !already_notified(&check.state_dir, version) {
+                        while is_busy(state_rx.borrow().phase) {
+                            if !pause(&token, BUSY_RETRY).await {
+                                return;
+                            }
                         }
+                        (check.notify)(version);
+                        remember_notified(&check.state_dir, version);
                     }
-                    (check.notify)(&status);
-                    remember_notified(&check.state_dir, &status.latest);
                 }
             }
             Ok(None) => {
@@ -441,13 +479,17 @@ pub async fn run(check: LtkCheck, state_rx: StateReceiver, token: CancellationTo
 mod tests {
     use super::*;
 
-    const AUDITED: AuditedInjector = AuditedInjector {
-        host_sha256: "a7c4047ce7548c7ae820bc440735f15b9d1a495acf061dbb5a5a2893a0ed8d7c",
-        dll_sha256: "07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b",
-    };
+    const DLL_A: &str = "6d419057e6667994ba752ad0fb089b363db98267618644d7f7b6632441a21d74";
+    const DLL_B: &str = "07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b";
 
     fn list(versions: &[&str]) -> Vec<String> {
         versions.iter().map(|v| (*v).to_owned()).collect()
+    }
+
+    fn trusted(dll: &str) -> Injector {
+        Injector::Trusted {
+            dll_sha256: dll.to_owned(),
+        }
     }
 
     #[test]
@@ -468,75 +510,86 @@ mod tests {
     }
 
     #[test]
-    fn only_both_audited_hashes_count_as_the_audited_injector() {
-        let (host, dll) = (AUDITED.host_sha256, AUDITED.dll_sha256);
-        assert_eq!(classify(AUDITED, host, dll), Injector::Audited);
-        assert_eq!(
-            classify(AUDITED, &host.to_ascii_uppercase(), dll),
-            Injector::Audited
-        );
-        assert_eq!(classify(AUDITED, host, &"0".repeat(64)), Injector::New);
-        assert_eq!(classify(AUDITED, &"0".repeat(64), dll), Injector::New);
-    }
-
-    #[test]
-    fn the_compatible_version_is_the_newest_release_with_the_audited_files() {
-        let mut verdicts = Verdicts::new(AUDITED);
-        verdicts.insert("1.27.0", Injector::New);
-        verdicts.insert("1.26.1", Injector::Audited);
-        verdicts.insert("1.26.0", Injector::Audited);
+    fn the_compatible_version_is_the_newest_release_signed_by_the_publisher() {
+        let mut verdicts = Verdicts::default();
+        verdicts.insert("1.28.0", Injector::Untrusted);
+        verdicts.insert("1.27.0", trusted(DLL_A));
+        verdicts.insert("1.26.1", trusted(DLL_B));
         let status = verdicts
-            .status(&list(&["1.27.0", "1.26.1", "1.26.0"]))
+            .status(&list(&["1.28.0", "1.27.0", "1.26.1"]))
             .expect("status");
-        assert_eq!(status.latest, "1.27.0");
-        assert_eq!(status.latest_injector, Injector::New);
-        assert_eq!(status.compatible.as_deref(), Some("1.26.1"));
-
-        let current = verdicts
-            .status(&list(&["1.26.1", "1.26.0"]))
-            .expect("status");
-        assert_eq!(current.latest_injector, Injector::Audited);
-        assert_eq!(current.compatible.as_deref(), Some("1.26.1"));
-
-        assert_eq!(verdicts.status(&list(&["1.28.0"])), None);
+        assert_eq!(status.latest, "1.28.0");
+        assert!(!status.latest_trusted);
+        assert_eq!(status.compatible.as_deref(), Some("1.27.0"));
+        assert_eq!(status.compatible_dll.as_deref(), Some(DLL_A));
+        assert_eq!(verdicts.status(&list(&["9.9.9"])), None);
         assert_eq!(verdicts.status(&[]), None);
     }
 
     #[test]
+    fn an_update_is_offered_only_when_the_installed_dll_differs() {
+        let status = LtkStatus {
+            latest: "1.27.0".into(),
+            latest_trusted: true,
+            compatible: Some("1.27.0".into()),
+            compatible_dll: Some(DLL_A.into()),
+        };
+        assert_eq!(status.offers_update_over(Some(DLL_B)), Some("1.27.0"));
+        assert_eq!(
+            status.offers_update_over(None),
+            Some("1.27.0"),
+            "missing files"
+        );
+        assert_eq!(status.offers_update_over(Some(DLL_A)), None);
+        assert_eq!(
+            status.offers_update_over(Some(&DLL_A.to_ascii_uppercase())),
+            None
+        );
+        let nothing_trusted = LtkStatus {
+            compatible: None,
+            compatible_dll: None,
+            ..status
+        };
+        assert_eq!(nothing_trusted.offers_update_over(Some(DLL_B)), None);
+    }
+
+    #[test]
     fn the_cache_orders_versions_numerically() {
-        let mut verdicts = Verdicts::new(AUDITED);
-        verdicts.insert("1.9.0", Injector::Audited);
-        verdicts.insert("1.10.0", Injector::New);
+        let mut verdicts = Verdicts::default();
+        verdicts.insert("1.9.0", trusted(DLL_B));
+        verdicts.insert("1.10.0", Injector::Untrusted);
         let status = verdicts.status_from_cache().expect("status");
         assert_eq!(status.latest, "1.10.0");
         assert_eq!(status.compatible.as_deref(), Some("1.9.0"));
     }
 
     #[test]
-    fn verdicts_round_trip_and_reset_when_the_audited_build_changes() {
+    fn verdicts_round_trip_and_drop_what_they_cannot_read() {
         let dir = std::env::temp_dir().join(format!("bullet_ltk_check_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
         std::fs::create_dir_all(&dir).expect("fixture dir");
-        assert_eq!(load_verdicts(&dir, AUDITED), Verdicts::new(AUDITED));
+        assert_eq!(load_verdicts(&dir), Verdicts::default());
 
-        let mut verdicts = Verdicts::new(AUDITED);
-        verdicts.insert("1.26.1", Injector::Audited);
-        verdicts.insert("1.27.0", Injector::New);
+        let mut verdicts = Verdicts::default();
+        verdicts.insert("1.27.0", trusted(DLL_A));
+        verdicts.insert("1.28.0", Injector::Untrusted);
         save_verdicts(&dir, &verdicts);
-        assert_eq!(load_verdicts(&dir, AUDITED), verdicts);
+        assert_eq!(load_verdicts(&dir), verdicts);
 
-        let other = AuditedInjector {
-            host_sha256: AUDITED.host_sha256,
-            dll_sha256: "1111111111111111111111111111111111111111111111111111111111111111",
-        };
-        assert_eq!(load_verdicts(&dir, other), Verdicts::new(other));
+        std::fs::write(dir.join(VERDICTS_FILE), "old-format-line\n1.27.0 audited\n")
+            .expect("write");
+        assert_eq!(
+            load_verdicts(&dir),
+            Verdicts::default(),
+            "a cache from the hash era is dropped"
+        );
 
         let garbage = format!(
-            "{}\n1.26.1 maybe\nnot-a-version audited\n1.27.0 new extra\n",
-            fingerprint(AUDITED)
+            "{}\n1.26.1 maybe\nnot-a-version untrusted\n1.27.0 trusted short\n1.27.1 trusted {DLL_A} extra\n",
+            fingerprint()
         );
         std::fs::write(dir.join(VERDICTS_FILE), garbage).expect("write");
-        assert_eq!(load_verdicts(&dir, AUDITED), Verdicts::new(AUDITED));
+        assert_eq!(load_verdicts(&dir), Verdicts::default());
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
     }
 
@@ -552,25 +605,27 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
     }
 
-    #[test]
-    fn pages_point_at_the_ltk_manager_releases() {
-        assert_eq!(
-            release_page(Some("1.26.1")),
-            format!("{LTK_REPOSITORY}/releases/tag/v1.26.1")
-        );
-        assert_eq!(release_page(None), format!("{LTK_REPOSITORY}/releases"));
+    #[tokio::test]
+    #[ignore = "downloads LTK Manager releases from GitHub"]
+    async fn the_newest_signed_release_is_found_online() {
+        let dir = std::env::temp_dir().join(format!("bullet_ltk_online_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+        std::fs::create_dir_all(&dir).expect("fixture dir");
+        let version = compatible_version(&dir).await.expect("a signed release");
+        let verdicts = load_verdicts(&dir);
+        assert!(matches!(
+            verdicts.get(&version),
+            Some(Injector::Trusted { .. })
+        ));
+        let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
     }
 
     #[test]
-    fn the_notice_holds_the_latest_status() {
-        let notice = LtkNotice::default();
-        assert_eq!(notice.status(), None);
-        let status = LtkStatus {
-            latest: "1.26.1".into(),
-            latest_injector: Injector::Audited,
-            compatible: Some("1.26.1".into()),
-        };
-        notice.set(status.clone());
-        assert_eq!(notice.clone().status(), Some(status));
+    fn pages_point_at_the_ltk_manager_releases() {
+        assert_eq!(
+            release_page(Some("1.27.0")),
+            format!("{LTK_REPOSITORY}/releases/tag/v1.27.0")
+        );
+        assert_eq!(release_page(None), format!("{LTK_REPOSITORY}/releases"));
     }
 }

@@ -4,7 +4,6 @@ use std::time::Duration;
 use bullet_core::state::{InjectionStatus, StateSender, set_injection_status};
 use tracing::{error, info, warn};
 
-use crate::dll_validator::validate_dll_hash;
 use crate::error::InjectError;
 use crate::overlay::{OverlayConfig, OverlayManager};
 use crate::overlay_process::{OverlayProcess, PatcherSignal};
@@ -61,11 +60,7 @@ impl Drop for CancelOnDrop {
 pub struct PipelineConfig {
     pub ltk_host_exe: PathBuf,
 
-    pub ltk_host_hash: String,
-
     pub ltk_dll_path: PathBuf,
-
-    pub ltk_dll_hash: String,
 
     pub ltk_flags: u32,
 
@@ -141,8 +136,8 @@ impl InjectionPipeline {
     }
 
     fn validate_patcher_binaries(&self) -> Result<(), InjectError> {
-        validate_dll_hash(&self.config.ltk_host_exe, &self.config.ltk_host_hash)?;
-        validate_dll_hash(&self.config.ltk_dll_path, &self.config.ltk_dll_hash)
+        crate::trust::verify_injector_file(&self.config.ltk_host_exe)?;
+        crate::trust::verify_injector_file(&self.config.ltk_dll_path)
     }
 
     pub async fn execute(

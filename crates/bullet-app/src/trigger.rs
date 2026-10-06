@@ -9,18 +9,6 @@ use bullet_platform::process::ProcessFinder;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
-pub const AUDITED_LTK_DLL_HASH: &str =
-    "6d419057e6667994ba752ad0fb089b363db98267618644d7f7b6632441a21d74";
-
-pub const AUDITED_LTK_HOST_HASH: &str =
-    "23fa1aaeda1a0c743da44227f179084e1fb81c7cd262144a3c8604ffc49d3bc1";
-
-pub const AUDITED_INJECTOR: bullet_app::ltk_release::AuditedInjector =
-    bullet_app::ltk_release::AuditedInjector {
-        host_sha256: AUDITED_LTK_HOST_HASH,
-        dll_sha256: AUDITED_LTK_DLL_HASH,
-    };
-
 mod mods;
 mod paths;
 
@@ -680,9 +668,7 @@ impl InjectionTrigger {
     fn pipeline_config(&self, game_dir: PathBuf) -> PipelineConfig {
         PipelineConfig {
             ltk_host_exe: self.paths.ltk_host_exe.clone(),
-            ltk_host_hash: AUDITED_LTK_HOST_HASH.into(),
             ltk_dll_path: self.paths.ltk_dll_path.clone(),
-            ltk_dll_hash: AUDITED_LTK_DLL_HASH.into(),
             ltk_flags: bullet_inject::ltk_host::default_flags(),
             overlay_config: OverlayConfig {
                 mods_dir: self.paths.mods_dir.clone(),

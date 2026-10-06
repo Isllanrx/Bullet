@@ -65,7 +65,7 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
         PanelAction::OpenTools => TrayEvent::OpenTools,
         PanelAction::OpenLogs => TrayEvent::OpenLogs,
         PanelAction::OpenRelease => TrayEvent::OpenRelease,
-        PanelAction::OpenLtk => TrayEvent::OpenLtkRelease,
+        PanelAction::InstallInjector => TrayEvent::InstallInjector,
         PanelAction::MarkProblem => TrayEvent::MarkProblem,
         PanelAction::ExportDiagnostics => TrayEvent::ExportDiagnostics,
         PanelAction::About => TrayEvent::About,

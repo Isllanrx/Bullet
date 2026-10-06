@@ -63,8 +63,8 @@ under a flat path (`bullet_platform::fs`, `bullet_wad::prop`), so callers never 
    `%LOCALAPPDATA%\Bullet`.
 3. **Logging.** A non-blocking daily log file starts in `%LOCALAPPDATA%\Bullet\logs`.
 4. **Discovery.** The game install (from Riot's metadata or the running process, WeGame layouts included) and
-   the injector tools (from Bullet's own folder, hash-checked) are located. When the tools are missing or not
-   the audited build, Bullet offers to download them from the compatible LTK Manager release and copies them
+   the injector tools (from Bullet's own folder, signature-checked) are located. When the tools are missing or
+   not signed by League Toolkit, Bullet offers to download them from the newest signed LTK Manager release and copies them
    with a verified, elevated copy of itself; otherwise it opens the download page and stops.
 5. **Warm-up.** One prewarm thread loads the index of the game's archives from `game_index.bin` in the state
    folder (rebuilt from the WADs' tables of contents only when a WAD's size or modification time changed),

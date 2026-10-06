@@ -5,7 +5,7 @@ use bullet_inject::ltk_host::{DllSupport, dll_support};
 use bullet_platform::i18n::{Text, fill};
 use bullet_platform::panel::{PanelCheck, PanelSnapshot};
 
-use crate::ltk_release::{Injector, LtkStatus};
+use crate::ltk_release::{InstalledDll, LtkStatus};
 
 #[derive(Debug, Clone)]
 pub struct Facts {
@@ -24,6 +24,7 @@ pub struct Facts {
     pub elevated: bool,
     pub update: Option<String>,
     pub ltk: Option<LtkStatus>,
+    pub installed_dll: Option<InstalledDll>,
 }
 
 #[must_use]
@@ -52,9 +53,11 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         ok,
         detail,
     };
+    let limit = facts.installed_dll.as_ref().and_then(|dll| dll.build_limit);
     let dll = match facts
         .game_build
-        .map(|stamp| dll_support(stamp, facts.now_secs))
+        .zip(limit)
+        .map(|(stamp, limit)| dll_support(stamp, limit, facts.now_secs))
     {
         Some(DllSupport::Supported) => check(text.check_dll, true, text.detail_ok.to_owned()),
         Some(DllSupport::SupportedUntilNextPatch { days_left }) => check(
@@ -71,39 +74,54 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         }
         None => check(text.check_dll, false, text.detail_dll_unknown.to_owned()),
     };
-    let compatible = facts.ltk.as_ref().and_then(|s| s.compatible.clone());
-    let ltk_version = compatible
-        .clone()
-        .unwrap_or_else(|| text.ltk_version_unknown.to_owned());
-    let ltk_check = match &facts.ltk {
-        None => check(text.check_ltk, true, text.detail_ltk_unchecked.to_owned()),
-        Some(status) if status.latest_injector == Injector::New => check(
+    let installed_sha = facts.installed_dll.as_ref().map(|dll| dll.sha256.as_str());
+    let offered = facts
+        .ltk
+        .as_ref()
+        .and_then(|status| status.offers_update_over(installed_sha));
+    let untrusted_latest = facts
+        .ltk
+        .as_ref()
+        .filter(|status| !status.latest_trusted)
+        .map(|status| status.latest.as_str());
+    let ltk_check = match (&facts.ltk, offered, untrusted_latest) {
+        (None, _, _) => check(text.check_ltk, true, text.detail_ltk_unchecked.to_owned()),
+        (Some(_), Some(version), _) if facts.tools_present => check(
             text.check_ltk,
             false,
-            fill(text.detail_ltk_new, "latest", &status.latest),
+            fill(text.detail_ltk_new, "version", version),
         ),
-        Some(_) => match &compatible {
+        (Some(_), _, Some(latest)) => check(
+            text.check_ltk,
+            false,
+            fill(text.detail_ltk_untrusted, "latest", latest),
+        ),
+        (Some(status), _, None) => match &status.compatible {
             Some(version) => check(
                 text.check_ltk,
                 true,
-                fill(text.detail_ltk_audited, "version", version),
+                fill(text.detail_ltk_current, "version", version),
             ),
             None => check(text.check_ltk, true, text.detail_ltk_unchecked.to_owned()),
         },
     };
+    let compatible = facts.ltk.as_ref().and_then(|s| s.compatible.as_deref());
     let (ltk_line, ltk_download) = if !facts.tools_present {
+        let version = compatible.unwrap_or(text.ltk_version_unknown);
         (
-            Some(fill(text.panel_ltk_missing_line, "version", &ltk_version)),
-            Some(fill(text.panel_ltk_download, "version", &ltk_version)),
+            Some(fill(text.panel_ltk_missing_line, "version", version)),
+            compatible.map(|version| fill(text.panel_ltk_download, "version", version)),
+        )
+    } else if let Some(version) = offered {
+        (
+            Some(fill(text.panel_ltk_new_line, "version", version)),
+            Some(fill(text.panel_ltk_download, "version", version)),
         )
     } else {
-        match &facts.ltk {
-            Some(status) if status.latest_injector == Injector::New => (
-                Some(fill(text.panel_ltk_new_line, "latest", &status.latest)),
-                None,
-            ),
-            _ => (None, None),
-        }
+        (
+            untrusted_latest.map(|latest| fill(text.panel_ltk_untrusted_line, "latest", latest)),
+            None,
+        )
     };
     PanelSnapshot {
         status: facts.status.clone(),
@@ -295,48 +313,59 @@ mod tests {
             game_found: true,
             lcu_connected: true,
             game_build: Some(1_790_205_875),
-            now_secs: u64::from(bullet_inject::ltk_host::LTK_DLL_GAME_BUILD_LIMIT)
-                - 4 * 86_400
-                - 3_600,
+            now_secs: u64::from(LIMIT) - 4 * 86_400 - 3_600,
             elevated: false,
             update: None,
             ltk: None,
+            installed_dll: Some(InstalledDll {
+                sha256: OLD_DLL.into(),
+                build_limit: Some(LIMIT),
+            }),
         }
     }
 
-    fn ltk(latest: &str, latest_injector: Injector, compatible: Option<&str>) -> Option<LtkStatus> {
+    const LIMIT: u32 = 0x6ad4_6e70;
+    const OLD_DLL: &str = "07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b";
+    const NEW_DLL: &str = "6d419057e6667994ba752ad0fb089b363db98267618644d7f7b6632441a21d74";
+
+    fn ltk(
+        latest: &str,
+        latest_trusted: bool,
+        compatible: Option<(&str, &str)>,
+    ) -> Option<LtkStatus> {
         Some(LtkStatus {
             latest: latest.into(),
-            latest_injector,
-            compatible: compatible.map(str::to_owned),
+            latest_trusted,
+            compatible: compatible.map(|(version, _)| version.to_owned()),
+            compatible_dll: compatible.map(|(_, dll)| dll.to_owned()),
         })
     }
 
-    #[test]
-    fn test_the_ltk_check_names_the_compatible_release_found_online() {
-        let text = Language::English.text();
-        let unchecked = snapshot(&facts(), text);
-        let row = unchecked
+    fn ltk_row<'a>(snapshot: &'a PanelSnapshot, text: &Text) -> &'a PanelCheck {
+        snapshot
             .checks
             .iter()
             .find(|c| c.label == text.check_ltk)
-            .expect("ltk row");
+            .expect("ltk row")
+    }
+
+    #[test]
+    fn test_the_ltk_check_names_the_signed_release_the_installed_dll_matches() {
+        let text = Language::English.text();
+        let unchecked = snapshot(&facts(), text);
+        let row = ltk_row(&unchecked, text);
         assert!(row.ok);
         assert_eq!(row.detail, text.detail_ltk_unchecked);
         assert_eq!(unchecked.ltk_line, None);
 
         let current = snapshot(
             &Facts {
-                ltk: ltk("1.26.1", Injector::Audited, Some("1.26.1")),
+                ltk: ltk("1.26.1", true, Some(("1.26.1", OLD_DLL))),
                 ..facts()
             },
             text,
         );
-        let row = current
-            .checks
-            .iter()
-            .find(|c| c.label == text.check_ltk)
-            .expect("ltk row");
+        let row = ltk_row(&current, text);
         assert!(row.ok);
         assert!(row.detail.contains("1.26.1"), "{}", row.detail);
         assert_eq!(current.ltk_line, None);
@@ -344,55 +373,95 @@ mod tests {
     }
 
     #[test]
-    fn test_a_new_ltk_injector_is_shown_without_a_download_button() {
+    fn test_a_newer_signed_injector_offers_the_install_button() {
         let text = Language::English.text();
         let shown = snapshot(
             &Facts {
-                ltk: ltk("1.27.0", Injector::New, Some("1.26.1")),
+                ltk: ltk("1.27.0", true, Some(("1.27.0", NEW_DLL))),
                 ..facts()
             },
             text,
         );
-        let row = shown
-            .checks
-            .iter()
-            .find(|c| c.label == text.check_ltk)
-            .expect("ltk row");
+        let row = ltk_row(&shown, text);
         assert!(!row.ok);
         assert!(row.detail.contains("1.27.0"), "{}", row.detail);
         let line = shown.ltk_line.expect("ltk line");
         assert!(line.contains("1.27.0") && !line.contains('{'), "{line}");
+        let button = shown.ltk_download.expect("install button");
+        assert!(
+            button.contains("1.27.0") && !button.contains('{'),
+            "{button}"
+        );
+    }
+
+    #[test]
+    fn test_an_unsigned_latest_release_warns_without_a_button() {
+        let text = Language::English.text();
+        let shown = snapshot(
+            &Facts {
+                ltk: ltk("1.28.0", false, Some(("1.26.1", OLD_DLL))),
+                ..facts()
+            },
+            text,
+        );
+        let row = ltk_row(&shown, text);
+        assert!(!row.ok);
+        assert!(row.detail.contains("1.28.0"), "{}", row.detail);
+        let line = shown.ltk_line.expect("ltk line");
+        assert!(line.contains("1.28.0") && !line.contains('{'), "{line}");
         assert_eq!(shown.ltk_download, None);
     }
 
     #[test]
-    fn test_missing_tools_point_at_the_compatible_ltk_release() {
+    fn test_missing_tools_offer_the_newest_signed_release() {
         let text = Language::English.text();
         let missing = snapshot(
             &Facts {
                 tools_present: false,
-                ltk: ltk("1.27.0", Injector::New, Some("1.26.1")),
+                installed_dll: None,
+                ltk: ltk("1.28.0", false, Some(("1.27.0", NEW_DLL))),
                 ..facts()
             },
             text,
         );
         let line = missing.ltk_line.expect("ltk line");
-        assert!(line.contains("1.26.1"), "{line}");
-        let button = missing.ltk_download.expect("download button");
+        assert!(line.contains("1.27.0"), "{line}");
+        let button = missing.ltk_download.expect("install button");
         assert!(
-            button.contains("1.26.1") && !button.contains('{'),
+            button.contains("1.27.0") && !button.contains('{'),
             "{button}"
         );
 
         let offline = snapshot(
             &Facts {
                 tools_present: false,
+                installed_dll: None,
                 ..facts()
             },
             text,
         );
         let line = offline.ltk_line.expect("ltk line");
         assert!(line.contains(text.ltk_version_unknown), "{line}");
+        assert_eq!(
+            offline.ltk_download, None,
+            "nothing to install without a known release"
+        );
+    }
+
+    #[test]
+    fn test_the_dll_deadline_comes_from_the_installed_dll() {
+        let text = Language::English.text();
+        let unknown = snapshot(
+            &Facts {
+                installed_dll: Some(InstalledDll {
+                    sha256: OLD_DLL.into(),
+                    build_limit: None,
+                }),
+                ..facts()
+            },
+            text,
+        );
+        assert_eq!(unknown.checks[3].detail, text.detail_dll_unknown);
     }
 
     #[test]
