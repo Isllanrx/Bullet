@@ -28,10 +28,11 @@ injector needs.
 | `game_version.rs` | Reads the game build timestamp and notices when it changes |
 | `fs.rs` | Atomic writes (write to a temporary file, then rename) and safe archive extraction that rejects path traversal, symlinks and oversized content |
 | `overlay_window.rs`, `overlay_ui.html` | The skin selection window: a WebView2 view attached to the League client window |
+| `client_settings.rs` | Sets `install.crash_reporting.enabled: false` in the League client's `Config/LeagueClientSettings.yaml`, changing only that line (or adding the missing section) and keeping the file's indentation and line endings; a missing file is left alone |
 | `client_window.rs` | Locates the League client window so the overlay can follow it |
 | `tray.rs` | The system tray icon; a click opens the control panel, the right-click menu only shows the status, "Open Bullet" and "Quit". Shows the new-version notification; clicking it opens the release page |
 | `panel.rs`, `panel_ui.html` | The control panel: status, options, party, folders and diagnostics in one window |
-| `preferences.rs` | Persisted on/off preferences: accept matches automatically (off by default) and roll a random skin when none is chosen (on by default) |
+| `preferences.rs` | Persisted on/off preferences: accept matches automatically (off by default) and roll a random skin when none is chosen (on by default), and light match loading (on by default) |
 | `welcome.rs`, `party_dialog.rs`, `dialog.rs` | The first-run window, the party dialog and message boxes |
 | `i18n.rs` | Translations (English, Portuguese, Spanish) for everything shown outside the League client; falls back to English |
 | `single_instance.rs`, `activation.rs` | Only one Bullet runs at a time; starting it again brings the first one to the front |

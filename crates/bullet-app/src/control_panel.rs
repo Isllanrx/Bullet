@@ -14,6 +14,7 @@ pub struct Facts {
     pub in_room: bool,
     pub auto_accept: bool,
     pub random_skin: bool,
+    pub light_loading: bool,
     pub autostart: bool,
     pub tools_present: bool,
     pub game_found: bool,
@@ -110,6 +111,7 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         in_room: facts.in_room,
         auto_accept: facts.auto_accept,
         random_skin: facts.random_skin,
+        light_loading: facts.light_loading,
         autostart: facts.autostart,
         update_line: facts.update.as_deref().map(|latest| {
             fill(
@@ -287,6 +289,7 @@ mod tests {
             in_room: false,
             auto_accept: false,
             random_skin: true,
+            light_loading: true,
             autostart: false,
             tools_present: true,
             game_found: true,

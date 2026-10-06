@@ -2,6 +2,7 @@
 
 pub mod activation;
 pub mod autostart;
+pub mod client_settings;
 pub mod client_window;
 pub mod clipboard;
 pub mod dialog;

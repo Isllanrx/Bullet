@@ -459,6 +459,9 @@ impl InjectionTrigger {
     )> {
         let mods = self.collect_mods(key).await?;
         let game_dir = self.effective_game_dir(None);
+        if bullet_platform::preferences::LIGHT_LOADING.is_enabled() {
+            prefer_lazy_wad_checks(&game_dir);
+        }
         let pipeline =
             InjectionPipeline::new(self.pipeline_config(game_dir), Some(self.state_tx.clone()));
 
@@ -1315,6 +1318,21 @@ const ARM_DEBOUNCE: Duration = Duration::from_millis(900);
 const INITIAL_ARM_DEBOUNCE: Duration = Duration::from_millis(100);
 
 const GAME_PROCESS_NAME: &str = "League of Legends.exe";
+
+fn prefer_lazy_wad_checks(game_dir: &Path) {
+    match bullet_platform::client_settings::disable_crash_reporting(game_dir) {
+        Ok(true) => info!(
+            "Turned the League client's crash reporting off so the injector checks archives as the game loads them"
+        ),
+        Ok(false) => debug!(
+            "The League client's crash reporting is already off or the client has no settings yet"
+        ),
+        Err(e) => warn!(
+            error = %e,
+            "Could not turn the League client's crash reporting off; the injector checks every archive as the match starts"
+        ),
+    }
+}
 const GAME_PROCESS_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

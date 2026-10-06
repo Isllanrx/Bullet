@@ -282,6 +282,11 @@ async fn main() -> Result<()> {
         enabled = random_skin,
         "Random skin when none is chosen setting loaded"
     );
+    let light_loading = bullet_platform::preferences::LIGHT_LOADING.load();
+    info!(
+        enabled = light_loading,
+        "Light match loading setting loaded"
+    );
 
     let update_notice = bullet_app::update_check::UpdateNotice::default();
     let ltk_notice = bullet_app::ltk_release::LtkNotice::default();
@@ -375,6 +380,12 @@ async fn main() -> Result<()> {
                                     match bullet_platform::preferences::RANDOM_SKIN.toggle() {
                                         Ok(enabled) => info!(enabled, "Random skin when none is chosen changed from the control panel"),
                                         Err(e) => warn!(error = %e, "Could not change the random skin setting"),
+                                    }
+                                }
+                                bullet_platform::tray::TrayEvent::ToggleLightLoading => {
+                                    match bullet_platform::preferences::LIGHT_LOADING.toggle() {
+                                        Ok(enabled) => info!(enabled, "Light match loading changed from the control panel"),
+                                        Err(e) => warn!(error = %e, "Could not change the light match loading setting"),
                                     }
                                 }
                                 bullet_platform::tray::TrayEvent::OpenLogs => {
@@ -788,6 +799,7 @@ fn panel_links_for(
             in_room,
             auto_accept: bullet_platform::preferences::AUTO_ACCEPT.is_enabled(),
             random_skin: bullet_platform::preferences::RANDOM_SKIN.is_enabled(),
+            light_loading: bullet_platform::preferences::LIGHT_LOADING.is_enabled(),
             autostart,
             tools_present: bullet_app::control_panel::tools_present(&tools),
             game_found: bullet_app::control_panel::game_found(&game_dir),
