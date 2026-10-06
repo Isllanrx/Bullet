@@ -355,130 +355,25 @@ async fn main() -> Result<()> {
 
         bullet_platform::welcome::show_welcome_window();
 
+        let actions = TrayActions {
+            shutdown: tray_shutdown,
+            logs_dir: tray_logs_dir,
+            tools_dir: tray_tools_dir,
+            mods_dir: tray_mods_dir,
+            party_tx: party_tx.clone(),
+            links: links.clone(),
+            mark_state,
+            mark_live,
+            ltk_notice: tray_ltk_notice,
+        };
+
         supervisor.spawn("tray-events", move |child_token| async move {
             loop {
                 tokio::select! {
                     _ = child_token.cancelled() => break,
                     () = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
                         while let Some(event) = tray.try_recv_event() {
-                            match event {
-                                bullet_platform::tray::TrayEvent::Quit => {
-                                    info!("Shutdown requested via system tray");
-                                    tray_shutdown.cancel();
-                                }
-                                bullet_platform::tray::TrayEvent::PartyCreate => {
-
-                                    // ignore-ok: the manager is gone only when the app is shutting down
-                                    let _ = party_tx.send(bullet_app::party_manager::PartyCommand::Create);
-                                }
-                                bullet_platform::tray::TrayEvent::PartyJoin => {
-
-                                    // ignore-ok: the manager is gone only when the app is shutting down
-                                    let _ = party_tx.send(bullet_app::party_manager::PartyCommand::Join);
-                                }
-                                bullet_platform::tray::TrayEvent::PartyLeave => {
-
-                                    // ignore-ok: the manager is gone only when the app is shutting down
-                                    let _ = party_tx.send(bullet_app::party_manager::PartyCommand::Leave);
-                                }
-                                bullet_platform::tray::TrayEvent::OpenMods => {
-                                    let _ = std::fs::create_dir_all(&tray_mods_dir); // ignore-ok: create dir if missing before opening
-                                    if let Err(e) = bullet_platform::shell::open_folder(&tray_mods_dir) {
-                                        warn!(error = %e, mods = %tray_mods_dir.display(), "Could not open the custom mods folder");
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::Activated => {
-                                    bullet_platform::panel::show_panel(links.clone());
-                                }
-                                bullet_platform::tray::TrayEvent::ToggleRandomSkin => {
-                                    match bullet_platform::preferences::RANDOM_SKIN.toggle() {
-                                        Ok(enabled) => info!(enabled, "Random skin when none is chosen changed from the control panel"),
-                                        Err(e) => warn!(error = %e, "Could not change the random skin setting"),
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::ToggleLightLoading => {
-                                    match bullet_platform::preferences::LIGHT_LOADING.toggle() {
-                                        Ok(enabled) => info!(enabled, "Light match loading changed from the control panel"),
-                                        Err(e) => warn!(error = %e, "Could not change the light match loading setting"),
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::OpenLogs => {
-                                    match tray_logs_dir {
-                                        Some(ref dir) => {
-                                            let _ = std::fs::create_dir_all(dir); // ignore-ok: open_folder below refuses a missing folder and that refusal is logged
-                                            if let Err(e) = bullet_platform::shell::open_folder(dir) {
-                                                warn!(error = %e, "Could not open the logs folder");
-                                            }
-                                        }
-                                        None => warn!("Logs folder requested from the tray, but its path could not be resolved at boot"),
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::OpenTools => {
-                                    let _ = std::fs::create_dir_all(&tray_tools_dir); // ignore-ok: create dir if missing before opening
-                                    if let Err(e) = bullet_platform::shell::open_folder(&tray_tools_dir) {
-                                        warn!(error = %e, tools = %tray_tools_dir.display(), "Could not open the tools folder");
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::About => {
-                                    bullet_platform::welcome::show_about_window();
-                                }
-                                bullet_platform::tray::TrayEvent::MarkProblem => {
-                                    let phase = mark_state.borrow().phase;
-                                    match mark_live.latest() {
-                                        Some(live) => warn!(
-                                            phase = ?phase,
-                                            game_time = %mark_live
-                                                .game_time_at(std::time::SystemTime::now())
-                                                .map(bullet_app::live_game::format_game_time)
-                                                .unwrap_or_default(),
-                                            champion = %live.champion,
-                                            skin_id = live.skin_id,
-                                            skin_name = %live.skin_name,
-                                            "User marked a problem"
-                                        ),
-                                        None => warn!(phase = ?phase, "User marked a problem (no live game data at this moment)"),
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::ExportDiagnostics => {
-                                    match tray_logs_dir.as_deref().map(|dir| bullet_app::control_panel::export_diagnostics(dir, std::time::SystemTime::now(), &[])) {
-                                        Some(Ok(zip)) => {
-                                            info!(file = %zip.display(), "Diagnostics exported");
-                                            if let Some(dir) = zip.parent() {
-                                                if let Err(e) = bullet_platform::shell::open_folder(dir) {
-                                                    warn!(error = %e, "Could not open the diagnostics folder");
-                                                }
-                                            }
-                                        }
-                                        Some(Err(e)) => warn!(error = %e, "Diagnostics could not be exported"),
-                                        None => warn!("Diagnostics requested, but the logs folder could not be resolved at boot"),
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::OpenRelease => {
-                                    let page = bullet_app::update_check::release_page();
-                                    if let Err(e) = bullet_platform::shell::open_web_page(&page) {
-                                        warn!(error = %e, page = %page, "Could not open the release page");
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::OpenLtkRelease => {
-                                    let compatible = tray_ltk_notice.status().and_then(|s| s.compatible);
-                                    let page = bullet_app::ltk_release::release_page(compatible.as_deref());
-                                    if let Err(e) = bullet_platform::shell::open_web_page(&page) {
-                                        warn!(error = %e, page = %page, "Could not open the LTK Manager release page");
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::ToggleAutostart => {
-                                    match bullet_platform::autostart::toggle() {
-                                        Ok(enabled) => info!(enabled, "Start with Windows changed from the tray"),
-                                        Err(e) => warn!(error = %e, "Could not change the Start with Windows setting"),
-                                    }
-                                }
-                                bullet_platform::tray::TrayEvent::ToggleAutoAccept => {
-                                    match bullet_platform::preferences::AUTO_ACCEPT.toggle() {
-                                        Ok(enabled) => info!(enabled, "Automatic match accept changed from the tray"),
-                                        Err(e) => warn!(error = %e, "Could not change the automatic match accept setting"),
-                                    }
-                                }
-                            }
+                            actions.handle(event);
                         }
                     }
                 }
@@ -1046,6 +941,164 @@ fn seed_directory(src: &std::path::Path, dst: &std::path::Path) {
             {
                 // ignore-ok: fallback to file copy if hard link fails
                 let _ = std::fs::copy(&path, &target);
+            }
+        }
+    }
+}
+
+struct TrayActions {
+    shutdown: CancellationToken,
+    logs_dir: Option<std::path::PathBuf>,
+    tools_dir: std::path::PathBuf,
+    mods_dir: std::path::PathBuf,
+    party_tx: tokio::sync::mpsc::UnboundedSender<bullet_app::party_manager::PartyCommand>,
+    links: bullet_platform::panel::PanelLinks,
+    mark_state: bullet_core::state::StateReceiver,
+    mark_live: bullet_app::live_game::LiveGame,
+    ltk_notice: bullet_app::ltk_release::LtkNotice,
+}
+
+impl TrayActions {
+    fn handle(&self, event: bullet_platform::tray::TrayEvent) {
+        match event {
+            bullet_platform::tray::TrayEvent::Quit => {
+                info!("Shutdown requested via system tray");
+                self.shutdown.cancel();
+            }
+            bullet_platform::tray::TrayEvent::PartyCreate => {
+                // ignore-ok: the manager is gone only when the app is shutting down
+                let _ = self
+                    .party_tx
+                    .send(bullet_app::party_manager::PartyCommand::Create);
+            }
+            bullet_platform::tray::TrayEvent::PartyJoin => {
+                // ignore-ok: the manager is gone only when the app is shutting down
+                let _ = self
+                    .party_tx
+                    .send(bullet_app::party_manager::PartyCommand::Join);
+            }
+            bullet_platform::tray::TrayEvent::PartyLeave => {
+                // ignore-ok: the manager is gone only when the app is shutting down
+                let _ = self
+                    .party_tx
+                    .send(bullet_app::party_manager::PartyCommand::Leave);
+            }
+            bullet_platform::tray::TrayEvent::OpenMods => {
+                let _ = std::fs::create_dir_all(&self.mods_dir); // ignore-ok: create dir if missing before opening
+                if let Err(e) = bullet_platform::shell::open_folder(&self.mods_dir) {
+                    warn!(error = %e, mods = %self.mods_dir.display(), "Could not open the custom mods folder");
+                }
+            }
+            bullet_platform::tray::TrayEvent::Activated => {
+                bullet_platform::panel::show_panel(self.links.clone());
+            }
+            bullet_platform::tray::TrayEvent::ToggleRandomSkin => {
+                match bullet_platform::preferences::RANDOM_SKIN.toggle() {
+                    Ok(enabled) => info!(
+                        enabled,
+                        "Random skin when none is chosen changed from the control panel"
+                    ),
+                    Err(e) => warn!(error = %e, "Could not change the random skin setting"),
+                }
+            }
+            bullet_platform::tray::TrayEvent::ToggleLightLoading => {
+                match bullet_platform::preferences::LIGHT_LOADING.toggle() {
+                    Ok(enabled) => info!(
+                        enabled,
+                        "Light match loading changed from the control panel"
+                    ),
+                    Err(e) => warn!(error = %e, "Could not change the light match loading setting"),
+                }
+            }
+            bullet_platform::tray::TrayEvent::OpenLogs => {
+                match self.logs_dir {
+                    Some(ref dir) => {
+                        let _ = std::fs::create_dir_all(dir); // ignore-ok: open_folder below refuses a missing folder and that refusal is logged
+                        if let Err(e) = bullet_platform::shell::open_folder(dir) {
+                            warn!(error = %e, "Could not open the logs folder");
+                        }
+                    }
+                    None => warn!(
+                        "Logs folder requested from the tray, but its path could not be resolved at boot"
+                    ),
+                }
+            }
+            bullet_platform::tray::TrayEvent::OpenTools => {
+                let _ = std::fs::create_dir_all(&self.tools_dir); // ignore-ok: create dir if missing before opening
+                if let Err(e) = bullet_platform::shell::open_folder(&self.tools_dir) {
+                    warn!(error = %e, tools = %self.tools_dir.display(), "Could not open the tools folder");
+                }
+            }
+            bullet_platform::tray::TrayEvent::About => {
+                bullet_platform::welcome::show_about_window();
+            }
+            bullet_platform::tray::TrayEvent::MarkProblem => {
+                let phase = self.mark_state.borrow().phase;
+                match self.mark_live.latest() {
+                    Some(live) => warn!(
+                        phase = ?phase,
+                        game_time = %self.mark_live
+                            .game_time_at(std::time::SystemTime::now())
+                            .map(bullet_app::live_game::format_game_time)
+                            .unwrap_or_default(),
+                        champion = %live.champion,
+                        skin_id = live.skin_id,
+                        skin_name = %live.skin_name,
+                        "User marked a problem"
+                    ),
+                    None => {
+                        warn!(phase = ?phase, "User marked a problem (no live game data at this moment)")
+                    }
+                }
+            }
+            bullet_platform::tray::TrayEvent::ExportDiagnostics => {
+                match self.logs_dir.as_deref().map(|dir| {
+                    bullet_app::control_panel::export_diagnostics(
+                        dir,
+                        std::time::SystemTime::now(),
+                        &[],
+                    )
+                }) {
+                    Some(Ok(zip)) => {
+                        info!(file = %zip.display(), "Diagnostics exported");
+                        if let Some(dir) = zip.parent() {
+                            if let Err(e) = bullet_platform::shell::open_folder(dir) {
+                                warn!(error = %e, "Could not open the diagnostics folder");
+                            }
+                        }
+                    }
+                    Some(Err(e)) => warn!(error = %e, "Diagnostics could not be exported"),
+                    None => warn!(
+                        "Diagnostics requested, but the logs folder could not be resolved at boot"
+                    ),
+                }
+            }
+            bullet_platform::tray::TrayEvent::OpenRelease => {
+                let page = bullet_app::update_check::release_page();
+                if let Err(e) = bullet_platform::shell::open_web_page(&page) {
+                    warn!(error = %e, page = %page, "Could not open the release page");
+                }
+            }
+            bullet_platform::tray::TrayEvent::OpenLtkRelease => {
+                let compatible = self.ltk_notice.status().and_then(|s| s.compatible);
+                let page = bullet_app::ltk_release::release_page(compatible.as_deref());
+                if let Err(e) = bullet_platform::shell::open_web_page(&page) {
+                    warn!(error = %e, page = %page, "Could not open the LTK Manager release page");
+                }
+            }
+            bullet_platform::tray::TrayEvent::ToggleAutostart => {
+                match bullet_platform::autostart::toggle() {
+                    Ok(enabled) => info!(enabled, "Start with Windows changed from the tray"),
+                    Err(e) => warn!(error = %e, "Could not change the Start with Windows setting"),
+                }
+            }
+            bullet_platform::tray::TrayEvent::ToggleAutoAccept => {
+                match bullet_platform::preferences::AUTO_ACCEPT.toggle() {
+                    Ok(enabled) => info!(enabled, "Automatic match accept changed from the tray"),
+                    Err(e) => {
+                        warn!(error = %e, "Could not change the automatic match accept setting")
+                    }
+                }
             }
         }
     }
