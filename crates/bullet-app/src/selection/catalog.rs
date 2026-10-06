@@ -653,27 +653,42 @@ async fn attach_tiles(
     assets: &ChampionAssets,
     client: &bullet_lcu::client::LcuClient,
 ) -> usize {
-    let mut fetched = 0usize;
-    for skin in &mut catalog.skins {
-        let Some(path) = assets
-            .skins
-            .iter()
-            .find(|s| s.id == skin.id)
-            .and_then(|s| s.tile_path.as_deref())
-        else {
-            continue;
-        };
+    use futures_util::StreamExt;
 
-        match client.get_asset_bytes(path).await {
-            Ok(bytes) if !bytes.is_empty() => {
-                skin.tile = Some(tile_data_uri(path, &bytes));
-                fetched += 1;
+    let wanted: Vec<(usize, String)> = catalog
+        .skins
+        .iter()
+        .enumerate()
+        .filter_map(|(index, skin)| {
+            assets
+                .skins
+                .iter()
+                .find(|s| s.id == skin.id)
+                .and_then(|s| s.tile_path.clone())
+                .map(|path| (index, path))
+        })
+        .collect();
+    let tiles: Vec<(usize, String)> = futures_util::stream::iter(wanted)
+        .map(|(index, path)| {
+            let client = client.clone();
+            async move {
+                match client.get_asset_bytes(&path).await {
+                    Ok(bytes) if !bytes.is_empty() => Some((index, tile_data_uri(&path, &bytes))),
+                    Ok(_) => None,
+                    Err(e) => {
+                        debug!(path, error = %e, "Skin tile unavailable");
+                        None
+                    }
+                }
             }
-            Ok(_) => {}
-            Err(e) => {
-                debug!(skin_id = skin.id, path, error = %e, "Skin tile unavailable");
-            }
-        }
+        })
+        .buffer_unordered(PREVIEW_FETCHES)
+        .filter_map(std::future::ready)
+        .collect()
+        .await;
+    let fetched = tiles.len();
+    for (index, tile) in tiles {
+        catalog.skins[index].tile = Some(tile);
     }
     fetched
 }
