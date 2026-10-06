@@ -20,26 +20,18 @@ pub fn state_dir() -> Result<PathBuf, PlatformError> {
     Ok(data_dir()?.join("state"))
 }
 
-pub fn ensure_webview2_data_dir() {
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(|| {
-        let dir = data_dir()
-            .map(|dir| dir.join("webview2"))
-            .unwrap_or_else(|_| std::env::temp_dir().join("Bullet").join("webview2"));
-        match std::fs::create_dir_all(&dir) {
-            Ok(()) => {
-                unsafe { std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &dir) };
-                tracing::debug!(dir = %dir.display(), "WebView2 data directory set");
-            }
-            Err(e) => {
-                tracing::warn!(
-                    dir = %dir.display(),
-                    error = %e,
-                    "Could not create the WebView2 data directory"
-                );
-            }
+#[must_use]
+pub fn webview2_data_dir() -> Option<PathBuf> {
+    let dir = data_dir()
+        .map(|dir| dir.join("webview2"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("Bullet").join("webview2"));
+    match std::fs::create_dir_all(&dir) {
+        Ok(()) => Some(dir),
+        Err(e) => {
+            tracing::warn!(dir = %dir.display(), error = %e, "Could not create the WebView2 data directory; WebView2 uses its default");
+            None
         }
-    });
+    }
 }
 
 #[must_use]

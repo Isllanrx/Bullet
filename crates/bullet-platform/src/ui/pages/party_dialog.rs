@@ -203,7 +203,7 @@ fn run_dialog_modal(title: &str, html: String) -> Result<Option<String>, Platfor
         );
     }
 
-    crate::paths::ensure_webview2_data_dir();
+    let mut web_context = wry::WebContext::new(crate::paths::webview2_data_dir());
 
     let mut client_rect = RECT::default();
 
@@ -223,7 +223,7 @@ fn run_dialog_modal(title: &str, html: String) -> Result<Option<String>, Platfor
     let pending_paste: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let paste_for_ipc = Arc::clone(&pending_paste);
 
-    let webview = WebViewBuilder::new()
+    let webview = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_html(html)
         .with_bounds(wry::Rect {
             position: wry::dpi::LogicalPosition::new(0, 0).into(),

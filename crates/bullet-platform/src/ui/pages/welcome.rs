@@ -208,7 +208,7 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
         );
     }
 
-    crate::paths::ensure_webview2_data_dir();
+    let mut web_context = wry::WebContext::new(crate::paths::webview2_data_dir());
 
     let mut client_rect = RECT::default();
     unsafe {
@@ -225,7 +225,7 @@ fn run_welcome_window_pump(auto_dismiss: bool, is_about: bool) {
     } else {
         welcome_html(crate::i18n::text())
     };
-    let webview = WebViewBuilder::new()
+    let webview = WebViewBuilder::new_with_web_context(&mut web_context)
         .with_html(html)
         .with_bounds(wry::Rect {
             position: wry::dpi::LogicalPosition::new(0, 0).into(),

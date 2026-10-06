@@ -368,11 +368,11 @@ fn run_overlay_message_loop(
 
     let host = OverlayWindowHandle(hwnd);
 
-    crate::paths::ensure_webview2_data_dir();
+    let mut web_context = wry::WebContext::new(crate::paths::webview2_data_dir());
 
     let hwnd_raw = hwnd.0 as isize;
     let html = overlay_html();
-    let webview = match WebViewBuilder::new()
+    let webview = match WebViewBuilder::new_with_web_context(&mut web_context)
         .with_html(html)
         .with_ipc_handler(move |request| {
             let payload = request.body();
