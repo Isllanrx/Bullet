@@ -26,7 +26,7 @@ The default was set to `info` after measuring that most `debug` output was "wait
 
 | When | What to find in the log |
 | --- | --- |
-| Startup | `Bullet starting` (version, elevation, single instance) and the game build |
+| Startup | `Bullet starting` (version, elevation, single instance), the game build, `Game WAD index ready` (wads, elapsed_ms) and `Companion characters indexed` (elapsed_s) |
 | Injector support | A warning at startup if the game build is newer than the DLL accepts |
 | Skin generated | `Skin bin generated for slot 0`: character, source skin, sizes and checksums of the source and generated bin, links, classification before and after, animation graph, number of changed fields; at `debug`, every changed field |
 | Overlay | `Overlay WAD written` per archive: write mode, entries replaced and added, whether the header matches the game's; at `debug`, every changed entry |
