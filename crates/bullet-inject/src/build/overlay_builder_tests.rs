@@ -818,3 +818,99 @@ fn test_wads_in_subfolders_and_packed_dot_wad_files_are_merged() {
         Some(&b"packed model"[..])
     );
 }
+
+#[test]
+fn random_mod_stacks_keep_every_overlay_consistent_with_the_game_and_the_last_mod() {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut state = 0x5EED_0201u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let wads = [
+        ("Champions/Zed.wad.client", "Zed"),
+        ("Champions/Shen.wad.client", "Shen"),
+        ("Champions/Akali.wad.client", "Akali"),
+        ("Maps/Shipping/Map11.wad.client", "Map11"),
+    ];
+    for scenario in 0..60 {
+        let root = TempDir::new(&format!("stack_{scenario}"));
+        let game = root.0.join("Game");
+        let mut game_entries: BTreeMap<&str, BTreeMap<u64, Vec<u8>>> = BTreeMap::new();
+        for (relpath, _) in wads {
+            let entries: BTreeMap<u64, Vec<u8>> = (0..6 + next() % 6)
+                .map(|_| {
+                    let hash = 1 + next() % 40;
+                    (hash, format!("game {hash}").into_bytes())
+                })
+                .collect();
+            let refs: Vec<(u64, &[u8])> = entries.iter().map(|(h, b)| (*h, b.as_slice())).collect();
+            write_wad(&game.join("DATA/FINAL").join(relpath), &refs);
+            game_entries.insert(relpath, entries);
+        }
+
+        let mods = root.0.join("mods");
+        let mut names = Vec::new();
+        let mut last: BTreeMap<u64, Vec<u8>> = BTreeMap::new();
+        for index in 0..1 + next() % 4 {
+            let name = format!("mod{index}");
+            let dir = make_mod(&mods, &name);
+            let target = wads[(next() % wads.len() as u64) as usize].1;
+            let entries: BTreeMap<u64, Vec<u8>> = (0..1 + next() % 8)
+                .map(|_| {
+                    let hash = 1 + next() % 48;
+                    (hash, format!("{name} {hash} {}", next() % 3).into_bytes())
+                })
+                .collect();
+            let refs: Vec<(u64, &[u8])> = entries.iter().map(|(h, b)| (*h, b.as_slice())).collect();
+            write_wad(&dir.join("WAD").join(format!("{target}.wad.client")), &refs);
+            last.extend(entries);
+            names.push(name);
+        }
+
+        let overlay = root.0.join("overlay");
+        build(&game, &mods, &overlay, &names, &AtomicBool::new(false)).expect("build");
+
+        let mut seen: BTreeMap<u64, Vec<u8>> = BTreeMap::new();
+        for (relpath, entries) in &game_entries {
+            let served = overlay.join("DATA/FINAL").join(relpath);
+            let touched: BTreeSet<u64> = entries
+                .keys()
+                .copied()
+                .filter(|h| last.get(h).is_some_and(|b| b != &entries[h]))
+                .collect();
+            if !served.is_file() {
+                assert!(
+                    touched.is_empty(),
+                    "scenario {scenario}: {relpath} holds a changed path but was not served"
+                );
+                continue;
+            }
+            let wad = WadFile::open(&served).expect("served wad");
+            for (hash, original) in entries {
+                let bytes = wad.read(*hash).expect("read").expect("game entry kept");
+                let expected = last.get(hash).unwrap_or(original);
+                assert_eq!(&bytes, expected, "scenario {scenario}: {relpath} {hash}");
+            }
+            for entry in wad.toc() {
+                let bytes = wad.read(entry.path_hash).expect("read").expect("listed");
+                if let Some(previous) = seen.insert(entry.path_hash, bytes.clone()) {
+                    assert_eq!(
+                        previous, bytes,
+                        "scenario {scenario}: path {} differs between WADs",
+                        entry.path_hash
+                    );
+                }
+                let stored = wad.read_raw(entry).expect("raw");
+                assert_eq!(
+                    entry.checksum,
+                    content_checksum(&stored),
+                    "scenario {scenario}: checksum of {}",
+                    entry.path_hash
+                );
+            }
+        }
+    }
+}
