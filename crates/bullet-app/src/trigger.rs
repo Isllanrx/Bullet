@@ -15,6 +15,12 @@ pub const AUDITED_LTK_DLL_HASH: &str =
 pub const AUDITED_LTK_HOST_HASH: &str =
     "a7c4047ce7548c7ae820bc440735f15b9d1a495acf061dbb5a5a2893a0ed8d7c";
 
+pub const AUDITED_INJECTOR: bullet_app::ltk_release::AuditedInjector =
+    bullet_app::ltk_release::AuditedInjector {
+        host_sha256: AUDITED_LTK_HOST_HASH,
+        dll_sha256: AUDITED_LTK_DLL_HASH,
+    };
+
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths {
     pub tools_dir: PathBuf,

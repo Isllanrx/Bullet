@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod control_panel;
 pub mod historic_store;
 pub mod live_game;
+pub mod ltk_release;
 pub mod mods_store;
 pub mod overlay_session;
 pub mod party_manager;

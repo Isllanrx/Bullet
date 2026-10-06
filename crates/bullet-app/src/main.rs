@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
 
     let mut paths = trigger::ResolvedPaths::discover();
 
-    if injector_unusable(&paths) {
+    if injector_unusable(&paths, &state_dir_path).await {
         return Ok(());
     }
 
@@ -278,6 +278,7 @@ async fn main() -> Result<()> {
     );
 
     let update_notice = bullet_app::update_check::UpdateNotice::default();
+    let ltk_notice = bullet_app::ltk_release::LtkNotice::default();
     let live_game = bullet_app::live_game::LiveGame::default();
     let live_state = state_rx.clone();
     let live_game_dir = paths.game_dir.clone();
@@ -319,9 +320,13 @@ async fn main() -> Result<()> {
             paths.game_dir.clone(),
             game_build,
             elevated,
-            update_notice.clone(),
+            ReleaseNotices {
+                bullet: update_notice.clone(),
+                ltk: ltk_notice.clone(),
+            },
         );
         panel_links = Some(links.clone());
+        let tray_ltk_notice = ltk_notice.clone();
 
         bullet_platform::welcome::show_welcome_window();
 
@@ -423,6 +428,13 @@ async fn main() -> Result<()> {
                                         warn!(error = %e, page = %page, "Could not open the release page");
                                     }
                                 }
+                                bullet_platform::tray::TrayEvent::OpenLtkRelease => {
+                                    let compatible = tray_ltk_notice.status().and_then(|s| s.compatible);
+                                    let page = bullet_app::ltk_release::release_page(compatible.as_deref());
+                                    if let Err(e) = bullet_platform::shell::open_web_page(&page) {
+                                        warn!(error = %e, page = %page, "Could not open the LTK Manager release page");
+                                    }
+                                }
                                 bullet_platform::tray::TrayEvent::ToggleAutostart => {
                                     match bullet_platform::autostart::toggle() {
                                         Ok(enabled) => info!(enabled, "Start with Windows changed from the tray"),
@@ -467,6 +479,24 @@ async fn main() -> Result<()> {
             let state_rx_update = state_rx.clone();
             supervisor.spawn("update-check", move |child_token| {
                 bullet_app::update_check::run(check, state_rx_update, child_token)
+            });
+
+            let ltk_tray = tray_controller.clone();
+            let ltk_check = bullet_app::ltk_release::LtkCheck {
+                audited: trigger::AUDITED_INJECTOR,
+                state_dir: state_dir_path.clone(),
+                notice: ltk_notice.clone(),
+                notify: Box::new(move |status| {
+                    let text = bullet_platform::i18n::text();
+                    ltk_tray.notify(
+                        &bullet_platform::i18n::fill(text.ltk_new_title, "version", &status.latest),
+                        text.ltk_new_body,
+                    );
+                }),
+            };
+            let state_rx_ltk = state_rx.clone();
+            supervisor.spawn("ltk-check", move |child_token| {
+                bullet_app::ltk_release::run(ltk_check, state_rx_ltk, child_token)
             });
         } else {
             info!("Update check turned off (BULLET_UPDATE_CHECK)");
@@ -636,7 +666,38 @@ fn tray_status(
     }
 }
 
-fn injector_unusable(paths: &trigger::ResolvedPaths) -> bool {
+async fn compatible_ltk_version(state_dir: &std::path::Path) -> Option<String> {
+    let audited = trigger::AUDITED_INJECTOR;
+    let online = bullet_app::update_check::is_enabled(
+        std::env::var(bullet_core::env::UPDATE_CHECK)
+            .ok()
+            .as_deref(),
+    );
+    let cached = || {
+        bullet_app::ltk_release::load_verdicts(state_dir, audited)
+            .status_from_cache()
+            .and_then(|s| s.compatible)
+    };
+    if !online {
+        return cached();
+    }
+    match tokio::time::timeout(
+        STARTUP_LTK_LOOKUP,
+        bullet_app::ltk_release::compatible_version(audited, state_dir),
+    )
+    .await
+    {
+        Ok(found) => found,
+        Err(_) => {
+            debug!("LTK Manager lookup took too long at startup; using the last known result");
+            cached()
+        }
+    }
+}
+
+const STARTUP_LTK_LOOKUP: std::time::Duration = std::time::Duration::from_secs(10);
+
+async fn injector_unusable(paths: &trigger::ResolvedPaths, state_dir: &std::path::Path) -> bool {
     use bullet_app::startup::{InjectorRefusal, injector_refusal};
 
     let text = bullet_platform::i18n::text();
@@ -665,6 +726,19 @@ fn injector_unusable(paths: &trigger::ResolvedPaths) -> bool {
             (text.broken_tools_title, text.broken_tools_body)
         }
     };
+    let compatible = compatible_ltk_version(state_dir).await;
+    info!(
+        compatible = compatible.as_deref().unwrap_or("unknown"),
+        "Pointing the user at the LTK Manager release that carries the audited injector"
+    );
+    let version = compatible
+        .clone()
+        .unwrap_or_else(|| text.ltk_version_unknown.to_owned());
+    let body = bullet_platform::i18n::fill(body, "version", &version);
+    let page = bullet_app::ltk_release::release_page(compatible.as_deref());
+    if let Err(e) = bullet_platform::shell::open_web_page(&page) {
+        warn!(error = %e, page = %page, "Could not open the LTK Manager release page");
+    }
     if let Err(e) = std::fs::create_dir_all(&paths.tools_dir)
         .map_err(|e| e.to_string())
         .and_then(|()| {
@@ -673,8 +747,13 @@ fn injector_unusable(paths: &trigger::ResolvedPaths) -> bool {
     {
         warn!(tools = %paths.tools_dir.display(), error = %e, "The tools folder could not be opened for the user");
     }
-    bullet_platform::shell::message_box_warning(title, body);
+    bullet_platform::shell::message_box_warning(title, &body);
     true
+}
+
+struct ReleaseNotices {
+    bullet: bullet_app::update_check::UpdateNotice,
+    ltk: bullet_app::ltk_release::LtkNotice,
 }
 
 fn panel_links_for(
@@ -684,7 +763,7 @@ fn panel_links_for(
     game_dir: std::path::PathBuf,
     game_build: Option<u32>,
     elevated: bool,
-    update: bullet_app::update_check::UpdateNotice,
+    notices: ReleaseNotices,
 ) -> bullet_platform::panel::PanelLinks {
     let controller = tray.clone();
     let snapshot = move || {
@@ -712,7 +791,8 @@ fn panel_links_for(
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
             elevated,
-            update: update.available().map(|latest| latest.to_string()),
+            update: notices.bullet.available().map(|latest| latest.to_string()),
+            ltk: notices.ltk.status(),
         };
         bullet_app::control_panel::snapshot(&facts, bullet_platform::i18n::text())
     };

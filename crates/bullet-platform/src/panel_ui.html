@@ -286,6 +286,13 @@
         </div>
       </section>
 
+      <section class="update" id="ltk" role="status" hidden>
+        <p id="ltk-line"></p>
+        <div class="row" id="ltk-actions">
+          <button id="b-openLtk" onclick="send('open:ltk')"></button>
+        </div>
+      </section>
+
       <section>
         <h2 id="h-options"></h2>
         <div class="toggle" role="switch" tabindex="0" id="t-randomSkin" data-message="toggle:randomSkin">
@@ -398,6 +405,10 @@
           setSwitch("t-autostart", state.autostart);
           setText("update-line", state.updateLine);
           document.getElementById("update").hidden = !state.updateLine;
+          setText("ltk-line", state.ltkLine);
+          setText("b-openLtk", state.ltkDownload);
+          document.getElementById("ltk").hidden = !state.ltkLine;
+          document.getElementById("ltk-actions").hidden = !state.ltkDownload;
           document.getElementById("b-partyCreate").disabled = state.inRoom;
           document.getElementById("b-partyJoin").disabled = state.inRoom;
           document.getElementById("b-partyLeave").disabled = !state.inRoom;

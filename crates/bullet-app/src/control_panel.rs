@@ -5,6 +5,8 @@ use bullet_inject::ltk_host::{DllSupport, dll_support};
 use bullet_platform::i18n::{Text, fill};
 use bullet_platform::panel::{PanelCheck, PanelSnapshot};
 
+use crate::ltk_release::{Injector, LtkStatus};
+
 #[derive(Debug, Clone)]
 pub struct Facts {
     pub status: String,
@@ -20,6 +22,7 @@ pub struct Facts {
     pub now_secs: u64,
     pub elevated: bool,
     pub update: Option<String>,
+    pub ltk: Option<LtkStatus>,
 }
 
 #[must_use]
@@ -67,6 +70,40 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         }
         None => check(text.check_dll, false, text.detail_dll_unknown.to_owned()),
     };
+    let compatible = facts.ltk.as_ref().and_then(|s| s.compatible.clone());
+    let ltk_version = compatible
+        .clone()
+        .unwrap_or_else(|| text.ltk_version_unknown.to_owned());
+    let ltk_check = match &facts.ltk {
+        None => check(text.check_ltk, true, text.detail_ltk_unchecked.to_owned()),
+        Some(status) if status.latest_injector == Injector::New => check(
+            text.check_ltk,
+            false,
+            fill(text.detail_ltk_new, "latest", &status.latest),
+        ),
+        Some(_) => match &compatible {
+            Some(version) => check(
+                text.check_ltk,
+                true,
+                fill(text.detail_ltk_audited, "version", version),
+            ),
+            None => check(text.check_ltk, true, text.detail_ltk_unchecked.to_owned()),
+        },
+    };
+    let (ltk_line, ltk_download) = if !facts.tools_present {
+        (
+            Some(fill(text.panel_ltk_missing_line, "version", &ltk_version)),
+            Some(fill(text.panel_ltk_download, "version", &ltk_version)),
+        )
+    } else {
+        match &facts.ltk {
+            Some(status) if status.latest_injector == Injector::New => (
+                Some(fill(text.panel_ltk_new_line, "latest", &status.latest)),
+                None,
+            ),
+            _ => (None, None),
+        }
+    };
     PanelSnapshot {
         status: facts.status.clone(),
         party_line: facts.party_line.clone(),
@@ -81,6 +118,8 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
                 bullet_platform::version::display_version(),
             )
         }),
+        ltk_line,
+        ltk_download,
         checks: vec![
             check(
                 text.check_injector,
@@ -113,6 +152,7 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
                 .to_owned(),
             ),
             dll,
+            ltk_check,
             check(
                 text.check_privileges,
                 true,
@@ -255,7 +295,99 @@ mod tests {
             now_secs: 1_790_700_000,
             elevated: false,
             update: None,
+            ltk: None,
         }
+    }
+
+    fn ltk(latest: &str, latest_injector: Injector, compatible: Option<&str>) -> Option<LtkStatus> {
+        Some(LtkStatus {
+            latest: latest.into(),
+            latest_injector,
+            compatible: compatible.map(str::to_owned),
+        })
+    }
+
+    #[test]
+    fn test_the_ltk_check_names_the_compatible_release_found_online() {
+        let text = Language::English.text();
+        let unchecked = snapshot(&facts(), text);
+        let row = unchecked
+            .checks
+            .iter()
+            .find(|c| c.label == text.check_ltk)
+            .expect("ltk row");
+        assert!(row.ok);
+        assert_eq!(row.detail, text.detail_ltk_unchecked);
+        assert_eq!(unchecked.ltk_line, None);
+
+        let current = snapshot(
+            &Facts {
+                ltk: ltk("1.26.1", Injector::Audited, Some("1.26.1")),
+                ..facts()
+            },
+            text,
+        );
+        let row = current
+            .checks
+            .iter()
+            .find(|c| c.label == text.check_ltk)
+            .expect("ltk row");
+        assert!(row.ok);
+        assert!(row.detail.contains("1.26.1"), "{}", row.detail);
+        assert_eq!(current.ltk_line, None);
+        assert_eq!(current.ltk_download, None);
+    }
+
+    #[test]
+    fn test_a_new_ltk_injector_is_shown_without_a_download_button() {
+        let text = Language::English.text();
+        let shown = snapshot(
+            &Facts {
+                ltk: ltk("1.27.0", Injector::New, Some("1.26.1")),
+                ..facts()
+            },
+            text,
+        );
+        let row = shown
+            .checks
+            .iter()
+            .find(|c| c.label == text.check_ltk)
+            .expect("ltk row");
+        assert!(!row.ok);
+        assert!(row.detail.contains("1.27.0"), "{}", row.detail);
+        let line = shown.ltk_line.expect("ltk line");
+        assert!(line.contains("1.27.0") && !line.contains('{'), "{line}");
+        assert_eq!(shown.ltk_download, None);
+    }
+
+    #[test]
+    fn test_missing_tools_point_at_the_compatible_ltk_release() {
+        let text = Language::English.text();
+        let missing = snapshot(
+            &Facts {
+                tools_present: false,
+                ltk: ltk("1.27.0", Injector::New, Some("1.26.1")),
+                ..facts()
+            },
+            text,
+        );
+        let line = missing.ltk_line.expect("ltk line");
+        assert!(line.contains("1.26.1"), "{line}");
+        let button = missing.ltk_download.expect("download button");
+        assert!(
+            button.contains("1.26.1") && !button.contains('{'),
+            "{button}"
+        );
+
+        let offline = snapshot(
+            &Facts {
+                tools_present: false,
+                ..facts()
+            },
+            text,
+        );
+        let line = offline.ltk_line.expect("ltk line");
+        assert!(line.contains(text.ltk_version_unknown), "{line}");
     }
 
     #[test]
