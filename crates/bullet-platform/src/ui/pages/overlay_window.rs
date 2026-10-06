@@ -532,6 +532,9 @@ fn run_overlay_message_loop(
                     let (w, h) = unpack_point(msg.lParam.0);
                     let _ = SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE); // ignore-ok: a refused reposition is retried by the next tracking tick, 200 ms later
                     let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE); // ignore-ok: returns the previous visibility, not an error
+                    if let Err(e) = webview.set_visible(true) {
+                        debug!(error = %e, "Could not resume the overlay WebView");
+                    }
                     if let Err(e) = webview.set_bounds(Rect {
                         position: LogicalPosition::new(0, 0).into(),
                         size: LogicalSize::new(w, h).into(),
@@ -541,6 +544,9 @@ fn run_overlay_message_loop(
                 }
                 WM_OVERLAY_HIDE => {
                     let _ = ShowWindow(hwnd, SW_HIDE); // ignore-ok: returns the previous visibility, not an error
+                    if let Err(e) = webview.set_visible(false) {
+                        debug!(error = %e, "Could not suspend the hidden overlay WebView");
+                    }
                 }
                 WM_OVERLAY_RESIZED => {
                     let (w, h) = overlay_size();
