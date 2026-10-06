@@ -423,7 +423,7 @@ impl InjectionTrigger {
         let (overlay, build) = armed?;
 
         let game_already_running = matches!(
-            ProcessFinder::find_process_by_name(GAME_PROCESS_NAME),
+            ProcessFinder::find_any_process(&bullet_platform::game_version::GAME_EXES),
             Ok(Some(_))
         );
         if game_already_running {
@@ -699,7 +699,9 @@ impl InjectionTrigger {
         let max_wait = Duration::from_secs(60);
 
         while discovery_started.elapsed() < max_wait && !token.is_cancelled() {
-            if let Ok(Some(pid)) = ProcessFinder::find_process_by_name(GAME_PROCESS_NAME) {
+            if let Ok(Some(pid)) =
+                ProcessFinder::find_any_process(&bullet_platform::game_version::GAME_EXES)
+            {
                 if let Ok(Some(tid)) = ProcessFinder::find_first_thread_id(pid) {
                     game_pid = Some(pid);
                     game_tid = Some(tid);
@@ -712,7 +714,7 @@ impl InjectionTrigger {
         let (pid, tid) = match (game_pid, game_tid) {
             (Some(p), Some(t)) => (p, t),
             _ => {
-                warn!("Timed out waiting for 'League of Legends.exe' game process to spawn");
+                warn!("Timed out waiting for the game process to spawn");
                 set_injection_status(
                     &self.state_tx,
                     InjectionStatus::Failed {
@@ -1316,8 +1318,6 @@ impl InjectionTrigger {
 const ARM_DEBOUNCE: Duration = Duration::from_millis(900);
 
 const INITIAL_ARM_DEBOUNCE: Duration = Duration::from_millis(100);
-
-const GAME_PROCESS_NAME: &str = "League of Legends.exe";
 
 fn prefer_lazy_wad_checks(game_dir: &Path) {
     match bullet_platform::client_settings::disable_crash_reporting(game_dir) {

@@ -855,7 +855,7 @@ fn report_game_build(
         }
         Err(e) => {
             warn!(
-                game = %game_dir.join(game_version::GAME_EXE).display(),
+                game = %game_version::game_exe(game_dir).display(),
                 error = %e,
                 "Could not read or record the game build"
             );

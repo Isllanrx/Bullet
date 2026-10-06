@@ -553,8 +553,8 @@ pub fn match_running(phase: GamePhase, game_alive: impl FnOnce() -> bool) -> boo
 }
 
 fn game_alive() -> bool {
-    match bullet_platform::process::ProcessFinder::find_process_by_name(
-        bullet_platform::game_version::GAME_EXE,
+    match bullet_platform::process::ProcessFinder::find_any_process(
+        &bullet_platform::game_version::GAME_EXES,
     ) {
         Ok(found) => found.is_some(),
         Err(e) => {

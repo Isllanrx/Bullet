@@ -112,6 +112,10 @@ impl ProcessFinder {
         }
     }
     pub fn find_process_by_name(exe_name: &str) -> Result<Option<u32>, PlatformError> {
+        Self::find_any_process(&[exe_name])
+    }
+
+    pub fn find_any_process(exe_names: &[&str]) -> Result<Option<u32>, PlatformError> {
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }?;
 
         let mut entry = PROCESSENTRY32W {
@@ -131,7 +135,10 @@ impl ProcessFinder {
             let name_os = OsString::from_wide(&entry.szExeFile[..len]);
 
             if let Some(name_str) = name_os.to_str() {
-                if name_str.eq_ignore_ascii_case(exe_name) {
+                if exe_names
+                    .iter()
+                    .any(|exe| name_str.eq_ignore_ascii_case(exe))
+                {
                     found_pid = Some(entry.th32ProcessID);
                     break;
                 }
@@ -145,8 +152,8 @@ impl ProcessFinder {
         };
 
         match found_pid {
-            Some(pid) => debug!(exe = exe_name, pid, "Process found"),
-            None => debug!(exe = exe_name, "Process not running"),
+            Some(pid) => debug!(exe = ?exe_names, pid, "Process found"),
+            None => debug!(exe = ?exe_names, "Process not running"),
         }
 
         Ok(found_pid)
