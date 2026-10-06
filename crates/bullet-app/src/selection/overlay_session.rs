@@ -34,6 +34,82 @@ fn wanted_for_phase(phase: &GamePhase) -> bool {
     matches!(phase, GamePhase::ChampSelect | GamePhase::Finalization)
 }
 
+type PendingImport = futures_util::future::BoxFuture<'static, Option<FinishedImport>>;
+
+struct FinishedImport {
+    category: ModCategory,
+    champion: Option<ChampionId>,
+    alias: Option<String>,
+    source: PathBuf,
+    outcome: Result<PathBuf, mods_store::ImportRefusal>,
+    text: &'static bullet_platform::i18n::Text,
+}
+
+async fn next_import(pending: &mut Option<PendingImport>) -> Option<FinishedImport> {
+    match pending {
+        Some(task) => {
+            let finished = task.await;
+            *pending = None;
+            finished
+        }
+        None => std::future::pending().await,
+    }
+}
+
+async fn pick_and_import(
+    owner: isize,
+    own_root: PathBuf,
+    category: ModCategory,
+    champion: Option<ChampionId>,
+    alias: Option<String>,
+    text: &'static bullet_platform::i18n::Text,
+) -> Option<FinishedImport> {
+    let title = text.import_title;
+    let picked = tokio::task::spawn_blocking(move || {
+        bullet_platform::dialog::pick_file(
+            owner,
+            title,
+            "Mods (*.fantome, *.zip, *.modpkg)",
+            "*.fantome;*.zip;*.modpkg",
+        )
+    })
+    .await;
+    let source = match picked {
+        Ok(Ok(Some(path))) => path,
+        Ok(Ok(None)) => {
+            debug!(category = ?category, "Mod import cancelled in the file dialog");
+            return None;
+        }
+        Ok(Err(e)) => {
+            warn!(error = %e, "The file dialog could not be shown; nothing imported");
+            return None;
+        }
+        Err(e) => {
+            error!(error = %e, "The file dialog task failed");
+            return None;
+        }
+    };
+    let from = source.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        mods_store::import_archive(&own_root, category, champion, &from)
+    })
+    .await;
+    match outcome {
+        Ok(outcome) => Some(FinishedImport {
+            category,
+            champion,
+            alias,
+            source,
+            outcome,
+            text,
+        }),
+        Err(e) => {
+            error!(error = %e, "The mod import task failed");
+            None
+        }
+    }
+}
+
 async fn next_preview(fetches: &mut Option<PreviewFetches>) -> Option<(u32, Option<String>)> {
     match fetches {
         Some(stream) => futures_util::StreamExt::next(stream).await,
@@ -88,6 +164,8 @@ pub struct OverlaySession {
     chroma_previews: std::collections::HashMap<u32, String>,
 
     preview_fetches: Option<PreviewFetches>,
+
+    pending_import: Option<PendingImport>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +208,7 @@ impl OverlaySession {
             random_declined: None,
             chroma_previews: std::collections::HashMap::new(),
             preview_fetches: None,
+            pending_import: None,
         }
     }
 
@@ -159,8 +238,7 @@ impl OverlaySession {
                         Some(OverlayCommand::ImportMod { category }) => {
                             let locale = catalog.as_ref().and_then(|c| c.locale.clone());
                             let alias = catalog.as_ref().and_then(|c| c.alias.clone());
-                            self.import_mod(category, catalog_champion, alias, locale.as_deref())
-                                .await;
+                            self.start_import(category, catalog_champion, alias, locale.as_deref());
                         }
                         Some(command) => handle_command(&self.state_tx, command, catalog.as_ref()),
 
@@ -168,6 +246,11 @@ impl OverlaySession {
                             warn!("Overlay command channel closed; the selection UI is gone");
                             break;
                         }
+                    }
+                }
+                finished = next_import(&mut self.pending_import) => {
+                    if let Some(finished) = finished {
+                        self.finish_import(finished).await;
                     }
                 }
                 fetched = next_preview(&mut self.preview_fetches) => match fetched {
@@ -588,49 +671,39 @@ impl OverlaySession {
         ));
     }
 
-    async fn import_mod(
+    fn start_import(
         &mut self,
         category: ModCategory,
         champion: Option<ChampionId>,
         alias: Option<String>,
         locale: Option<&str>,
     ) {
+        if self.pending_import.is_some() {
+            debug!(category = ?category, "A mod import is already open; this request is ignored");
+            return;
+        }
         let text = bullet_platform::i18n::Language::for_locale(locale).text();
-        let title = text.import_title;
-        let owner = self.controller.window_handle();
-        let picked = tokio::task::spawn_blocking(move || {
-            bullet_platform::dialog::pick_file(
-                owner,
-                title,
-                "Mods (*.fantome, *.zip, *.modpkg)",
-                "*.fantome;*.zip;*.modpkg",
-            )
-        })
-        .await;
-        let source = match picked {
-            Ok(Ok(Some(path))) => path,
-            Ok(Ok(None)) => {
-                debug!(category = ?category, "Mod import cancelled in the file dialog");
-                return;
-            }
-            Ok(Err(e)) => {
-                warn!(error = %e, "The file dialog could not be shown; nothing imported");
-                return;
-            }
-            Err(e) => {
-                error!(error = %e, "The file dialog task failed");
-                return;
-            }
-        };
+        self.pending_import = Some(Box::pin(pick_and_import(
+            self.controller.window_handle(),
+            self.mods.own_root.clone(),
+            category,
+            champion,
+            alias,
+            text,
+        )));
+    }
 
-        let own_root = self.mods.own_root.clone();
-        let from = source.clone();
-        let imported = tokio::task::spawn_blocking(move || {
-            mods_store::import_archive(&own_root, category, champion, &from)
-        })
-        .await;
-        match imported {
-            Ok(Ok(destination)) => {
+    async fn finish_import(&mut self, finished: FinishedImport) {
+        let FinishedImport {
+            category,
+            champion,
+            alias,
+            source,
+            outcome,
+            text,
+        } = finished;
+        match outcome {
+            Ok(destination) => {
                 info!(
                     category = ?category,
                     source = %source.display(),
@@ -647,7 +720,7 @@ impl OverlaySession {
                     }
                 }
             }
-            Ok(Err(reason)) => {
+            Err(reason) => {
                 warn!(
                     category = ?category,
                     source = %source.display(),
@@ -659,14 +732,11 @@ impl OverlaySession {
                     "reason",
                     &reason.describe(text),
                 );
-
-                // ignore-ok: the refusal is already logged; the box only tells the user why
-                let _ = tokio::task::spawn_blocking(move || {
+                let title = text.import_title;
+                drop(tokio::task::spawn_blocking(move || {
                     bullet_platform::shell::message_box(title, &message);
-                })
-                .await;
+                }));
             }
-            Err(e) => error!(error = %e, "The mod import task failed"),
         }
     }
 
