@@ -409,7 +409,8 @@ async fn lcu_client() -> Option<bullet_lcu::client::LcuClient> {
 
 const PREVIEW_FETCHES: usize = 4;
 
-pub type PreviewFetches = futures_util::stream::BoxStream<'static, (u32, Option<Arc<[u8]>>)>;
+pub type PreviewFetches =
+    futures_util::stream::BoxStream<'static, (u32, Result<Arc<[u8]>, String>)>;
 
 #[must_use]
 pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
@@ -422,7 +423,7 @@ pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
                     async move {
                         let image = match client {
                             Some(client) => fetch_chroma_preview(&client, &path).await,
-                            None => None,
+                            None => Err("the League client could not be reached".to_owned()),
                         };
                         (id, image)
                     }
@@ -435,14 +436,11 @@ pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
 async fn fetch_chroma_preview(
     client: &bullet_lcu::client::LcuClient,
     path: &str,
-) -> Option<Arc<[u8]>> {
+) -> Result<Arc<[u8]>, String> {
     match client.get_asset_bytes(path).await {
-        Ok(bytes) if !bytes.is_empty() => Some(Arc::from(bytes)),
-        Ok(_) => None,
-        Err(e) => {
-            debug!(path, error = %e, "Chroma preview unavailable");
-            None
-        }
+        Ok(bytes) if !bytes.is_empty() => Ok(Arc::from(bytes)),
+        Ok(_) => Err(format!("{path} answered with no bytes")),
+        Err(e) => Err(format!("{path}: {e}")),
     }
 }
 
