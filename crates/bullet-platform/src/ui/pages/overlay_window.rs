@@ -216,6 +216,7 @@ impl Drop for OverlayWindow {
 
 fn create(commands: UnboundedSender<OverlayCommand>) -> Result<views::OverlayWindow, String> {
     let view = views::OverlayWindow::new().map_err(|e| format!("overlay window: {e}"))?;
+    runtime::repaint_on_expose(&view, |v| v.set_expose_flip(!v.get_expose_flip()));
     wire(&view);
     view.show().map_err(|e| format!("overlay window: {e}"))?;
     let mut overlay = Overlay::new(view.clone_strong(), commands);

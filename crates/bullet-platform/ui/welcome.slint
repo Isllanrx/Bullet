@@ -1,6 +1,7 @@
-import { Theme, GoldButton, Diamond, Hairline, Wordmark } from "theme.slint";
+import { Theme, ExposeLayer, GoldButton, Diamond, Hairline, Wordmark } from "theme.slint";
 
 export component WelcomeWindow inherits Window {
+    in property <bool> expose-flip;
     in property <string> version;
     in property <string> pill;
     in property <[string]> items;
@@ -147,5 +148,9 @@ export component WelcomeWindow inherits Window {
                 clicked => { root.dismiss(); }
             }
         }
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
     }
 }

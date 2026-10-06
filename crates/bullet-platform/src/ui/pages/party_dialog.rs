@@ -154,6 +154,7 @@ pub(crate) fn wire(dialog: &PartyDialog, content: &PartyContent, answer: Answer)
 
 fn open(content: &PartyContent, answer: Answer) -> Result<(), slint::PlatformError> {
     let dialog = PartyDialog::new()?;
+    runtime::repaint_on_expose(&dialog, |d| d.set_expose_flip(!d.get_expose_flip()));
     wire(&dialog, content, answer);
     dialog.show()?;
     runtime::when_created(&dialog, |dialog, hwnd| {

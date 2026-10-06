@@ -1,4 +1,4 @@
-import { Theme, GoldButton, Field, Hairline, Caps, Wordmark, StatusDot } from "theme.slint";
+import { Theme, ExposeLayer, GoldButton, Field, Hairline, Caps, Wordmark, StatusDot } from "theme.slint";
 import { ScrollView, ComboBox } from "std-widgets.slint";
 
 export struct ChromaGem {
@@ -424,6 +424,7 @@ component Dice inherits Rectangle {
 }
 
 export component OverlayWindow inherits Window {
+    in property <bool> expose-flip;
     in property <OverlayLabels> labels;
     in property <string> champion;
     in property <image> portrait;
@@ -897,5 +898,9 @@ export component OverlayWindow inherits Window {
 
     public function focus-search() {
         search-field.take-focus();
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
     }
 }

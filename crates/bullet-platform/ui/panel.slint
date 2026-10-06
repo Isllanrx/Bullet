@@ -1,4 +1,4 @@
-import { Theme, GoldButton, Switch, Hairline, Caps, Wordmark, StatusDot } from "theme.slint";
+import { Theme, ExposeLayer, GoldButton, Switch, Hairline, Caps, Wordmark, StatusDot } from "theme.slint";
 import { ScrollView } from "std-widgets.slint";
 
 export struct PanelLabels {
@@ -152,6 +152,7 @@ component Notice inherits Rectangle {
 }
 
 export component ControlPanel inherits Window {
+    in property <bool> expose-flip;
     in property <PanelLabels> labels;
     in property <string> status;
     in property <string> party-line;
@@ -380,5 +381,9 @@ export component ControlPanel inherits Window {
                 }
             }
         }
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
     }
 }

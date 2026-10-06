@@ -153,6 +153,7 @@ fn open(links: PanelLinks) {
         }
     };
     window.set_labels(labels(crate::i18n::text()));
+    runtime::repaint_on_expose(&window, |w| w.set_expose_flip(!w.get_expose_flip()));
 
     let last = std::rc::Rc::new(RefCell::new(None::<PanelSnapshot>));
     let refresh = {

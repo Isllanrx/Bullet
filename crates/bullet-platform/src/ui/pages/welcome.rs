@@ -75,6 +75,7 @@ fn open(content: &WelcomeContent, auto_dismiss: Option<Duration>) {
         }
     };
     fill(&window, content);
+    runtime::repaint_on_expose(&window, |w| w.set_expose_flip(!w.get_expose_flip()));
     let weak = window.as_weak();
     window.on_dismiss(move || {
         if let Some(window) = weak.upgrade() {
