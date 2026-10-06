@@ -164,14 +164,19 @@ Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anyt
 build.
 
 > [!IMPORTANT]
-> Bullet only accepts the **exact build** it has audited. Today that is the build shipped with
-> **LTK Manager 1.21.0 through 1.24.0** (the same two files in every one of them). Older versions contain a different build, which Bullet refuses. When a
-> future LTK Manager changes these files, use the version named in the latest Bullet release notes.
+> Bullet only accepts the **exact build** it has audited. Use **LTK Manager 1.26.1**: it ships that build
+> (versions 1.21.0 to 1.26.1 all carry the same two files; older ones carry a different build, which Bullet
+> refuses).
+>
+> Bullet also checks this by itself. The **LTK injector** line in the control panel names the newest LTK
+> Manager release that carries the audited files, and if Bullet refuses its injector at startup it opens that
+> release's download page. When LTK Manager publishes a new injector, a notification tells you about it. Keep
+> your current files until a Bullet update accepts the new one.
 
 #### A. Get LTK Manager
 
-1. Open the [LTK Manager releases](https://github.com/LeagueToolkit/ltk-manager/releases) and download
-   `LTK.Manager_1.24.0_x64-setup.exe` (or any version from 1.21.0 to 1.24.0).
+1. Open the [LTK Manager 1.26.1 release](https://github.com/LeagueToolkit/ltk-manager/releases/tag/v1.26.1)
+   and download `LTK.Manager_1.26.1_x64-setup.exe`.
 2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
 3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
    Bullet is running: two injectors at once will conflict.
@@ -277,7 +282,7 @@ champion they are not playing.
 | `BULLET_RELAY_URL` | Party relay to use instead of the default one |
 | `BULLET_SKIN_SYNC` | A GitHub repository as `owner/repo` to download a skin library from in the background; off when unset |
 | `BULLET_PATCHER_FLAGS` | Advanced: numeric hook flags passed to the injector host |
-| `BULLET_UPDATE_CHECK` | `0` turns off the check for a new Bullet release; on when unset |
+| `BULLET_UPDATE_CHECK` | `0` turns off the check for a new Bullet release and for new LTK Manager injector files; on when unset |
 
 All of them are optional. [`.env.example`](.env.example) documents each one and how to set it on Windows.
 Bullet reads them from the environment; it does not load a `.env` file.
@@ -358,8 +363,9 @@ C:\Program Files\Bullet\              installed program (read-only for users)
   and logged.
 - It never writes to the game folder. Everything it generates lives in `%LOCALAPPDATA%\Bullet`.
 - It collects no telemetry. It only talks to the League client on your own machine, to GitHub to read the
-  latest release number (off with `BULLET_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only
-  receives encrypted data.
+  latest Bullet release number and compare the injector files of LTK Manager releases with the audited ones
+  (both off with `BULLET_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only receives encrypted
+  data.
 - It never downloads or runs an update. A new release is only announced; you install it yourself.
 - Every failure is logged with its cause in `%LOCALAPPDATA%\Bullet\logs`.
 

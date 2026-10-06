@@ -130,7 +130,7 @@ inject→core+platform+wad, party→core, app→all.
     Never patch the DLL bytes or strip its signature. **Never bundle it:** the LTK Patcher License forbids
     redistributing League Toolkit's signed binaries outside an official LTK Manager release, so users copy
     host + DLL from that release into `tools\` (the README also links a convenience mirror, `tools.zip` on
-    chosen by the maintainer). The audited hashes match **LTK Manager 1.21.0 through 1.24.0**
+    chosen by the maintainer). The audited hashes match **LTK Manager 1.21.0 through 1.26.1**
     (`src-tauri/resources/`, installed to `%LOCALAPPDATA%\LTK Manager`). Changing `AUDITED_*_HASH` means
     updating the version and hashes in the README's "Step 2 — Add the injector".
 11. **Never perform git commit or git push without explicit user approval.** Code modifications are made,
