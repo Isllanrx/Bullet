@@ -517,9 +517,43 @@ fn read_bounded(reader: impl Read, entry: &WadEntry) -> std::io::Result<Vec<u8>>
     Ok(decoded)
 }
 
+struct AtReader<'a> {
+    file: &'a std::fs::File,
+    position: u64,
+}
+
+impl Read for AtReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let read = read_at(self.file, buf, self.position)?;
+        self.position += read as u64;
+        Ok(read)
+    }
+}
+
+#[cfg(windows)]
+fn read_at(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+    std::os::windows::fs::FileExt::seek_read(file, buf, offset)
+}
+
+#[cfg(unix)]
+fn read_at(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+    std::os::unix::fs::FileExt::read_at(file, buf, offset)
+}
+
+fn read_exact_at(file: &std::fs::File, offset: u64, len: usize) -> std::io::Result<Vec<u8>> {
+    let mut buf = vec![0u8; len];
+    AtReader {
+        file,
+        position: offset,
+    }
+    .read_exact(&mut buf)?;
+    Ok(buf)
+}
+
 #[derive(Debug)]
 pub struct WadFile {
     path: std::path::PathBuf,
+    file: std::fs::File,
     entries: std::collections::HashMap<u64, WadEntry>,
 
     subchunk_toc: Option<SubchunkToc>,
@@ -626,6 +660,7 @@ impl WadFile {
         checksum.copy_from_slice(&header[260..268]);
         Ok(Self {
             path: path.to_path_buf(),
+            file,
             entries,
             subchunk_toc: None,
             signature,
@@ -675,18 +710,12 @@ impl WadFile {
     }
 
     pub fn read_raw(&self, entry: &WadEntry) -> Result<Vec<u8>, WadError> {
-        use std::io::Seek;
-
-        let io = |source: std::io::Error| WadError::FileIo {
-            path: self.path.display().to_string(),
-            source,
-        };
-        let mut file = std::fs::File::open(&self.path).map_err(io)?;
-        file.seek(std::io::SeekFrom::Start(entry.offset as u64))
-            .map_err(io)?;
-        let mut raw = vec![0u8; entry.compressed_size];
-        file.read_exact(&mut raw).map_err(io)?;
-        Ok(raw)
+        read_exact_at(&self.file, entry.offset as u64, entry.compressed_size).map_err(|source| {
+            WadError::FileIo {
+                path: self.path.display().to_string(),
+                source,
+            }
+        })
     }
 
     #[must_use]
@@ -700,8 +729,6 @@ impl WadFile {
     }
 
     pub fn read_prefix(&self, path_hash: u64, len: usize) -> Result<Option<Vec<u8>>, WadError> {
-        use std::io::Seek;
-
         let Some(entry) = self.entries.get(&path_hash) else {
             return Ok(None);
         };
@@ -709,10 +736,11 @@ impl WadFile {
             path: self.path.display().to_string(),
             source,
         };
-        let mut file = std::fs::File::open(&self.path).map_err(io)?;
-        file.seek(std::io::SeekFrom::Start(entry.offset as u64))
-            .map_err(io)?;
-        let payload = std::io::BufReader::new(file.take(entry.compressed_size as u64));
+        let at = AtReader {
+            file: &self.file,
+            position: entry.offset as u64,
+        };
+        let payload = std::io::BufReader::new(at.take(entry.compressed_size as u64));
         let wanted = len.min(entry.uncompressed_size) as u64;
         let mut prefix = Vec::with_capacity(len.min(MAX_PREALLOCATION));
         let read = match entry.compression {
@@ -740,20 +768,10 @@ impl WadFile {
     }
 
     pub fn read(&self, path_hash: u64) -> Result<Option<Vec<u8>>, WadError> {
-        use std::io::Seek;
-
         let Some(entry) = self.entries.get(&path_hash) else {
             return Ok(None);
         };
-        let io = |source: std::io::Error| WadError::FileIo {
-            path: self.path.display().to_string(),
-            source,
-        };
-        let mut file = std::fs::File::open(&self.path).map_err(io)?;
-        file.seek(std::io::SeekFrom::Start(entry.offset as u64))
-            .map_err(io)?;
-        let mut raw = vec![0u8; entry.compressed_size];
-        file.read_exact(&mut raw).map_err(io)?;
+        let raw = self.read_raw(entry)?;
         decompress_entry(entry, &raw, self.subchunk_toc.as_ref()).map(Some)
     }
 }
