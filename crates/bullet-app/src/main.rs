@@ -368,14 +368,14 @@ async fn main() -> Result<()> {
         };
 
         supervisor.spawn("tray-events", move |child_token| async move {
+            let mut tray = tray;
             loop {
                 tokio::select! {
                     _ = child_token.cancelled() => break,
-                    () = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
-                        while let Some(event) = tray.try_recv_event() {
-                            actions.handle(event);
-                        }
-                    }
+                    event = tray.recv_event() => match event {
+                        Some(event) => actions.handle(event),
+                        None => break,
+                    },
                 }
             }
             drop(tray);

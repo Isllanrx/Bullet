@@ -2,8 +2,10 @@ use tracing::warn;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Sender, channel};
+
 use std::thread;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::UI::Shell::{
@@ -73,7 +75,7 @@ pub struct TrayController {
     status: Arc<std::sync::Mutex<String>>,
     party: Arc<std::sync::Mutex<PartyMenu>>,
     balloon: Arc<std::sync::Mutex<Option<Balloon>>>,
-    events: Sender<TrayEvent>,
+    events: UnboundedSender<TrayEvent>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,7 +118,7 @@ impl TrayController {
     }
 
     #[must_use]
-    pub fn events(&self) -> Sender<TrayEvent> {
+    pub fn events(&self) -> UnboundedSender<TrayEvent> {
         self.events.clone()
     }
 
@@ -154,14 +156,14 @@ impl TrayController {
 }
 
 pub struct SystemTray {
-    event_rx: Receiver<TrayEvent>,
+    event_rx: UnboundedReceiver<TrayEvent>,
     controller: TrayController,
     join_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl SystemTray {
     pub fn spawn(initial_title: &str) -> Result<Self, PlatformError> {
-        let (event_tx, event_rx) = channel();
+        let (event_tx, event_rx) = unbounded_channel();
         let (ready_tx, ready_rx) = channel();
 
         let title_owned = initial_title.to_string();
@@ -219,8 +221,8 @@ impl SystemTray {
         self.controller.clone()
     }
 
-    pub fn try_recv_event(&self) -> Option<TrayEvent> {
-        self.event_rx.try_recv().ok()
+    pub async fn recv_event(&mut self) -> Option<TrayEvent> {
+        self.event_rx.recv().await
     }
 }
 
@@ -237,7 +239,7 @@ impl Drop for SystemTray {
 
 struct TrayState {
     nid: NOTIFYICONDATAW,
-    event_tx: Sender<TrayEvent>,
+    event_tx: UnboundedSender<TrayEvent>,
     status_text: String,
     status_shared: Arc<std::sync::Mutex<String>>,
     balloon_shared: Arc<std::sync::Mutex<Option<Balloon>>>,
@@ -245,7 +247,7 @@ struct TrayState {
 
 fn run_tray_message_loop(
     title: String,
-    event_tx: Sender<TrayEvent>,
+    event_tx: UnboundedSender<TrayEvent>,
     ready_tx: Sender<isize>,
     alive: Arc<AtomicBool>,
     status_shared: Arc<std::sync::Mutex<String>>,
