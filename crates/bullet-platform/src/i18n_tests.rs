@@ -34,6 +34,14 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.panel_update_line, "version"),
             (text.panel_update_line, "current"),
             (text.detail_dll_days_left, "n"),
+            (text.detail_ltk_audited, "version"),
+            (text.detail_ltk_new, "latest"),
+            (text.panel_ltk_missing_line, "version"),
+            (text.panel_ltk_new_line, "latest"),
+            (text.panel_ltk_download, "version"),
+            (text.ltk_new_title, "version"),
+            (text.missing_tools_body, "version"),
+            (text.broken_tools_body, "version"),
         ] {
             assert!(
                 template.contains(&format!("{{{key}}}")),

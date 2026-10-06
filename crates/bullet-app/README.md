@@ -46,6 +46,7 @@ trusted.
 | `party_manager.rs` | Connects party mode to the app state and the tray |
 | `skin_sync.rs` | Optional download of a skin library from a GitHub repository the user names in `BULLET_SKIN_SYNC` (`owner/repo`); there is no built-in source |
 | `live_game.rs` | During a match, reads the game's local live data API every five seconds (roster skins, skin changes, events) and, after the match, the game's own log (skins loaded, errors). A client left in `Reconnect` after the game process is gone counts as a finished match, so the log of a crashed game is read too; only reads, never touches the game |
+| `ltk_release.rs` | Lists the published LTK Manager releases every six hours, hashes the injector files of each release it has not seen yet and compares them with the audited ones. The newest matching release is the version the control panel and the startup refusal point at; a release with different files is announced once. Verdicts are cached per release in `ltk_releases.txt` and reset when the audited hashes change. Off with `BULLET_UPDATE_CHECK=0` |
 | `update_check.rs` | Reads the latest published release from GitHub every six hours and announces a newer one once (tray notification, control panel line); never downloads or runs anything. Off with `BULLET_UPDATE_CHECK=0` |
 | `logging.rs` | Log setup and level handling (`BULLET_LOG`, `RUST_LOG`) |
 | `build.rs` | Embeds the icon, the version details shown in the file properties, and the manifest that keeps Bullet running without administrator rights |

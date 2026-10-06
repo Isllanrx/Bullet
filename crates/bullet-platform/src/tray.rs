@@ -58,6 +58,7 @@ pub enum TrayEvent {
     PartyLeave,
 
     OpenRelease,
+    OpenLtkRelease,
 
     MarkProblem,
 

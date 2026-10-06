@@ -60,6 +60,8 @@ pub struct PanelSnapshot {
     pub random_skin: bool,
     pub autostart: bool,
     pub update_line: Option<String>,
+    pub ltk_line: Option<String>,
+    pub ltk_download: Option<String>,
     pub checks: Vec<PanelCheck>,
 }
 
@@ -142,6 +144,7 @@ pub fn event_for(message: &str) -> Option<TrayEvent> {
         "about" => TrayEvent::About,
         "quit" => TrayEvent::Quit,
         "open:release" => TrayEvent::OpenRelease,
+        "open:ltk" => TrayEvent::OpenLtkRelease,
         "diag:mark" => TrayEvent::MarkProblem,
         "diag:export" => TrayEvent::ExportDiagnostics,
         _ => return None,
