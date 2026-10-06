@@ -110,11 +110,21 @@ async fn pick_and_import(
 
 async fn next_preview(
     fetches: &mut Option<PreviewFetches>,
-) -> Option<(u32, Option<std::sync::Arc<[u8]>>)> {
+) -> Option<(u32, Result<std::sync::Arc<[u8]>, String>)> {
     match fetches {
         Some(stream) => futures_util::StreamExt::next(stream).await,
         None => std::future::pending().await,
     }
+}
+
+#[derive(Debug, Default)]
+struct PreviewTally {
+    asked: usize,
+    fetched: usize,
+    bytes: usize,
+    failed: usize,
+    first_error: Option<String>,
+    started: Option<std::time::Instant>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,6 +175,8 @@ pub struct OverlaySession {
 
     preview_fetches: Option<PreviewFetches>,
 
+    preview_tally: PreviewTally,
+
     pending_import: Option<PendingImport>,
 }
 
@@ -208,6 +220,7 @@ impl OverlaySession {
             random_declined: None,
             chroma_previews: std::collections::HashMap::new(),
             preview_fetches: None,
+            preview_tally: PreviewTally::default(),
             pending_import: None,
         }
     }
@@ -254,9 +267,9 @@ impl OverlaySession {
                     }
                 }
                 fetched = next_preview(&mut self.preview_fetches) => match fetched {
-                    Some((id, Some(image))) => self.deliver_chroma_preview(id, image),
-                    Some((id, None)) => debug!(chroma_id = id, "Chroma preview not fetched"),
-                    None => self.preview_fetches = None,
+                    Some((id, Ok(image))) => self.deliver_chroma_preview(id, image),
+                    Some((id, Err(reason))) => self.count_failed_preview(id, reason),
+                    None => self.finish_preview_fetches(),
                 },
                 () = tokio::time::sleep(TRACK_INTERVAL) => {
                     let (wanted, finalization, champion, target_stale, target, lcu_skin, confirmed) = {
@@ -293,9 +306,10 @@ impl OverlaySession {
                         catalog_champion = champion;
                         self.chroma_previews.clear();
                         catalog = self.refresh_catalog(champion).await;
-                        self.preview_fetches = catalog
-                            .as_ref()
-                            .map(|built| catalog::chroma_preview_fetches(built.chroma_preview_paths()));
+                        self.preview_fetches = None;
+                        if let Some(built) = catalog.as_ref() {
+                            self.start_preview_fetches(built.chroma_preview_paths());
+                        }
                         if champion.is_none() {
                             self.historic_consulted = None;
                             self.historic_restored = None;
@@ -337,14 +351,31 @@ impl OverlaySession {
         if !self.mods.injection_tools.iter().all(|file| file.is_file()) {
             built.notice = Some(catalog::CatalogNotice::ToolsMissing);
         }
+        let chromas = built
+            .skins
+            .iter()
+            .map(|skin| skin.chromas.len())
+            .sum::<usize>();
+        let without_preview: Vec<u32> = built
+            .skins
+            .iter()
+            .flat_map(|skin| skin.chromas.iter())
+            .filter(|chroma| !chroma.has_preview)
+            .map(|chroma| chroma.id)
+            .collect();
         info!(
             champion_id,
             champion = %built.champion_name,
             skins = built.skins.len(),
             entries = built.entry_count(),
+            chromas,
+            chromas_with_preview = chromas - without_preview.len(),
             custom_mods = built.mods.available.len(),
             "Skin catalog sent to the overlay"
         );
+        if !without_preview.is_empty() {
+            debug!(champion_id, ids = ?without_preview, "Chromas the client gave no preview image for");
+        }
         self.controller.set_catalog(built.clone());
         if !classic {
             self.warm_companions(built.alias.clone());
@@ -626,25 +657,93 @@ impl OverlaySession {
 
     fn send_chroma_preview(&mut self, chroma_id: u32, catalog: Option<&Catalog>) {
         if let Some(image) = self.chroma_previews.get(&chroma_id) {
+            debug!(
+                chroma_id,
+                bytes = image.len(),
+                "Chroma preview served from the session cache"
+            );
             self.controller.set_chroma_preview(chroma_id, image.clone());
             return;
         }
         if self.preview_fetches.is_some() {
+            debug!(
+                chroma_id,
+                asked = self.preview_tally.asked,
+                fetched = self.preview_tally.fetched,
+                failed = self.preview_tally.failed,
+                "Chroma preview asked while previews are still being fetched; it is shown when it arrives"
+            );
             return;
         }
         let Some(path) = catalog.and_then(|c| c.chroma_preview_path(chroma_id)) else {
             debug!(chroma_id, "Chroma preview asked for an entry without one");
             return;
         };
-        self.preview_fetches = Some(catalog::chroma_preview_fetches(vec![(
-            chroma_id,
-            path.to_owned(),
-        )]));
+        debug!(chroma_id, path, "Chroma preview fetched again on hover");
+        self.start_preview_fetches(vec![(chroma_id, path.to_owned())]);
+    }
+
+    fn start_preview_fetches(&mut self, previews: Vec<(u32, String)>) {
+        if previews.is_empty() {
+            return;
+        }
+        self.preview_tally = PreviewTally {
+            asked: previews.len(),
+            started: Some(std::time::Instant::now()),
+            ..PreviewTally::default()
+        };
+        self.preview_fetches = Some(catalog::chroma_preview_fetches(previews));
     }
 
     fn deliver_chroma_preview(&mut self, chroma_id: u32, image: std::sync::Arc<[u8]>) {
+        self.preview_tally.fetched += 1;
+        self.preview_tally.bytes += image.len();
+        debug!(
+            chroma_id,
+            bytes = image.len(),
+            "Chroma preview fetched from the client"
+        );
         self.controller.set_chroma_preview(chroma_id, image.clone());
         self.chroma_previews.insert(chroma_id, image);
+    }
+
+    fn count_failed_preview(&mut self, chroma_id: u32, reason: String) {
+        debug!(chroma_id, reason, "Chroma preview not fetched");
+        self.preview_tally.failed += 1;
+        self.preview_tally.first_error.get_or_insert(reason);
+    }
+
+    fn finish_preview_fetches(&mut self) {
+        self.preview_fetches = None;
+        let tally = std::mem::take(&mut self.preview_tally);
+        let elapsed_ms = tally
+            .started
+            .map_or(0, |started| started.elapsed().as_millis());
+        if tally.asked <= 1 {
+            debug!(
+                fetched = tally.fetched,
+                elapsed_ms,
+                error = tally.first_error.as_deref().unwrap_or("-"),
+                "Chroma preview fetch on hover finished"
+            );
+        } else if tally.failed == 0 {
+            info!(
+                asked = tally.asked,
+                fetched = tally.fetched,
+                bytes = tally.bytes,
+                elapsed_ms,
+                "Chroma previews fetched from the client"
+            );
+        } else {
+            warn!(
+                asked = tally.asked,
+                fetched = tally.fetched,
+                failed = tally.failed,
+                elapsed_ms,
+                first_error = tally.first_error.as_deref().unwrap_or("-"),
+                "Some chroma previews could not be fetched from the client; their hover shows no image"
+            );
+        }
     }
 
     fn show_selection(&self, entry_id: Option<u32>, origin: Option<SelectionOrigin>) {

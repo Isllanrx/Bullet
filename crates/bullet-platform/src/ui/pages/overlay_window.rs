@@ -300,7 +300,12 @@ fn wire(view: &views::OverlayWindow) {
         with_overlay(|overlay| {
             if on && gem.has_preview {
                 overlay.show_preview(&gem, x, y);
-            } else if !on {
+            } else if on {
+                debug!(
+                    chroma_id = gem.id,
+                    "Hovered chroma has no preview image in the catalog"
+                );
+            } else {
                 overlay.hide_preview();
             }
         });
@@ -607,9 +612,22 @@ impl Overlay {
 
     fn deliver_preview(&mut self, chroma_id: u32, bytes: &[u8]) {
         let Some(image) = runtime::image(bytes) else {
-            debug!(chroma_id, "A chroma preview could not be decoded");
+            warn!(
+                chroma_id,
+                bytes = bytes.len(),
+                magic = ?bytes.get(..8),
+                "A chroma preview could not be decoded; its hover shows no image"
+            );
             return;
         };
+        let size = image.size();
+        debug!(
+            chroma_id,
+            width = size.width,
+            height = size.height,
+            shown_now = self.preview_for == Some(chroma_id),
+            "Chroma preview decoded"
+        );
         if self.preview_for == Some(chroma_id) {
             self.view.set_preview_image(image.clone());
             self.view.set_preview_loading(false);

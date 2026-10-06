@@ -28,6 +28,7 @@ The default was set to `info` after measuring that most `debug` output was "wait
 | --- | --- |
 | Startup | `Bullet starting` (version, elevation, single instance), the game build, `Game WAD index ready` (wads, elapsed_ms) and `Companion characters indexed` (elapsed_s) |
 | Injector support | A warning at startup if the game build is newer than the DLL accepts |
+| Chroma previews | `Skin catalog sent to the overlay` counts `chromas` and `chromas_with_preview` (those the client gave an image path for). `Chroma previews fetched from the client` closes the prefetch (asked, fetched, bytes, elapsed_ms); a warning with `failed` and `first_error` when some did not arrive, and one when an image could not be decoded. At `debug`: the ids without a preview, each image fetched or refused with its reason, each hover answered from the cache or while the prefetch runs, and each decoded image's size |
 | Skin generated | `Skin bin generated for slot 0`: character, source skin, sizes and checksums of the source and generated bin, links, classification before and after, animation graph, number of changed fields; at `debug`, every changed field |
 | Overlay | `Overlay WAD written` per archive: write mode, entries replaced and added, whether the header matches the game's; at `debug`, every changed entry |
 | Game reads | `The game opened this archive from the overlay`, one line per archive the injector redirected |
