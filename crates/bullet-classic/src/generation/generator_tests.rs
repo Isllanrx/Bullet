@@ -1254,3 +1254,50 @@ fn test_prewarm_lists_only_champion_archives() {
         "a missing folder lists nothing"
     );
 }
+
+#[test]
+fn a_companion_cache_counts_only_for_the_exact_wad_it_was_made_from() {
+    let root = std::env::temp_dir().join(format!("bullet_companion_cache_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture may not exist yet
+    let champions = root
+        .join("Game")
+        .join("DATA")
+        .join("FINAL")
+        .join("Champions");
+    std::fs::create_dir_all(&champions).expect("champions");
+    let state = root.join("state");
+    std::fs::create_dir_all(&state).expect("state");
+    let wad = champions.join("Zed.wad.client");
+    std::fs::write(&wad, b"not even a real wad").expect("wad");
+    let game = root.join("Game");
+
+    assert!(
+        !companion_cache_is_current(&game, &state, "Zed"),
+        "no cache yet"
+    );
+    let cache = CharacterCache {
+        source: wad_stamp(&wad),
+        characters: ["zedshadow".to_owned()].into(),
+    };
+    std::fs::write(
+        state.join("companion_names_zed.json"),
+        serde_json::to_vec(&cache).expect("json"),
+    )
+    .expect("cache");
+    assert!(
+        companion_cache_is_current(&game, &state, "Zed"),
+        "valid without opening the WAD"
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    std::fs::write(&wad, b"a patched wad of another size").expect("patch");
+    assert!(
+        !companion_cache_is_current(&game, &state, "Zed"),
+        "a patched WAD invalidates the cache"
+    );
+    assert!(
+        !companion_cache_is_current(&game, &state, "Ahri"),
+        "another champion has no cache"
+    );
+    let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
+}

@@ -593,10 +593,12 @@ fn character_names_in_bins(wad: &WadFile, alias: &str) -> BTreeSet<String> {
 
     let mut found = BTreeSet::new();
     let mut unreadable = 0usize;
-    for (hash, size) in wad.entries() {
-        if size > MAX_BIN_BYTES {
-            continue;
-        }
+    let mut on_disk: Vec<&bullet_wad::WadEntry> = wad
+        .toc()
+        .filter(|entry| entry.uncompressed_size <= MAX_BIN_BYTES)
+        .collect();
+    on_disk.sort_unstable_by_key(|entry| entry.offset);
+    for hash in on_disk.into_iter().map(|entry| entry.path_hash) {
         match wad.read_prefix(hash, 4) {
             Ok(Some(head)) if head.starts_with(b"PROP") || head.starts_with(b"PTCH") => {}
             Ok(_) => continue,
@@ -1021,6 +1023,25 @@ pub fn champion_aliases(game_dir: &Path) -> Vec<String> {
     aliases
 }
 
+#[must_use]
+pub fn companion_cache_is_current(game_dir: &Path, cache_dir: &Path, alias: &str) -> bool {
+    let wad = game_dir
+        .join("DATA")
+        .join("FINAL")
+        .join("Champions")
+        .join(format!("{alias}.wad.client"));
+    let stamp = wad_stamp(&wad);
+    let cache = cache_dir.join(format!(
+        "companion_names_{}.json",
+        alias.to_ascii_lowercase()
+    ));
+    !stamp.is_empty()
+        && std::fs::read(cache)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<CharacterCache>(&bytes).ok())
+            .is_some_and(|cached| cached.source == stamp)
+}
+
 pub fn prewarm_companions(game_dir: &Path, cache_dir: &Path, gate: impl Fn() -> PrewarmGate) {
     let started = std::time::Instant::now();
     let aliases = champion_aliases(game_dir);
@@ -1032,6 +1053,10 @@ pub fn prewarm_companions(game_dir: &Path, cache_dir: &Path, gate: impl Fn() -> 
                 PrewarmGate::Wait => std::thread::sleep(PREWARM_WAIT),
                 PrewarmGate::Stop => break 'champions,
             }
+        }
+        if companion_cache_is_current(game_dir, cache_dir, alias) {
+            indexed += 1;
+            continue;
         }
         match StandardChampion::open(game_dir, alias) {
             Ok(champion) => {
