@@ -23,28 +23,28 @@ injector needs.
 
 | File | Purpose |
 | --- | --- |
-| `paths.rs` | Finds the game, the data folders and the tools folder |
-| `process.rs` | Finds processes and threads and reads a process's image path |
-| `game_version.rs` | Reads the game build timestamp and notices when it changes |
-| `fs.rs` | Atomic writes (write to a temporary file, then rename) and safe archive extraction that rejects path traversal, symlinks and oversized content |
-| `overlay_window.rs`, `overlay_ui.html` | The skin selection window: a WebView2 view attached to the League client window |
-| `client_settings.rs` | Sets `install.crash_reporting.enabled: false` in the League client's `Config/LeagueClientSettings.yaml`, changing only that line (or adding the missing section) and keeping the file's indentation and line endings; a missing file is left alone |
-| `client_window.rs` | Locates the League client window so the overlay can follow it |
-| `tray.rs` | The system tray icon; a click opens the control panel, the right-click menu only shows the status, "Open Bullet" and "Quit". Shows the new-version notification; clicking it opens the release page |
-| `panel.rs`, `panel_ui.html` | The control panel: status, options, party, folders and diagnostics in one window |
-| `preferences.rs` | Persisted on/off preferences: accept matches automatically (off by default) and roll a random skin when none is chosen (on by default), and light match loading (on by default) |
-| `welcome.rs`, `party_dialog.rs`, `dialog.rs` | The first-run window, the party dialog and message boxes |
-| `i18n.rs` | Translations (English, Portuguese, Spanish) for everything shown outside the League client; falls back to English |
-| `single_instance.rs`, `activation.rs` | Only one Bullet runs at a time; starting it again brings the first one to the front |
-| `autostart.rs` | The "start with Windows" setting |
-| `elevation.rs`, `user_profile.rs` | Checks the process privileges and resolves the real desktop user |
-| `clipboard.rs`, `shell.rs` | Copying invite codes, opening folders in Explorer and opening `https://` pages (anything else is refused) |
+| `league/paths.rs` | Finds the game, the data folders and the tools folder |
+| `os/process.rs` | Finds processes and threads and reads a process's image path |
+| `league/game_version.rs` | Reads the game build timestamp and notices when it changes |
+| `os/fs.rs` | Atomic writes (write to a temporary file, then rename) and safe archive extraction that rejects path traversal, symlinks and oversized content |
+| `ui/overlay_window.rs`, `ui/overlay_ui.html` | The skin selection window: a WebView2 view attached to the League client window |
+| `league/client_settings.rs` | Sets `install.crash_reporting.enabled: false` in the League client's `Config/LeagueClientSettings.yaml`, changing only that line (or adding the missing section) and keeping the file's indentation and line endings; a missing file is left alone |
+| `league/client_window.rs` | Locates the League client window so the overlay can follow it |
+| `ui/tray.rs` | The system tray icon; a click opens the control panel, the right-click menu only shows the status, "Open Bullet" and "Quit". Shows the new-version notification; clicking it opens the release page |
+| `ui/panel.rs`, `ui/panel_ui.html` | The control panel: status, options, party, folders and diagnostics in one window |
+| `os/preferences.rs` | Persisted on/off preferences: accept matches automatically (off by default) and roll a random skin when none is chosen (on by default), and light match loading (on by default) |
+| `ui/welcome.rs`, `ui/party_dialog.rs`, `ui/dialog.rs` | The first-run window, the party dialog and message boxes |
+| `ui/i18n.rs` | Translations (English, Portuguese, Spanish) for everything shown outside the League client; falls back to English |
+| `os/single_instance.rs`, `os/activation.rs` | Only one Bullet runs at a time; starting it again brings the first one to the front |
+| `os/autostart.rs` | The "start with Windows" setting |
+| `os/elevation.rs`, `os/user_profile.rs` | Checks the process privileges and resolves the real desktop user |
+| `ui/clipboard.rs`, `ui/shell.rs` | Copying invite codes, opening folders in Explorer and opening `https://` pages (anything else is refused) |
 
 ## Design notes
 
 - **No hardcoded locations.** Every path is discovered at runtime, because Bullet is meant to run on many
   machines with different setups.
-- **Text is never hardcoded in one language.** Anything the user reads goes through `i18n.rs`. The selection
+- **Text is never hardcoded in one language.** Anything the user reads goes through `ui/i18n.rs`. The selection
   window uses the client's language; dialogs that can open before the client is running use the Windows
   language.
 - **The selection window lives outside the client.** Bullet never loads code into the League client. Its window

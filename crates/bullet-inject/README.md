@@ -27,15 +27,15 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 
 | File | Purpose |
 | --- | --- |
-| `mod_compat.rs` | Finds broken references inside a mod before it is used |
-| `overlay_builder.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
-| `overlay_cache.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
-| `overlay.rs` | Overlay configuration and locations |
-| `ltk_host.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
-| `overlay_process.rs` | Starts the host, reads its output without blocking, and kills it if Bullet drops it |
+| `build/mod_compat.rs` | Finds broken references inside a mod before it is used |
+| `build/overlay_builder.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
+| `build/overlay_cache.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed |
+| `build/overlay.rs` | Overlay configuration and locations |
+| `injector/ltk_host.rs` | Protocol spoken with the injector host; checks which game builds the DLL supports |
+| `injector/overlay_process.rs` | Starts the host, reads its output without blocking, and kills it if Bullet drops it |
 | `pipeline.rs` | Orchestrates build → arm → confirm |
-| `runner.rs` | Runs external processes without a console window |
-| `dll_validator.rs` | Checks a binary's SHA-256 against its audited hash before it is ever run or loaded |
+| `injector/runner.rs` | Runs external processes without a console window |
+| `injector/dll_validator.rs` | Checks a binary's SHA-256 against its audited hash before it is ever run or loaded |
 
 ## Rules the builder follows
 

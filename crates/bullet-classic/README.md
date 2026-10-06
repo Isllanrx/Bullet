@@ -36,11 +36,11 @@ find the characters.
 
 | File | Purpose |
 | --- | --- |
-| `generator.rs` | `StandardChampion` and `ClassicChampion`: open a champion from the installed game and build the mod for a skin |
-| `builder.rs` | `ClassicIdMapper`: converts between classic and regular champion and skin ids |
-| `forms.rs` | Bakes one form of a skin with gears into the slot-0 skin and strips HUD gear indicators |
-| `gear_toggle.rs` | Adds the in-game form cycle (`Ctrl+5`) to the animation graph of a skin with gears |
-| `clip_alias.rs` | Gives a skin's graph the spell clip the default skin's animations ask for, when the skin only has its own variants |
+| `generation/generator.rs` | `StandardChampion` and `ClassicChampion`: open a champion from the installed game and build the mod for a skin |
+| `generation/builder.rs` | `ClassicIdMapper`: converts between classic and regular champion and skin ids |
+| `animation/forms.rs` | Bakes one form of a skin with gears into the slot-0 skin and strips HUD gear indicators |
+| `animation/gear_toggle.rs` | Adds the in-game form cycle (`Ctrl+5`) to the animation graph of a skin with gears |
+| `animation/clip_alias.rs` | Gives a skin's graph the spell clip the default skin's animations ask for, when the skin only has its own variants |
 | `error.rs` | Error type |
 
 ## Design notes

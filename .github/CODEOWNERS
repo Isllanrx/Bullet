@@ -12,9 +12,6 @@
 /Cargo.lock                         @Isllanrx
 /crates/bullet-app/build.rs         @Isllanrx
 /crates/bullet-app/src/trigger.rs   @Isllanrx
-/crates/bullet-inject/src/ltk_host.rs      @Isllanrx
-/crates/bullet-inject/src/dll_validator.rs @Isllanrx
-/crates/bullet-inject/src/suspend.rs       @Isllanrx
-/crates/bullet-party/src/crypto.rs  @Isllanrx
-/crates/bullet-party/src/token.rs   @Isllanrx
+/crates/bullet-inject/src/injector/ @Isllanrx
+/crates/bullet-party/src/security/  @Isllanrx
 /relay-worker/wrangler.toml         @Isllanrx

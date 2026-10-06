@@ -75,7 +75,7 @@ jobs:
           [[ "$approved" == true ]] || { echo "::error::no approval of $SHA from a maintainer"; exit 1; }
 
           files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
-          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/bullet-app/build\.rs$|crates/bullet-app/src/trigger\.rs$|crates/bullet-inject/src/(ltk_host|dll_validator|suspend)\.rs$|crates/bullet-party/src/(crypto|token)\.rs$|relay-worker/wrangler\.toml$|xtask/)'
+          protected='^(\.github/|installer/|\.cargo/|rust-toolchain\.toml$|deny\.toml$|\.gitleaks\.toml$|clippy\.toml$|Cargo\.lock$|crates/bullet-app/build\.rs$|crates/bullet-app/src/trigger\.rs$|crates/bullet-inject/src/injector/|crates/bullet-party/src/security/|relay-worker/wrangler\.toml$|xtask/)'
           blocked=$(grep -E "$protected" <<<"$files" || true)
           if [[ -n "$blocked" ]]; then
             echo "::warning::PR #$PR touches protected paths and must be merged by hand:"

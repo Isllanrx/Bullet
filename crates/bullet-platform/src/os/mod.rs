@@ -1,0 +1,9 @@
+pub mod activation;
+pub mod autostart;
+pub mod elevation;
+pub mod fs;
+pub mod preferences;
+pub mod process;
+pub mod single_instance;
+pub mod user_profile;
+pub mod version;
