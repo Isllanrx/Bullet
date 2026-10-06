@@ -76,3 +76,4 @@ strip_rust_comments.py
 __pycache__/
 *.pyc
 .mypy_cache/
+resultados_ltk/
