@@ -4,7 +4,12 @@ use std::path::PathBuf;
 use std::process::Command;
 
 pub(crate) fn release_rustflags(workspace_root: &std::path::Path) -> String {
-    let mut flags: Vec<String> = vec!["-C".into(), "target-feature=+crt-static".into()];
+    let mut flags: Vec<String> = vec![
+        "-C".into(),
+        "target-feature=+crt-static".into(),
+        "-C".into(),
+        "target-cpu=x86-64-v2".into(),
+    ];
     if let Ok(extra) = std::env::var("RUSTFLAGS") {
         flags.extend(extra.split_whitespace().map(str::to_owned));
     }
