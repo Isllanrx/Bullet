@@ -792,11 +792,16 @@ fn is_map(wad: &GameWad) -> bool {
         .any(|c| c.as_os_str().eq_ignore_ascii_case("Maps"))
 }
 
+#[must_use]
+pub fn build_waiting_for_copies() -> bool {
+    BUILDS_WAITING_FOR_COPIES.load(Ordering::Acquire) > 0
+}
+
 pub fn prewarm_shared_copies(
     game_dir: &Path,
     overlay_dir: &Path,
     names: &[u64],
-    match_started: &dyn Fn() -> bool,
+    stop: &dyn Fn() -> bool,
 ) -> Result<usize, InjectError> {
     let Some(store) = base_store_for(overlay_dir) else {
         return Ok(0);
@@ -806,7 +811,6 @@ pub fn prewarm_shared_copies(
     let _copies = GAME_COPY_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let stop = || match_started() && BUILDS_WAITING_FOR_COPIES.load(Ordering::Acquire) == 0;
     let mut copied = 0usize;
     for (mount, wad) in game.iter() {
         if !is_map(wad)
@@ -824,7 +828,7 @@ pub fn prewarm_shared_copies(
             &wad.path,
             &store.join(&wad.relpath),
             &revision,
-            &stop,
+            stop,
         )
         .map_err(|e| match e {
             bullet_wad::error::WadError::Cancelled => InjectError::Cancelled,
