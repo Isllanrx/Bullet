@@ -1,7 +1,7 @@
 use std::future::Future;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct Supervisor {
     token: CancellationToken,
@@ -28,7 +28,21 @@ impl Supervisor {
         Fut: Future<Output = ()> + Send + 'static,
     {
         let child_token = self.token.child_token();
-        let handle = tokio::spawn(f(child_token));
+        let task = tokio::spawn(f(child_token.clone()));
+        let handle = tokio::spawn(async move {
+            match task.await {
+                Ok(()) if child_token.is_cancelled() => {}
+                Ok(()) => warn!(
+                    task = name,
+                    "Supervised task ended before shutdown; its work has stopped"
+                ),
+                Err(e) => error!(
+                    task = name,
+                    panic = %panic_message(e),
+                    "Supervised task panicked; its work has stopped"
+                ),
+            }
+        });
         self.handles.push((name, handle));
         info!(task = name, "Spawned supervised task");
     }
@@ -38,21 +52,25 @@ impl Supervisor {
         self.token.cancel();
 
         for (name, handle) in self.handles {
-            match handle.await {
-                Ok(()) => {
-                    info!(task = name, "Task completed cleanly");
-                }
-                Err(e) if e.is_panic() => {
-                    error!(task = name, error = %e, "Task panicked during shutdown");
-                }
-                Err(e) => {
-                    error!(task = name, error = %e, "Task failed during shutdown");
-                }
+            if let Err(e) = handle.await {
+                error!(task = name, error = %e, "Supervisor watch failed during shutdown");
             }
         }
 
         info!("Supervisor: all tasks shut down");
     }
+}
+
+fn panic_message(error: JoinError) -> String {
+    if !error.is_panic() {
+        return error.to_string();
+    }
+    let payload = error.into_panic();
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| (*s).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "non-text panic payload".to_owned())
 }
 
 #[cfg(test)]
