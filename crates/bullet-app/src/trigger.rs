@@ -156,10 +156,6 @@ impl InjectionTrigger {
         }
     }
 
-    fn tools_ready(&self) -> bool {
-        tools_ready(&self.paths)
-    }
-
     pub async fn run(&self, token: CancellationToken) {
         let mut state_rx = self.state_rx.clone();
         let mut injected_session = false;
@@ -194,7 +190,7 @@ impl InjectionTrigger {
                 } => {
                     if let Some(request) = pending_arm.take() {
 
-                        if !self.tools_ready() {
+                        if !tools_ready(&self.paths) {
                             if !tools_missing_reported {
                                 tools_missing_reported = true;
                                 warn!(
@@ -269,7 +265,7 @@ impl InjectionTrigger {
                             }
                         }
 
-                        if armed.is_none() && !self.tools_ready() {
+                        if armed.is_none() && !tools_ready(&self.paths) {
                             if !tools_missing_reported {
                                 tools_missing_reported = true;
                                 warn!(
@@ -592,7 +588,7 @@ impl InjectionTrigger {
             }
             Some(target) => {
                 let entry_id = target.package_entry_id();
-                if bullet_core::selection::SelectionMode::is_base_skin(entry_id, champ_id) {
+                if bullet_core::selection::is_base_skin(entry_id, champ_id) {
                     info!(
                         champ_id,
                         entry_id, "Base skin chosen; there is no skin to overlay"
@@ -859,12 +855,11 @@ impl InjectionTrigger {
         champion_id: u32,
         entry_id: u32,
     ) -> Option<Vec<String>> {
-        use bullet_classic::builder::ClassicIdMapper;
         use bullet_classic::generator::{
             ClassicChampion, jade_characters, resolve_alias_with_id, skin_number, slots_for,
         };
 
-        let regular = ClassicIdMapper::normalize_champion_id(champion_id);
+        let regular = bullet_classic::builder::normalize_champion_id(champion_id);
         let skin = skin_number(entry_id);
         if skin == 0 {
             return None;
@@ -944,7 +939,6 @@ impl InjectionTrigger {
     }
 
     async fn classic_mods(&self, key: ArmKey) -> Option<Vec<String>> {
-        use bullet_classic::builder::ClassicIdMapper;
         use bullet_classic::generator::{
             ClassicChampion, jade_characters, resolve_alias_with_id, skin_number, slots_for,
         };
@@ -956,7 +950,7 @@ impl InjectionTrigger {
             );
             return None;
         };
-        let regular = ClassicIdMapper::normalize_champion_id(key.champ_id);
+        let regular = bullet_classic::builder::normalize_champion_id(key.champ_id);
         let skin = skin_number(entry_id);
         let slots = slots_for(key.classic_slot);
 
@@ -1372,7 +1366,7 @@ fn generation_options() -> bullet_classic::generator::GenerationOptions {
 }
 
 fn is_classic(champ_id: u32) -> bool {
-    bullet_classic::builder::ClassicIdMapper::is_classic_champion(champ_id)
+    bullet_classic::builder::is_classic_champion(champ_id)
 }
 
 fn build_key(
@@ -1513,9 +1507,7 @@ fn wanted_skin(state: &bullet_core::state::AppState) -> WantedSkin {
         .as_ref()
         .filter(|target| target.matches_champion(champ_id))
         .map(bullet_core::overlay::OverlayTarget::package_entry_id)
-        .filter(|entry_id| {
-            !bullet_core::selection::SelectionMode::is_base_skin(*entry_id, champ_id)
-        });
+        .filter(|entry_id| !bullet_core::selection::is_base_skin(*entry_id, champ_id));
 
     let (party, _) = party_skins(state);
     match build_key(

@@ -530,10 +530,6 @@ pub fn field_value<'a>(body: &'a [u8], path: &[u32]) -> Result<Option<FieldValue
     find_in_fields(&mut Cursor { data: body, at: 0 }, path)
 }
 
-pub fn set_u32_field(body: &mut [u8], field_hash: u32, value: u32) -> Result<bool, WadError> {
-    set_top_level_int(body, field_hash, value, &[FIELD_U32])
-}
-
 pub fn set_int_field(body: &mut [u8], field_hash: u32, value: u32) -> Result<bool, WadError> {
     set_top_level_int(body, field_hash, value, &[FIELD_I32, FIELD_U32])
 }
@@ -922,7 +918,7 @@ mod tests {
     fn test_a_top_level_u32_field_is_found_after_every_container_kind() {
         let mut body = body_with_target_after_every_container();
         let original = body.clone();
-        assert!(set_u32_field(&mut body, 0x8722_5880, 1).expect("set"));
+        assert!(set_int_field(&mut body, 0x8722_5880, 1).expect("set"));
         let len = body.len();
         assert_eq!(&body[len - 4..], &1u32.to_le_bytes());
         assert_eq!(
@@ -936,7 +932,7 @@ mod tests {
     fn test_a_missing_field_changes_nothing() {
         let mut body = body_with_target_after_every_container();
         let original = body.clone();
-        assert!(!set_u32_field(&mut body, 0x1234_5678, 1).expect("walk"));
+        assert!(!set_int_field(&mut body, 0x1234_5678, 1).expect("walk"));
         assert_eq!(body, original);
     }
 
@@ -946,7 +942,7 @@ mod tests {
         for cut in 0..full.len() - 4 {
             let mut body = full[..cut].to_vec();
             let before = body.clone();
-            match set_u32_field(&mut body, 0x8722_5880, 1) {
+            match set_int_field(&mut body, 0x8722_5880, 1) {
                 Ok(changed) => assert!(!changed && body == before, "cut {cut}"),
                 Err(WadError::InvalidProp(_)) => assert_eq!(body, before),
                 Err(other) => panic!("cut {cut}: unexpected {other:?}"),
@@ -1017,7 +1013,7 @@ mod tests {
     fn test_a_diff_names_only_the_fields_that_changed() {
         let before = body_with_target_after_every_container();
         let mut after = before.clone();
-        assert!(set_u32_field(&mut after, 0x8722_5880, 1).expect("set"));
+        assert!(set_int_field(&mut after, 0x8722_5880, 1).expect("set"));
         let changes = diff_fields(&before, &after).expect("diff");
         assert_eq!(
             changes,
@@ -1132,16 +1128,10 @@ mod tests {
     }
 
     #[test]
-    fn test_a_signed_int_field_is_set_only_by_the_int_setter() {
+    fn test_the_int_setter_sets_signed_and_unsigned_fields() {
         let mut body = 2u16.to_le_bytes().to_vec();
         field(&mut body, 1, FIELD_I32, &5i32.to_le_bytes());
         field(&mut body, 2, FIELD_U32, &7u32.to_le_bytes());
-        let original = body.clone();
-        assert!(
-            !set_u32_field(&mut body, 1, 0).expect("walk"),
-            "u32 setter skips an i32"
-        );
-        assert_eq!(body, original);
         assert!(set_int_field(&mut body, 1, 0).expect("set i32"));
         assert!(set_int_field(&mut body, 2, 9).expect("set u32"));
         assert_eq!(
@@ -1164,6 +1154,6 @@ mod tests {
     fn test_an_unknown_field_type_is_refused() {
         let mut body = 1u16.to_le_bytes().to_vec();
         field(&mut body, 1, 0x7F, &[0; 4]);
-        assert!(set_u32_field(&mut body, 0x8722_5880, 1).is_err());
+        assert!(set_int_field(&mut body, 0x8722_5880, 1).is_err());
     }
 }

@@ -4,7 +4,7 @@ mod build;
 mod injector;
 
 pub use build::{mod_compat, overlay, overlay_builder, overlay_cache};
-pub use injector::{dll_validator, ltk_host, overlay_process, runner};
+pub use injector::{dll_validator, ltk_host, overlay_process};
 
 pub mod error;
 pub mod pipeline;

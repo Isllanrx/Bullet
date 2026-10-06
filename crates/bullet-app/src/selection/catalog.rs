@@ -94,9 +94,7 @@ impl Catalog {
         let candidates: Vec<&CatalogSkin> = self
             .skins
             .iter()
-            .filter(|skin| {
-                !bullet_core::selection::SelectionMode::is_base_skin(skin.id, self.champion_id)
-            })
+            .filter(|skin| !bullet_core::selection::is_base_skin(skin.id, self.champion_id))
             .collect();
         if candidates.is_empty() {
             return None;
@@ -183,9 +181,7 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
         library
             .skins
             .iter()
-            .filter(|skin| {
-                !bullet_core::selection::SelectionMode::is_base_skin(skin.id, library.champion_id)
-            })
+            .filter(|skin| !bullet_core::selection::is_base_skin(skin.id, library.champion_id))
             .map(|skin| {
                 let named = assets.and_then(|a| a.name_of(skin.id));
                 let chromas = skin
@@ -239,11 +235,7 @@ pub fn build_catalog(library: &ChampionLibrary, assets: Option<&ChampionAssets>)
             .skins
             .iter()
             .filter(|skin| {
-                !skin.is_base
-                    && !bullet_core::selection::SelectionMode::is_base_skin(
-                        skin.id,
-                        library.champion_id,
-                    )
+                !skin.is_base && !bullet_core::selection::is_base_skin(skin.id, library.champion_id)
             })
             .map(|skin| {
                 let chromas = skin
@@ -382,8 +374,7 @@ pub fn build_classic_catalog(
     assets: Option<&ChampionAssets>,
     numbers: &std::collections::BTreeSet<u32>,
 ) -> (Catalog, usize) {
-    let regular =
-        bullet_classic::builder::ClassicIdMapper::normalize_champion_id(classic_champion_id);
+    let regular = bullet_classic::builder::normalize_champion_id(classic_champion_id);
     let offerable = |id: u32| {
         let number = id % 1000;
         number != 0 && numbers.contains(&number)
@@ -479,10 +470,9 @@ pub async fn load_classic_catalog(
     library_root: PathBuf,
     classic_champion_id: u32,
 ) -> Catalog {
-    use bullet_classic::builder::ClassicIdMapper;
     use bullet_classic::generator::{ClassicChampion, resolve_alias_with_id};
 
-    let regular = ClassicIdMapper::normalize_champion_id(classic_champion_id);
+    let regular = bullet_classic::builder::normalize_champion_id(classic_champion_id);
     let fetched = match fetch_assets(classic_champion_id).await {
         Some(classic) if classic.0.skins.iter().any(|skin| !skin.is_base) => Some(classic),
         _ => {
