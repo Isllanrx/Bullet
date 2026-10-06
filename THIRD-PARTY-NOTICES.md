@@ -25,8 +25,8 @@ license. Bullet is not affiliated with or endorsed by League Toolkit.
 ## Rust crates
 
 `bullet.exe` statically links open-source Rust crates from [crates.io](https://crates.io). Every crate in the
-dependency graph uses a permissive license. The accepted set is enforced in CI by `cargo deny` (see
-`deny.toml`):
+dependency graph uses a permissive license, except the Slint interface toolkit (below). The accepted set is
+enforced in CI by `cargo deny` (see `deny.toml`):
 
 | License | Crates (approx.) |
 | --- | --- |
@@ -53,8 +53,7 @@ included in each crate's source, which is available from crates.io at the versio
 
 | Component | Use | License |
 | --- | --- | --- |
-| [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) | Renders Bullet's selection window; installed separately, not redistributed | Microsoft Software License Terms |
-| WebView2 SDK loader (via `webview2-com`) | Linked into `bullet.exe` to locate the runtime | BSD-3-Clause (Microsoft) |
+| [Slint](https://slint.dev) (`slint`, `i-slint-*`) | Draws Bullet's windows; linked into `bullet.exe` | Slint Royalty-free License 2.0 (chosen from `GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0`); attribution is the "Made with Slint" badge on the project page |
 | [Inno Setup](https://jrsoftware.org/isinfo.php) | Builds the Windows installer | Inno Setup License (permissive) |
 | `relay-worker` dev tooling (`wrangler`, `typescript`, `@cloudflare/workers-types`) | Build and deploy only; not shipped to users | MIT / Apache-2.0 |
 

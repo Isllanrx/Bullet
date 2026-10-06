@@ -57,6 +57,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -66,7 +67,7 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 Type: filesandordirs; Name: "{localappdata}\Programs\Bullet"
 Type: files; Name: "{app}\tools\*.orig"
 Type: files; Name: "{app}\tools\*.bak"
-Type: filesandordirs; Name: "{localappdata}\Bullet\overlay"
+Type: filesandordirs; Name: "{localappdata}\Bullet\webview2"
 
 [Dirs]
 Name: "{app}\tools"
@@ -109,6 +110,7 @@ Type: dirifempty; Name: "{app}"
 [CustomMessages]
 brazilianportuguese.DeleteUserContent=Remover também as skins e os mods personalizados salvos pelo Bullet?%n%n%1%n%nEscolha "Não" para mantê-los.
 english.DeleteUserContent=Also remove the skins and custom mods saved by Bullet?%n%n%1%n%nChoose "No" to keep them.
+spanish.DeleteUserContent=¿Quitar también los aspectos y los mods personalizados guardados por Bullet?%n%n%1%n%nElige "No" para conservarlos.
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
