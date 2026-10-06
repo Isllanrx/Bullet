@@ -370,29 +370,16 @@ fn index_mod(mod_dir: &Path, name: &str) -> Result<ModIndex, InjectError> {
     };
 
     let mut mounts = BTreeMap::new();
-    let wads = mod_dir.join("WAD");
-    let mut children: Vec<PathBuf> = std::fs::read_dir(&wads)
-        .map(|entries| entries.flatten().map(|e| e.path()).collect())
-        .unwrap_or_default();
-    children.sort();
-    for path in children {
+    let mut wads = Vec::new();
+    collect_mod_wads(&mod_dir.join("WAD"), name, &mut wads);
+    for path in wads {
         let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
         let entries = if path.is_file() {
-            if !file_name.ends_with(".wad.client") {
-                warn!(mod_name = name, file = %path.display(), "Not a .wad.client file; ignored");
-                continue;
-            }
             read_mod_wad(&path).map_err(|e| bad("unreadable WAD", &path, &e))?
-        } else if path.is_dir() {
-            if !(file_name.ends_with(".wad.client") || file_name.ends_with(".wad")) {
-                warn!(mod_name = name, folder = %path.display(), "Not a .wad folder; ignored");
-                continue;
-            }
-            pack_folder(&path).map_err(|e| bad("unreadable folder", &path, &e))?
         } else {
-            continue;
+            pack_folder(&path).map_err(|e| bad("unreadable folder", &path, &e))?
         };
         mounts.insert(mount_name(file_name), ModMount { entries });
     }
@@ -407,6 +394,28 @@ fn index_mod(mod_dir: &Path, name: &str) -> Result<ModIndex, InjectError> {
         name: name.to_owned(),
         mounts,
     })
+}
+
+fn collect_mod_wads(dir: &Path, mod_name: &str, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut children: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+    children.sort();
+    for path in children {
+        let lower = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if lower.ends_with(".wad.client") || lower.ends_with(".wad") {
+            out.push(path);
+        } else if path.is_dir() {
+            collect_mod_wads(&path, mod_name, out);
+        } else {
+            warn!(mod_name, file = %path.display(), "Not a WAD; ignored");
+        }
+    }
 }
 
 fn retype_stale_bins(game: &GameIndexMap, index: &mut ModIndex) -> Result<(), InjectError> {

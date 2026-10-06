@@ -783,3 +783,38 @@ fn test_a_stale_mod_bin_gets_the_file_references_the_installed_game_declares() {
     );
     assert_eq!(file.links, vec![shared_link.to_owned()]);
 }
+
+#[test]
+fn test_wads_in_subfolders_and_packed_dot_wad_files_are_merged() {
+    let root = TempDir::new("nested");
+    let game = game(&root.0);
+    let mods = root.0.join("mods");
+    let skin = make_mod(&mods, "nested");
+    write_wad(
+        &skin.join("WAD").join("Champions").join("Zed.wad.client"),
+        &[(1, b"nested skin0")],
+    );
+    write_wad(
+        &skin.join("WAD").join("Shadow.wad"),
+        &[(9, b"packed model")],
+    );
+    let overlay = root.0.join("overlay");
+
+    build(
+        &game,
+        &mods,
+        &overlay,
+        &["nested".into()],
+        &AtomicBool::new(false),
+    )
+    .expect("build");
+
+    assert_eq!(
+        read(&overlay.join("DATA/FINAL/Champions/Zed.wad.client"), 1).as_deref(),
+        Some(&b"nested skin0"[..])
+    );
+    assert_eq!(
+        read(&overlay.join("DATA/FINAL/Champions/Shadow.wad.client"), 9).as_deref(),
+        Some(&b"packed model"[..])
+    );
+}
