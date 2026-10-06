@@ -290,6 +290,7 @@ impl OverlaySession {
         };
         let cache_dir = self.mods.state_dir.clone();
         let overlay_dir = self.mods.overlay_dir.clone();
+        let state_rx = self.state_rx.clone();
         drop(tokio::task::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let companions =
@@ -314,12 +315,17 @@ impl OverlaySession {
                 &game_dir,
                 &overlay_dir,
                 &skin_bins,
+                &|| state_rx.borrow().phase.is_in_game(),
             ) {
                 Ok(copied) => info!(
                     companions = ?companions,
                     copied,
                     elapsed_ms = started.elapsed().as_millis(),
                     "Shared map WADs prepared in the background; the selection window stayed responsive"
+                ),
+                Err(bullet_inject::error::InjectError::Cancelled) => info!(
+                    elapsed_ms = started.elapsed().as_millis(),
+                    "Map WAD copy ahead stopped: the match started and no build needs it"
                 ),
                 Err(e) => {
                     warn!(error = %e, "Map WAD not copied ahead; the first build of this skin copies it")

@@ -566,6 +566,30 @@ fn test_a_map_copy_leaves_the_served_folder_when_unused_and_comes_back_when_need
 }
 
 #[test]
+fn test_a_started_match_stops_the_copy_ahead_and_leaves_nothing_half_written() {
+    let root = TempDir::new("prewarm_stop");
+    let game = game(&root.0);
+    let overlay = root.0.join("Bullet").join("overlay");
+    let map11 = root
+        .0
+        .join("Bullet")
+        .join(BASE_STORE_DIR)
+        .join("DATA/FINAL/Maps/Shipping/Map11.wad.client");
+
+    assert!(matches!(
+        prewarm_shared_copies(&game, &overlay, &[3], &|| true),
+        Err(InjectError::Cancelled)
+    ));
+    assert!(!map11.exists());
+    assert!(!base_stamp_path(&map11).exists());
+    let leftovers = map11
+        .parent()
+        .and_then(|dir| std::fs::read_dir(dir).ok())
+        .map_or(0, |entries| entries.count());
+    assert_eq!(leftovers, 0, "no partial copy is left behind");
+}
+
+#[test]
 fn test_prewarm_copies_only_the_maps_holding_the_champions_skin_bins() {
     let root = TempDir::new("prewarm");
     let game = game(&root.0);
@@ -574,13 +598,13 @@ fn test_prewarm_copies_only_the_maps_holding_the_champions_skin_bins() {
     let map11 = "DATA/FINAL/Maps/Shipping/Map11.wad.client";
 
     assert_eq!(
-        prewarm_shared_copies(&game, &overlay, &[1, 9]).expect("none"),
+        prewarm_shared_copies(&game, &overlay, &[1, 9], &|| false).expect("none"),
         0
     );
     assert!(!store.join(map11).exists());
 
     assert_eq!(
-        prewarm_shared_copies(&game, &overlay, &[3]).expect("map11"),
+        prewarm_shared_copies(&game, &overlay, &[3], &|| false).expect("map11"),
         1
     );
     assert!(store.join(map11).is_file());
@@ -591,7 +615,7 @@ fn test_prewarm_copies_only_the_maps_holding_the_champions_skin_bins() {
         "TFT maps are never copied"
     );
     assert_eq!(
-        prewarm_shared_copies(&game, &overlay, &[3]).expect("again"),
+        prewarm_shared_copies(&game, &overlay, &[3], &|| false).expect("again"),
         0,
         "a valid copy is not made twice"
     );
