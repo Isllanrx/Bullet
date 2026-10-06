@@ -336,7 +336,7 @@ C:\Program Files\Bullet\              installed program (read-only for users)
 
 %LOCALAPPDATA%\Bullet\                 everything Bullet writes, per Windows user
 ├── logs\                            daily logs, bullet.log.YYYY-MM-DD, last 7 days kept
-├── custom_mods\                     your .fantome mods, one folder per category:
+├── custom_mods\                     your .fantome, .zip and .modpkg mods, one folder per category:
 │   ├── skins\   maps\   fonts\   announcers\   ui\
 │   └── voiceover\   loading_screen\   vfx\   sfx\   others\
 ├── library\                         skin library (generated or synced)

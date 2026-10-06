@@ -105,8 +105,9 @@ maintainer approves a pull request
 - the `no-automerge` label,
 - any change to paths that decide trust, permissions or what ships: `.github/`, `installer/`, `xtask/`,
   `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger, the
-  injector host and DLL validation, the party cipher and token, and the relay's deploy
-  config. These are merged by hand.
+  whole injector folder (`crates/bullet-inject/src/injector/`: host, overlay process, DLL validation), the
+  party cipher and token (`crates/bullet-party/src/security/`), and the relay's deploy config. These are
+  merged by hand.
 
 The `main` branch ruleset (`.github/rulesets/main.json`) enforces the rest: pull requests only, squash merges,
 a code owner's approval, stale approvals dismissed on push, required checks up to date with `main`, no force
