@@ -1,77 +1,23 @@
 use std::path::Path;
 
 use bullet_core::historic::HistoricBook;
-use bullet_platform::fs::atomic_write;
-use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, warn};
+use tracing::info;
+
+use crate::book_store;
 
 const HISTORIC_FILE: &str = "historic.json";
 
-const HISTORIC_VERSION: u32 = 1;
-
-#[derive(Serialize, Deserialize)]
-struct PersistedHistoric {
-    version: u32,
-    book: HistoricBook,
-}
-
 #[must_use]
 pub fn load(state_dir: &Path) -> HistoricBook {
-    let path = state_dir.join(HISTORIC_FILE);
-    let bytes = match std::fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return HistoricBook::default(),
-        Err(e) => {
-            warn!(file = %path.display(), error = %e, "Historic skins could not be read; starting empty");
-            return HistoricBook::default();
-        }
-    };
-
-    match serde_json::from_slice::<PersistedHistoric>(&bytes) {
-        Ok(persisted) => {
-            if persisted.version != HISTORIC_VERSION {
-                warn!(
-                    file = %path.display(),
-                    version = persisted.version,
-                    expected = HISTORIC_VERSION,
-                    "Historic skins written by another version; reading them as-is"
-                );
-            }
-            info!(champions = persisted.book.len(), "Historic skins restored");
-            persisted.book
-        }
-        Err(e) => {
-            let aside = path.with_extension("json.unreadable");
-            let moved = std::fs::rename(&path, &aside);
-            warn!(
-                file = %path.display(),
-                moved_to = %aside.display(),
-                moved = moved.is_ok(),
-                error = %e,
-                "Historic skins file is not valid; it was set aside and the book starts empty"
-            );
-            HistoricBook::default()
-        }
+    let book: HistoricBook = book_store::load(&state_dir.join(HISTORIC_FILE), "historic skins");
+    if !book.is_empty() {
+        info!(champions = book.len(), "Historic skins restored");
     }
+    book
 }
 
 pub fn save(state_dir: &Path, book: &HistoricBook) {
-    let path = state_dir.join(HISTORIC_FILE);
-    let persisted = PersistedHistoric {
-        version: HISTORIC_VERSION,
-        book: book.clone(),
-    };
-    let bytes = match serde_json::to_vec_pretty(&persisted) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            error!(error = %e, "Historic skins could not be serialized; they will not survive a restart");
-            return;
-        }
-    };
-    match atomic_write(&path, &bytes, true) {
-        Ok(()) => debug!(file = %path.display(), "Historic skins saved"),
-        Err(e) => warn!(file = %path.display(), error = %e, "Historic skins could not be saved"),
-    }
+    book_store::save(&state_dir.join(HISTORIC_FILE), book, "historic skins");
 }
 
 #[cfg(test)]

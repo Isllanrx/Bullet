@@ -1,3 +1,4 @@
+pub(crate) mod book_store;
 pub mod catalog;
 pub mod historic_store;
 pub mod mods_store;
