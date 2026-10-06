@@ -39,6 +39,8 @@ trusted.
 | --- | --- |
 | `main.rs` | Startup, tray, lifecycle and shutdown |
 | `trigger.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
+| `trigger/paths.rs` | Resolves the game, tools, library, mods and overlay folders (`ResolvedPaths`) |
+| `trigger/mods.rs` | Prepares the mods for an arm: library packages, generated store and Classic skins, party skins, custom mods and their compatibility check |
 | `selection/overlay_session.rs` | Drives the selection window: sends it the catalog, receives the user's choice |
 | `selection/catalog.rs` | Builds the list of skins and chromas for a champion, from the local library or from the client |
 | `selection/mods_store.rs` | Custom mod folders, the saved selection and preparing the selected mods |

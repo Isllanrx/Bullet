@@ -104,7 +104,7 @@ maintainer approves a pull request
 - an approval from someone without write access,
 - the `no-automerge` label,
 - any change to paths that decide trust, permissions or what ships: `.github/`, `installer/`, `xtask/`,
-  `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger, the
+  `.cargo/`, the toolchain, `deny.toml`, `Cargo.lock`, the app's build script and injection trigger (`trigger.rs` and `trigger/`), the
   whole injector folder (`crates/bullet-inject/src/injector/`: host, overlay process, DLL validation), the
   party cipher and token (`crates/bullet-party/src/security/`), and the relay's deploy config. These are
   merged by hand.
