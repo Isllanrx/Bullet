@@ -708,7 +708,7 @@ fn decoded_mod_entry(entry: &WriterEntry) -> Option<Vec<u8>> {
     match CompressionType::from_type_byte(entry.kind) {
         Ok(CompressionType::Raw | CompressionType::Redirection) => Some(bytes.to_vec()),
         Ok(CompressionType::Zstd) => {
-            zstd::bulk::decompress(bytes, entry.uncompressed_size as usize).ok()
+            bullet_wad::writer::decode_zstd_bounded(bytes, entry.uncompressed_size)
         }
         _ => None,
     }

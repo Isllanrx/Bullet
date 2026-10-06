@@ -152,7 +152,7 @@ impl ModPkg {
         let padding = (8 - offset % 8) % 8;
         std::io::copy(&mut (&mut reader).take(padding), &mut std::io::sink()).map_err(io)?;
 
-        let mut records = Vec::with_capacity(chunk_count as usize);
+        let mut records = Vec::with_capacity((chunk_count as usize).min(4096));
         for _ in 0..chunk_count {
             let path_hash = u64_le(&mut reader)?;
             let data_offset = u64_le(&mut reader)?;

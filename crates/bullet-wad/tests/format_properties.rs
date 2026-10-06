@@ -437,3 +437,29 @@ fn a_modpkg_cut_anywhere_is_refused_and_damage_never_panics() {
         }
     }
 }
+
+#[test]
+fn forged_sizes_are_refused_without_allocating_what_they_declare() {
+    let mut writer = WadWriter::default();
+    writer.insert(7, optimal_raw(vec![1; 64]).expect("entry"));
+    let mut bytes = writer.to_bytes().expect("wad");
+    let size_field = 272 + 16;
+    bytes[size_field..size_field + 4].copy_from_slice(&0x7FFF_FFFFu32.to_le_bytes());
+    assert!(matches!(
+        WadArchive::parse(&bytes),
+        Err(bullet_wad::error::WadError::EntryTooLarge { path_hash: 7, .. })
+    ));
+
+    let bomb = zstd::bulk::compress(&vec![0u8; 64 * 1024 * 1024], 19).expect("bomb");
+    assert!(bomb.len() < 64 * 1024, "the frame is tiny: {}", bomb.len());
+    let started = std::time::Instant::now();
+    assert_eq!(bullet_wad::writer::decode_zstd_bounded(&bomb, 100), None);
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    assert_eq!(
+        bullet_wad::writer::decode_zstd_bounded(
+            &zstd::bulk::compress(b"exact", 3).expect("frame"),
+            5
+        ),
+        Some(b"exact".to_vec())
+    );
+}

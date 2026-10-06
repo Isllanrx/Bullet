@@ -281,6 +281,12 @@ fn parse_toc_entry(
     let offset = read_u32(8)?;
     let compressed_size = read_u32(12)?;
     let uncompressed_size = read_u32(16)?;
+    if uncompressed_size > MAX_ENTRY_BYTES {
+        return Err(WadError::EntryTooLarge {
+            path_hash,
+            size: uncompressed_size,
+        });
+    }
     let type_byte = field(20, 1)?[0];
     let compression = CompressionType::from_type_byte(type_byte)?;
     let subchunk_count = type_byte >> 4;
@@ -321,6 +327,8 @@ fn parse_toc_entry(
 }
 
 const ZSTD_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+
+pub const MAX_ENTRY_BYTES: usize = 1 << 30;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SubchunkToc {

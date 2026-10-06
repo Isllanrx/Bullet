@@ -827,7 +827,19 @@ pub fn prop_payload(entry: &WriterEntry) -> Option<Vec<u8>> {
     if entry.kind != CompressionType::Zstd as u8 || !crate::prop::is_prop(&zstd_head(stored)) {
         return None;
     }
-    zstd::decode_all(stored.as_ref()).ok()
+    decode_zstd_bounded(stored, entry.uncompressed_size)
+}
+
+#[must_use]
+pub fn decode_zstd_bounded(stored: &[u8], declared: u64) -> Option<Vec<u8>> {
+    let limit = declared.min(crate::wad::MAX_ENTRY_BYTES as u64);
+    let mut decoded = Vec::new();
+    zstd::Decoder::new(stored)
+        .ok()?
+        .take(limit + 1)
+        .read_to_end(&mut decoded)
+        .ok()?;
+    (decoded.len() as u64 == declared).then_some(decoded)
 }
 
 fn zstd_head(stored: &[u8]) -> Vec<u8> {
