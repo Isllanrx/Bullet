@@ -179,13 +179,13 @@ by League Toolkit's publisher (Natoken LLC). A file with one byte changed loses 
 
 1. Open the [latest LTK Manager release](https://github.com/LeagueToolkit/ltk-manager/releases/latest)
    and download its `LTK.Manager_<version>_x64-setup.exe`.
-2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
+2. Run it. It installs for every user of the PC, in `C:\Program Files\LTK Manager`.
 3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
    Bullet is running: two injectors at once will conflict.
 
 #### B. Copy the two files with File Explorer
 
-1. Press `Win + R`, type `%LOCALAPPDATA%\LTK Manager` and press Enter. If it does not open, right-click the
+1. Press `Win + R`, type `%ProgramFiles%\LTK Manager` and press Enter. If it does not open, right-click the
    LTK Manager shortcut in the Start menu and choose **Open file location** (twice, if it opens the shortcut
    folder first).
 2. Select `ltk_patcher_host.exe` and `ltk_patcher_dll.dll` and copy them (`Ctrl + C`).
@@ -198,7 +198,7 @@ by League Toolkit's publisher (Natoken LLC). A file with one byte changed loses 
 Open PowerShell **as administrator** (Start menu → type `PowerShell` → **Run as administrator**) and run:
 
 ```powershell
-$from = Join-Path $env:LOCALAPPDATA 'LTK Manager'
+$from = Join-Path $env:ProgramFiles 'LTK Manager'
 $to   = Join-Path $env:ProgramFiles 'Bullet\tools'
 Copy-Item (Join-Path $from 'ltk_patcher_host.exe'), (Join-Path $from 'ltk_patcher_dll.dll') $to -Force
 Get-AuthenticodeSignature (Join-Path $to 'ltk_patcher_*') | Format-Table Status, SignerCertificate, Path -AutoSize
@@ -346,8 +346,9 @@ C:\Program Files\Bullet\              installed program (read-only for users)
 - **Logs** are the first thing to check, and to attach, when something fails. `BULLET_LOG=debug` adds
   detail.
 - **Tools** are looked for in `Program Files\Bullet\tools`, then in a `tools` folder next to `bullet.exe`, then
-  in `%LOCALAPPDATA%\Bullet\tools`. Wherever they are found, they are only used if their SHA-256 matches the
-  audited build. A file from another product's folder is never loaded.
+  in `%LOCALAPPDATA%\Bullet\tools`. Wherever they are found, they are only used if both carry a valid
+  Authenticode signature from League Toolkit's publisher. A file from another product's folder, LTK Manager's
+  included, is never loaded.
 - **The game folder is never written to.** Deleting `%LOCALAPPDATA%\Bullet` resets Bullet completely; the
   uninstaller does it for you.
 
