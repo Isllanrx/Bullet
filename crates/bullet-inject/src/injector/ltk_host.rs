@@ -184,7 +184,7 @@ pub fn is_dll_failure(level: &str, message: &str) -> bool {
     lower.contains("failed") || lower.contains("disabling overlay") || is_end_of_life(message)
 }
 
-pub const LTK_DLL_GAME_BUILD_LIMIT: u32 = 0x6ac1_f970;
+pub const LTK_DLL_GAME_BUILD_LIMIT: u32 = 0x6ad4_6e70;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DllSupport {

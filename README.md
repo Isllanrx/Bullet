@@ -165,9 +165,9 @@ Whichever you use, Bullet checks both files' SHA-256 at startup and refuses anyt
 build.
 
 > [!IMPORTANT]
-> Bullet only accepts the **exact build** it has audited. Use **LTK Manager 1.26.1**: it ships that build
-> (versions 1.21.0 to 1.26.1 all carry the same two files; older ones carry a different build, which Bullet
-> refuses).
+> Bullet only accepts the **exact build** it has audited. Use **LTK Manager 1.27.0**: it ships that build
+> (built for game patch 26.20; earlier releases carry a build whose DLL no longer accepts the current game,
+> which Bullet refuses).
 >
 > Bullet also checks this by itself. The **LTK injector** line in the control panel names the newest LTK
 > Manager release that carries the audited files, and if Bullet refuses its injector at startup it opens that
@@ -176,8 +176,8 @@ build.
 
 #### A. Get LTK Manager
 
-1. Open the [LTK Manager 1.26.1 release](https://github.com/LeagueToolkit/ltk-manager/releases/tag/v1.26.1)
-   and download `LTK.Manager_1.26.1_x64-setup.exe`.
+1. Open the [LTK Manager 1.27.0 release](https://github.com/LeagueToolkit/ltk-manager/releases/tag/v1.27.0)
+   and download `LTK.Manager_1.27.0_x64-setup.exe`.
 2. Run it. By default it installs to `%LOCALAPPDATA%\LTK Manager`.
 3. You do not need to use LTK Manager itself. Close it after installing, and do not start its patcher while
    Bullet is running: two injectors at once will conflict.
@@ -231,8 +231,8 @@ Optional for the official option, recommended for the direct download. The folde
 
 | File | SHA-256 |
 | --- | --- |
-| `ltk_patcher_host.exe` | `a7c4047ce7548c7ae820bc440735f15b9d1a495acf061dbb5a5a2893a0ed8d7c` |
-| `ltk_patcher_dll.dll` | `07a43bf36a389eb00f6276e333bd7f2b95218f25a58e1e128ff4d2e4ab2dc99b` |
+| `ltk_patcher_host.exe` | `23fa1aaeda1a0c743da44227f179084e1fb81c7cd262144a3c8604ffc49d3bc1` |
+| `ltk_patcher_dll.dll` | `6d419057e6667994ba752ad0fb089b363db98267618644d7f7b6632441a21d74` |
 
 You do not have to check them by hand: Bullet checks both at startup. If one is missing or is a different
 build, Bullet tells you and shows the exact path it expected. If you used LTK Manager, you can uninstall it
@@ -322,7 +322,7 @@ late swap (ARAM bench, trades, a pick in the last second) is not lost.
 | Party mode (friends see each other's skins) | Works against the public relay; not yet proven with several players in one match |
 
 > **Heads up:** the injector DLL only accepts game builds up to a fixed date: it refuses any game executable
-> built after 2026-10-04 07:00 UTC. The build you have installed keeps working after that date. The first patch
+> built after 2026-10-18 07:00 UTC. The build you have installed keeps working after that date. The first patch
 > built later needs a refreshed DLL. Bullet checks this at startup and tells you.
 
 ## Where Bullet keeps its files

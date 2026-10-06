@@ -295,7 +295,9 @@ mod tests {
             game_found: true,
             lcu_connected: true,
             game_build: Some(1_790_205_875),
-            now_secs: 1_790_700_000,
+            now_secs: u64::from(bullet_inject::ltk_host::LTK_DLL_GAME_BUILD_LIMIT)
+                - 4 * 86_400
+                - 3_600,
             elevated: false,
             update: None,
             ltk: None,
