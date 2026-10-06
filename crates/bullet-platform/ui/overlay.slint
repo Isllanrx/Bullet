@@ -41,6 +41,9 @@ export struct OverlayLabels {
     search-skin: string,
     search-mod: string,
     dice: string,
+    minimize: string,
+    restore: string,
+    hide: string,
     tab-skins: string,
     tab-mods: string,
     historic-tag: string,
@@ -118,8 +121,12 @@ component Card inherits Rectangle {
     callback chosen(int);
     callback gem-hovered(ChromaGem, length, length, bool);
     property <bool> selected: root.card.id == root.selected-skin;
-    property <int> per-line: max(1, floor((info.width + 7px) / 25px));
-    min-height: 76px;
+    property <length> gems-width: root.width - 12px - 56px - 12px - 26px;
+    property <int> per-line: max(1, floor((self.gems-width + 7px) / 25px));
+    property <int> gem-rows: ceil(root.card.chromas.length / root.per-line);
+    property <bool> tagged: root.selected && root.origin != SelectionOrigin.none;
+    property <length> details: 18px + (root.tagged ? 24px : 0px) + (root.card.chromas.length > 0 ? root.gem-rows * 26px : 0px);
+    height: max(56px, root.details) + 24px;
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.chosen(root.card.id); }
@@ -174,7 +181,7 @@ component Card inherits Rectangle {
                 vertical-alignment: center;
             }
         }
-        info := VerticalLayout {
+        VerticalLayout {
             spacing: 7px;
             alignment: center;
             Text {
@@ -186,7 +193,7 @@ component Card inherits Rectangle {
                 letter-spacing: 0.3px;
                 overflow: elide;
             }
-            if root.selected && root.origin != SelectionOrigin.none: HorizontalLayout {
+            if root.tagged: HorizontalLayout {
                 alignment: start;
                 Rectangle {
                     border-radius: 3px;
@@ -207,7 +214,7 @@ component Card inherits Rectangle {
                 }
             }
             if root.card.chromas.length > 0: Rectangle {
-                height: ceil(root.card.chromas.length / root.per-line) * 26px - 7px;
+                height: root.gem-rows * 26px - 7px;
                 for gem[index] in root.card.chromas: Gem {
                     x: mod(index, root.per-line) * 25px;
                     y: floor(index / root.per-line) * 26px;
@@ -348,6 +355,35 @@ component ModEntry inherits Rectangle {
     accessible-action-default => { root.clicked(); }
 }
 
+component HeaderButton inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    callback clicked();
+    width: 28px;
+    border-radius: 4px;
+    background: touch.has-hover ? Theme.gold.with-alpha(0.18) : transparent;
+    animate background { duration: 120ms; }
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 11px;
+        height: 11px;
+        viewbox-width: 11;
+        viewbox-height: 11;
+        stroke: touch.has-hover ? Theme.gold-bright : Theme.muted;
+        stroke-width: 1.4px;
+        fill: transparent;
+        commands: root.icon;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+}
+
 component Dice inherits Rectangle {
     in property <string> label;
     callback clicked();
@@ -430,18 +466,21 @@ export component OverlayWindow inherits Window {
     callback drag();
     callback resize();
     callback hide-requested();
+    callback minimize();
+    in property <bool> collapsed;
+    out property <length> header-height: header.height;
     title: "Bullet";
     icon: @image-url("assets/logo.png");
     no-frame: true;
     always-on-top: true;
     min-width: 320px;
-    min-height: 380px;
+    min-height: root.collapsed ? 0px : 380px;
     background: Theme.backdrop;
     default-font-family: Theme.sans;
     changed columns => { root.columns-changed(self.columns); }
 
     VerticalLayout {
-        Rectangle {
+        header := Rectangle {
             vertical-stretch: 0;
             background: Theme.header;
             TouchArea {
@@ -515,25 +554,15 @@ export component OverlayWindow inherits Window {
                             }
                         }
                     }
-                    Rectangle {
-                        width: 28px;
-                        border-radius: 4px;
-                        background: close-touch.has-hover ? Theme.gold.with-alpha(0.18) : transparent;
-                        Path {
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            width: 11px;
-                            height: 11px;
-                            viewbox-width: 11;
-                            viewbox-height: 11;
-                            stroke: close-touch.has-hover ? Theme.gold-bright : Theme.muted;
-                            stroke-width: 1.4px;
-                            commands: "M 1 1 L 10 10 M 10 1 L 1 10";
-                        }
-                        close-touch := TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => { root.hide-requested(); }
-                        }
+                    HeaderButton {
+                        label: root.collapsed ? root.labels.restore : root.labels.minimize;
+                        icon: root.collapsed ? "M 1.5 1.5 L 9.5 1.5 L 9.5 9.5 L 1.5 9.5 Z" : "M 1 8.5 L 10 8.5";
+                        clicked => { root.minimize(); }
+                    }
+                    HeaderButton {
+                        label: root.labels.hide;
+                        icon: "M 1 1 L 10 10 M 10 1 L 1 10";
+                        clicked => { root.hide-requested(); }
                     }
                 }
                 Hairline {
@@ -798,6 +827,7 @@ export component OverlayWindow inherits Window {
     }
 
     Rectangle {
+        visible: !root.collapsed;
         x: root.width - 18px;
         y: root.height - 18px;
         width: 13px;

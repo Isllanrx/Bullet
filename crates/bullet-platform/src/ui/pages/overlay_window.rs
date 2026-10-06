@@ -62,6 +62,7 @@ struct Overlay {
     tiles: HashMap<u32, slint::Image>,
     previews: HashMap<u32, slint::Image>,
     preview_for: Option<u32>,
+    expanded: Option<slint::LogicalSize>,
 }
 
 thread_local! {
@@ -339,6 +340,7 @@ fn wire(view: &views::OverlayWindow) {
         });
     });
     view.on_hide_requested(|| with_overlay(|overlay| overlay.hide()));
+    view.on_minimize(|| with_overlay(Overlay::toggle_collapsed));
 }
 
 impl Overlay {
@@ -358,6 +360,7 @@ impl Overlay {
             tiles: HashMap::new(),
             previews: HashMap::new(),
             preview_for: None,
+            expanded: None,
         }
     }
 
@@ -385,7 +388,30 @@ impl Overlay {
         }
     }
 
+    fn toggle_collapsed(&mut self) {
+        self.hide_preview();
+        let window = self.view.window();
+        match self.expanded.take() {
+            Some(size) => {
+                self.view.set_collapsed(false);
+                window.set_size(size);
+            }
+            None => {
+                let size = window.size().to_logical(window.scale_factor());
+                self.expanded = Some(size);
+                self.view.set_collapsed(true);
+                window.set_size(slint::LogicalSize::new(
+                    size.width,
+                    self.view.get_header_height(),
+                ));
+            }
+        }
+    }
+
     fn hide(&mut self) {
+        if self.expanded.is_some() {
+            self.toggle_collapsed();
+        }
         self.hide_preview();
         unsafe {
             let _ = ShowWindow(HWND(self.hwnd as *mut _), SW_HIDE); // ignore-ok: returns the previous visibility, not an error
@@ -429,6 +455,9 @@ impl Overlay {
             search_skin: text.overlay_search_skin.into(),
             search_mod: text.overlay_search_mod.into(),
             dice: text.overlay_dice.into(),
+            minimize: text.overlay_minimize.into(),
+            restore: text.overlay_restore.into(),
+            hide: text.overlay_hide.into(),
             tab_skins: text.overlay_tab_skins.into(),
             tab_mods: text.overlay_tab_mods.into(),
             historic_tag: text.overlay_historic_tag.into(),
