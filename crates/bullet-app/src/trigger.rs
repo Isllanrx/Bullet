@@ -703,7 +703,7 @@ impl InjectionTrigger {
                     break;
                 }
             }
-            tokio::time::sleep(Duration::from_millis(25)).await;
+            tokio::time::sleep(GAME_PROCESS_POLL).await;
         }
 
         let (pid, tid) = match (game_pid, game_tid) {
@@ -1315,6 +1315,7 @@ const ARM_DEBOUNCE: Duration = Duration::from_millis(900);
 const INITIAL_ARM_DEBOUNCE: Duration = Duration::from_millis(100);
 
 const GAME_PROCESS_NAME: &str = "League of Legends.exe";
+const GAME_PROCESS_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ArmKey {
