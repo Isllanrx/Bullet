@@ -36,6 +36,11 @@ export global Theme {
     out property <length> text-xl: 22px;
 }
 
+export component ExposeLayer inherits Rectangle {
+    in property <bool> flip;
+    background: root.flip ? #00000001 : #00000000;
+}
+
 export component Hairline inherits Rectangle {
     in property <bool> gold;
     height: 1px;

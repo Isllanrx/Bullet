@@ -1,4 +1,4 @@
-import { Theme, GoldButton, Field, Hairline } from "theme.slint";
+import { Theme, ExposeLayer, GoldButton, Field, Hairline } from "theme.slint";
 
 component PeopleGlyph inherits Path {
     width: 18px;
@@ -39,6 +39,7 @@ component InlineButton inherits Rectangle {
 }
 
 export component PartyDialog inherits Window {
+    in property <bool> expose-flip;
     in property <string> heading;
     in property <string> description;
     in property <string> label;
@@ -196,5 +197,9 @@ export component PartyDialog inherits Window {
     public function focus-field() {
         field.take-focus();
         field.select-all();
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
     }
 }
