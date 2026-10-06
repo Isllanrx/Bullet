@@ -54,3 +54,30 @@ fn the_real_window_shows_every_row_and_dismisses_from_its_button() {
         .invoke_accessible_default_action();
     assert_eq!(dismissed.get(), 1);
 }
+
+#[test]
+fn tab_reaches_the_dismiss_button_and_space_presses_it() {
+    use slint::platform::WindowEvent;
+    i_slint_backend_testing::init_no_event_loop();
+    let window = WelcomeWindow::new().expect("welcome window");
+    fill(&window, &about_content(Language::English.text()));
+    let dismissed = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = dismissed.clone();
+    window.on_dismiss(move || count.set(count.get() + 1));
+    window.show().expect("show");
+    let key = |text: &str| {
+        window
+            .window()
+            .dispatch_event(WindowEvent::KeyPressed { text: text.into() });
+        window
+            .window()
+            .dispatch_event(WindowEvent::KeyReleased { text: text.into() });
+    };
+    key("\t");
+    key(" ");
+    assert_eq!(
+        dismissed.get(),
+        1,
+        "the focused button reacts to the space bar"
+    );
+}

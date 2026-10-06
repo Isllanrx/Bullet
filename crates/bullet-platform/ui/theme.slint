@@ -13,7 +13,9 @@ export global Theme {
     out property <color> cyan: #0ac8b9;
     out property <color> text: #f0e6d2;
     out property <color> muted: #a09b8c;
-    out property <color> muted-dim: #5b5a56;
+    out property <color> muted-dim: #85817a;
+    out property <color> control-line: #5a6a82;
+    out property <color> button-line: #9b7b45;
     out property <color> danger: #c24b4b;
     out property <color> danger-text: #e8a0a0;
     out property <color> surface: #141c28;
@@ -92,23 +94,23 @@ export component GoldButton inherits Rectangle {
     in property <string> text;
     in property <bool> enabled: true;
     in property <bool> primary;
-    in property <bool> secondary;
     in property <bool> danger;
-    in property <bool> accent;
     in property <bool> caps;
     in property <length> font-size: Theme.text-md;
     in property <length> tracking: 0px;
     callback clicked();
+    property <bool> hot: touch.has-hover && root.enabled;
+    property <bool> focused: keys.has-focus && root.enabled;
     min-height: 32px;
     vertical-stretch: 0;
     horizontal-stretch: 1;
     border-radius: 6px;
-    border-width: 1px;
-    border-color: !root.enabled ? Theme.surface-line : root.primary ? (touch.has-hover ? Theme.gold-bright : Theme.gold) : root.secondary ? (touch.has-hover ? #55555c : #3c3c41) : root.danger ? (touch.has-hover ? Theme.danger : #5a2a26) : touch.has-hover ? Theme.gold : root.accent ? Theme.gold-dim : Theme.line-gold;
-    background: root.primary ? (touch.has-hover ? @linear-gradient(180deg, #2b3b52 0%, #182536 100%) : @linear-gradient(180deg, #1e2a3a 0%, #111a26 100%)) : root.secondary ? (touch.has-hover ? #ffffff14 : #ffffff0a) : root.enabled && touch.has-hover ? Theme.surface-hover : root.accent ? Theme.panel : Theme.button;
-    drop-shadow-blur: root.primary ? (touch.has-hover ? 12px : 8px) : 0px;
-    drop-shadow-color: Theme.gold.with-alpha(touch.has-hover ? 0.4 : 0.2);
-    opacity: root.enabled ? 1 : 0.4;
+    border-width: root.focused ? 2px : 1px;
+    border-color: !root.enabled ? Theme.control-line : root.focused ? Theme.gold-bright : root.primary ? (root.hot ? Theme.gold-bright : Theme.gold) : root.danger ? (root.hot ? #ef7468 : #d8584d) : root.hot ? Theme.gold : Theme.button-line;
+    background: root.primary ? (touch.pressed ? @linear-gradient(180deg, #a8884f 0%, #8c6d3c 100%) : root.hot ? @linear-gradient(180deg, #e0c48a 0%, #b8975a 100%) : @linear-gradient(180deg, #d1b47a 0%, #a8884f 100%)) : root.danger ? (root.hot ? #3a2022 : #2a1a1c) : touch.pressed ? #1c2838 : root.hot ? @linear-gradient(180deg, #2e4160 0%, #22324a 100%) : @linear-gradient(180deg, #26364f 0%, #1c2838 100%);
+    drop-shadow-blur: root.primary ? (root.hot ? 12px : 6px) : 0px;
+    drop-shadow-color: Theme.gold.with-alpha(root.hot ? 0.45 : 0.25);
+    opacity: root.enabled ? 1 : 0.45;
     animate border-color, drop-shadow-blur { duration: 150ms; }
     Text {
         x: 12px;
@@ -116,14 +118,24 @@ export component GoldButton inherits Rectangle {
         width: parent.width - 24px;
         height: parent.height;
         text: root.caps ? root.text.to-uppercase() : root.text;
-        color: root.danger ? #f2b8b2 : root.secondary ? (touch.has-hover ? Theme.text : Theme.muted) : Theme.gold-bright;
+        color: root.primary ? #0a1428 : root.danger ? #f2b8b2 : Theme.gold-bright;
         font-family: Theme.sans;
         font-size: root.font-size;
-        font-weight: root.caps ? 700 : 600;
+        font-weight: root.caps || root.primary ? 700 : 600;
         letter-spacing: root.tracking;
         horizontal-alignment: center;
         vertical-alignment: center;
         overflow: elide;
+    }
+    keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
     }
     touch := TouchArea {
         enabled: root.enabled;
@@ -194,7 +206,7 @@ export component Field inherits Rectangle {
     clip: true;
     border-radius: 4px;
     border-width: 1px;
-    border-color: input.has-focus ? Theme.gold : root.monospace ? Theme.line-gold : Theme.line;
+    border-color: input.has-focus ? Theme.gold : Theme.control-line;
     background: root.monospace ? Theme.input : Theme.bg-0;
     drop-shadow-blur: input.has-focus ? 10px : 0px;
     drop-shadow-color: Theme.gold.with-alpha(0.25);
