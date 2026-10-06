@@ -21,6 +21,10 @@
 </p>
 
 <p align="center">
+  <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><b>Download</b></a> ·
   <a href="https://discord.gg/e2dH2nUjd9"><b>Discord community</b></a> ·
   <a href="https://github.com/Isllanrx/Bullet/issues"><b>Report a bug</b></a>
@@ -135,7 +139,6 @@ Setup takes three steps: install Bullet, add the injector, start Bullet.
 | Requirement | Notes |
 | --- | --- |
 | Windows 10 or 11, 64-bit | |
-| [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) | Already present on Windows 11. On Windows 10, install it if it is missing |
 | League of Legends | Any install location. Bullet finds the game on its own |
 
 ### Step 1 — Install Bullet
@@ -342,8 +345,7 @@ C:\Program Files\Bullet\              installed program (read-only for users)
 ├── library\                         skin library (generated or synced)
 ├── mods\                            mods generated from the game for the current match
 ├── overlay\                         built overlays, reused while the game build is unchanged
-├── state\                           settings, party.json, selections
-└── webview2\                        data of the selection window
+└── state\                           settings, party.json, selections
 ```
 
 - **Open them from the tray icon:** it has entries for the mods folder and the logs folder.

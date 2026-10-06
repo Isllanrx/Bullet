@@ -93,6 +93,9 @@ and the crate READMEs, in English, without internal references.
   - LTK Manager 1.26.1 still ships the DLL that expired on 2026-10-04.
   - Modules were grouped into segment folders in every crate and in `xtask` (`docs/architecture.md`).
   - The native patcher experiment lives on `experiment/native-patcher`, not on dev.
+  - The interface moved from WebView2/HTML to Slint (ADR-035): overlay, control panel, About and party dialog
+    keep every feature and the previous look; no Edge runtime, no `msedgewebview2.exe` processes. The Slint
+    attribution required by its royalty-free license is the badge in the README, not inside the app.
 
 ## Architecture
 
@@ -158,9 +161,10 @@ in `docs/architecture.md` ("Source layout"). New modules go into the folder of t
 12. **Version format is two numbers (`1.0`, `1.1`, `2.0`) across UI, installer, and release tags.**
     Cargo strictly requires SemVer 2.0.0 (`MAJOR.MINOR.PATCH`), so Cargo.toml bumps minor (e.g. `1.1.0`)
     and helper functions (`display_version()`) strip the zero for user-facing surfaces.
-13. **Overlay keyboard focus goes to the WebView, never to the host window.** The UI asks for focus over
-    IPC; Rust takes the foreground (thread-input attach) and then calls `webview.focus()`. `SetFocus` on the
-    host HWND pulls focus out of the WebView2 child and the search box stops receiving keys.
+13. **The overlay never takes focus on its own.** It is created without activation and shown with
+    `SW_SHOWNOACTIVATE`; only a click in its search box takes the foreground (thread-input attach), and Enter or
+    Escape gives it back to the client. The interface is Slint (ADR-035): one `bullet-ui` thread owns the event
+    loop, logic lives in Rust (`overlay_model.rs`), every control has an accessible label the tests use.
 14. **A retargeted skin bin is the source bin relocated, nothing more.** `retarget_skin_bin` keeps only the
     skin object and its Resources, re-keyed to slot 0; every `link`/`hash` value that pointed at the old keys is
     rewritten to the new ones (`remap_references`), and `skinClassification`/`skinParent` take the values of
@@ -170,7 +174,7 @@ in `docs/architecture.md` ("Source layout"). New modules go into the folder of t
     Garen's sword). Never write `animations/skin0.bin`: the skin keeps pointing at `Animations/SkinN`, and a
     slot-0 graph only replaces the base graph other players and companions use. Not yet proven in a match.
 15. **No comments in code, so the code stays clean.** No `//`, `///`, `//!`, `/* */`, `<!-- -->`, `#` or `;`
-    comments in Rust, HTML/CSS/JS, TypeScript, YAML (including the shell inside `run:`), TOML or the Inno
+    comments in Rust, Slint, HTML/CSS/JS, TypeScript, YAML (including the shell inside `run:`), TOML or the Inno
     script. Names, types and tests carry the meaning; explanations and definitions go in a separate `.md`
     (`docs/`, the crate README or an ADR). A comment is at most **one line**, and only a tool directive:
     `// ignore-ok: <reason>` (rule 4), `# zizmor: ignore[...]`, the version after a pinned `uses:` SHA.

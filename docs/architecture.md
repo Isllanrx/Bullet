@@ -3,8 +3,8 @@
 ## Overview
 
 Bullet is a Cargo workspace. A single tray executable (`bullet-app`) runs everything: it follows the League
-client, builds the overlay and drives the injector. The skin is chosen in a window Bullet owns (a WebView2
-view), never inside the client.
+client, builds the overlay and drives the injector. The skin is chosen in a window Bullet owns (drawn with
+Slint, in Rust), never inside the client.
 
 ```text
                   ┌──────────────────────────────────────────────────┐
@@ -12,7 +12,7 @@ view), never inside the client.
   (LCU REST + WS) │─────────────┐                                     │
                   │             ▼                                     │
   Bullet window   │  bullet-app      shared state + injection trigger │
-  (WebView2)  ────┼─────────────┤   decides what to build and when    │
+  (Slint)     ────┼─────────────┤   decides what to build and when    │
                   │             ▼                                     │
   Installed game  │  bullet-inject   builds the overlay (bullet-wad)  │
   (DATA/FINAL) ───┼─────────────►   and arms the injector host        │
@@ -46,7 +46,7 @@ under a flat path (`bullet_platform::fs`, `bullet_wad::prop`), so callers never 
 | Crate | Folders |
 | --- | --- |
 | `bullet-core` | `domain/` (historic, library, mods, overlay, party), `runtime/` (phase, selection, state, supervisor) |
-| `bullet-platform` | `os/instance`, `os/system`, `os/storage`, `league/` (client settings and window, game build, paths), `ui/pages` (WebView windows and their HTML), `ui/desktop` (tray, hotkey, clipboard, dialogs, shell), `ui/locale` |
+| `bullet-platform` | `os/instance`, `os/system`, `os/storage`, `league/` (client settings and window, game build, paths), `ui/pages` (the Slint windows; their `.slint` sources live in `crates/bullet-platform/ui`), `ui/desktop` (tray, hotkey, clipboard, dialogs, shell), `ui/locale` |
 | `bullet-wad` | `archive/` (WAD, writer, `.fantome`, `.modpkg`), `properties/` (BIN/PROP), `hashing/` |
 | `bullet-lcu` | `connection/` (client, lockfile, WebSocket, observer), `session/` (champion select, live selection, skin registration, assets) |
 | `bullet-classic` | `animation/` (forms, gear toggle, clip aliases), `generation/` (builder, client data, and `generator/`: retarget, characters, classic, standard) |
