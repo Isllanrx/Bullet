@@ -60,14 +60,13 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         .map(|(stamp, limit)| dll_support(stamp, limit, facts.now_secs))
     {
         Some(DllSupport::Supported) => check(text.check_dll, true, text.detail_ok.to_owned()),
+        Some(DllSupport::SupportedUntilNextPatch { days_left }) if days_left < 0 => {
+            check(text.check_dll, false, text.detail_dll_past_limit.to_owned())
+        }
         Some(DllSupport::SupportedUntilNextPatch { days_left }) => check(
             text.check_dll,
             false,
-            fill(
-                text.detail_dll_days_left,
-                "n",
-                &days_left.max(0).to_string(),
-            ),
+            fill(text.detail_dll_days_left, "n", &days_left.to_string()),
         ),
         Some(DllSupport::Refused) => {
             check(text.check_dll, false, text.detail_dll_refused.to_owned())
@@ -462,6 +461,16 @@ mod tests {
             text,
         );
         assert_eq!(unknown.checks[3].detail, text.detail_dll_unknown);
+
+        let past = snapshot(
+            &Facts {
+                now_secs: u64::from(LIMIT) + 2 * 86_400,
+                ..facts()
+            },
+            text,
+        );
+        assert_eq!(past.checks[3].detail, text.detail_dll_past_limit);
+        assert!(!past.checks[3].ok);
     }
 
     #[test]
