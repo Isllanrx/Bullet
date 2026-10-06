@@ -25,6 +25,8 @@ const MAX_INSPECTIONS_PER_CHECK: usize = 12;
 const VERDICTS_FILE: &str = "ltk_releases.txt";
 const NOTIFIED_FILE: &str = "ltk_notified.txt";
 
+pub const INJECTOR_FILES: [&str; 2] = ["ltk_patcher_host.exe", "ltk_patcher_dll.dll"];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuditedInjector {
     pub host_sha256: &'static str,
@@ -293,14 +295,27 @@ async fn release_versions(client: &reqwest::Client) -> Result<Vec<String>, Strin
     published_versions(&String::from_utf8_lossy(&body))
 }
 
+async fn resource(client: &reqwest::Client, version: &str, file: &str) -> Result<Vec<u8>, String> {
+    let url = format!("{LTK_API}/contents/{RESOURCES_PATH}/{file}?ref=v{version}");
+    get(client, &url, "application/vnd.github.raw").await
+}
+
 async fn resource_sha256(
     client: &reqwest::Client,
     version: &str,
     file: &str,
 ) -> Result<String, String> {
-    let url = format!("{LTK_API}/contents/{RESOURCES_PATH}/{file}?ref=v{version}");
-    let bytes = get(client, &url, "application/vnd.github.raw").await?;
+    let bytes = resource(client, version, file).await?;
     Ok(bullet_inject::dll_validator::compute_sha256(&bytes))
+}
+
+pub async fn download_injector(version: &str) -> Result<Vec<(&'static str, Vec<u8>)>, String> {
+    let client = http_client()?;
+    let mut files = Vec::with_capacity(INJECTOR_FILES.len());
+    for name in INJECTOR_FILES {
+        files.push((name, resource(&client, version, name).await?));
+    }
+    Ok(files)
 }
 
 async fn inspect(
@@ -308,8 +323,8 @@ async fn inspect(
     audited: AuditedInjector,
     version: &str,
 ) -> Result<Injector, String> {
-    let host = resource_sha256(client, version, "ltk_patcher_host.exe").await?;
-    let dll = resource_sha256(client, version, "ltk_patcher_dll.dll").await?;
+    let host = resource_sha256(client, version, INJECTOR_FILES[0]).await?;
+    let dll = resource_sha256(client, version, INJECTOR_FILES[1]).await?;
     Ok(classify(audited, &host, &dll))
 }
 

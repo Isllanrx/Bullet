@@ -37,8 +37,8 @@ injector needs.
 | `ui/locale/i18n.rs` | Translations (English, Portuguese, Spanish) for everything shown outside the League client; falls back to English |
 | `os/instance/single_instance.rs`, `os/instance/activation.rs` | Only one Bullet runs at a time; starting it again brings the first one to the front |
 | `os/system/autostart.rs` | The "start with Windows" setting |
-| `os/system/elevation.rs`, `os/system/user_profile.rs` | Checks the process privileges and resolves the real desktop user |
-| `ui/desktop/clipboard.rs`, `ui/desktop/shell.rs` | Copying invite codes, opening folders in Explorer and opening `https://` pages (anything else is refused) |
+| `os/system/elevation.rs`, `os/system/user_profile.rs` | Checks the process privileges, runs a program elevated and waits for its exit code (`run_elevated`, a declined prompt is its own outcome), and resolves the real desktop user |
+| `ui/desktop/clipboard.rs`, `ui/desktop/shell.rs` | Copying invite codes, opening folders in Explorer, opening `https://` pages (anything else is refused) and message boxes, including a yes/no question |
 
 ## Design notes
 

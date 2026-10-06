@@ -161,6 +161,9 @@ pub struct Text {
     pub panel_mark_problem_hint: &'static str,
     pub panel_export_diagnostics: &'static str,
 
+    pub injector_auto_title: &'static str,
+    pub injector_auto_body: &'static str,
+    pub injector_auto_failed: &'static str,
     pub missing_tools_title: &'static str,
     pub missing_tools_body: &'static str,
     pub broken_tools_title: &'static str,
@@ -300,6 +303,9 @@ static PORTUGUESE: Text = Text {
     panel_mark_problem_hint: "Sem sair do jogo: durante a partida, Ctrl+Shift+B marca o momento em que algo aparece errado e F12 tira um print. No fim da partida o diagnóstico é salvo sozinho na pasta de logs.",
     panel_export_diagnostics: "Exportar diagnóstico",
 
+    injector_auto_title: "Bullet — Instalar o injetor",
+    injector_auto_body: "O Bullet pode baixar o injetor do LTK Manager {version} direto do GitHub oficial do League Toolkit, conferir que é exatamente a versão auditada e colocá-lo na pasta 'tools'.\n\nSe o Windows pedir permissão de administrador, é só para copiar esses dois arquivos.\n\nInstalar agora?",
+    injector_auto_failed: "Não foi possível instalar o injetor automaticamente ({error}).",
     missing_tools_title: "Bullet — Injetor Necessário",
     missing_tools_body: "O Bullet precisa do injetor para funcionar:\n• ltk_patcher_host.exe\n• ltk_patcher_dll.dll\n\nCopie os dois do LTK Manager {version} para a pasta 'tools' e abra o Bullet de novo.\nA pasta e a página de download do LTK Manager foram abertas para você.",
     broken_tools_title: "Bullet — Injetor Inválido",
@@ -436,6 +442,9 @@ static SPANISH: Text = Text {
     panel_mark_problem_hint: "Sin salir del juego: durante la partida, Ctrl+Shift+B marca el momento en que algo se ve mal y F12 toma una captura. Al terminar la partida el diagnóstico se guarda solo en la carpeta de logs.",
     panel_export_diagnostics: "Exportar diagnóstico",
 
+    injector_auto_title: "Bullet — Instalar el inyector",
+    injector_auto_body: "Bullet puede descargar el inyector de LTK Manager {version} directamente del GitHub oficial de League Toolkit, comprobar que es exactamente la versión auditada y colocarlo en la carpeta 'tools'.\n\nSi Windows pide permiso de administrador, es solo para copiar esos dos archivos.\n\n¿Instalar ahora?",
+    injector_auto_failed: "No se pudo instalar el inyector automáticamente ({error}).",
     missing_tools_title: "Bullet — Inyector Requerido",
     missing_tools_body: "Bullet necesita el inyector para funcionar:\n• ltk_patcher_host.exe\n• ltk_patcher_dll.dll\n\nCópielos desde LTK Manager {version} a la carpeta 'tools' y vuelva a abrir Bullet.\nLa carpeta y la página de descarga de LTK Manager se han abierto para usted.",
     broken_tools_title: "Bullet — Inyector Inválido",
@@ -572,6 +581,9 @@ static ENGLISH: Text = Text {
     panel_mark_problem_hint: "Without leaving the game: during a match, Ctrl+Shift+B marks the moment something looks wrong and F12 takes a screenshot. When the match ends the diagnostics are saved to the logs folder on their own.",
     panel_export_diagnostics: "Export diagnostics",
 
+    injector_auto_title: "Bullet — Install the injector",
+    injector_auto_body: "Bullet can download the injector from LTK Manager {version} straight from League Toolkit's official GitHub, check that it is exactly the audited build and place it in the 'tools' folder.\n\nIf Windows asks for administrator permission, it is only to copy those two files.\n\nInstall now?",
+    injector_auto_failed: "The injector could not be installed automatically ({error}).",
     missing_tools_title: "Bullet — Injector Required",
     missing_tools_body: "Bullet requires the injection backend to operate:\n• ltk_patcher_host.exe\n• ltk_patcher_dll.dll\n\nCopy both from LTK Manager {version} into the 'tools' folder and open Bullet again.\nThe folder and the LTK Manager download page have been opened for you.",
     broken_tools_title: "Bullet — Invalid Injector",

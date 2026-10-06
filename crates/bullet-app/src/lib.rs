@@ -10,4 +10,4 @@ pub use diagnostics::{control_panel, startup};
 pub use game::{auto_accept, live_game};
 pub use party::party_manager;
 pub use selection::{catalog, historic_store, mods_store, overlay_session, skin_sync};
-pub use updates::{ltk_release, update_check};
+pub use updates::{injector_install, ltk_release, update_check};
