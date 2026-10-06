@@ -22,14 +22,14 @@ WebSocket event stream. This crate is Bullet's only way of knowing what is happe
 
 | File | Purpose |
 | --- | --- |
-| `lockfile.rs` | Finds and parses the client lockfile; builds the REST and WebSocket addresses |
-| `client.rs` | REST client; every request has a timeout |
-| `websocket.rs` | WebSocket connection and reconnection |
-| `observer.rs` | Turns client events into game phases and app state updates |
-| `champ_select.rs` | Champion select session: both teams, picks, selected skins, when the phase is really over |
-| `live_selection.rs` | The final, authoritative read of champion and skin, used right before building the overlay; covers ARAM, Arena and rotating modes |
-| `skin_registration.rs` | Which skin id to register with the client and how |
-| `champion_assets.rs` | Skin and chroma lists from the client, used to fill the selection window when no local library exists |
+| `connection/lockfile.rs` | Finds and parses the client lockfile; builds the REST and WebSocket addresses |
+| `connection/client.rs` | REST client; every request has a timeout |
+| `connection/websocket.rs` | WebSocket connection and reconnection |
+| `connection/observer.rs` | Turns client events into game phases and app state updates |
+| `session/champ_select.rs` | Champion select session: both teams, picks, selected skins, when the phase is really over |
+| `session/live_selection.rs` | The final, authoritative read of champion and skin, used right before building the overlay; covers ARAM, Arena and rotating modes |
+| `session/skin_registration.rs` | Which skin id to register with the client and how |
+| `session/champion_assets.rs` | Skin and chroma lists from the client, used to fill the selection window when no local library exists |
 
 ## Design notes
 
