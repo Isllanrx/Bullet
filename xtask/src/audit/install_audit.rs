@@ -1,6 +1,5 @@
 use crate::bullet_data_dir;
-use crate::package::{USER_SUPPLIED_TOOLS, audited_hash};
-use sha2::{Digest, Sha256};
+use crate::package::USER_SUPPLIED_TOOLS;
 
 use std::path::{Path, PathBuf};
 
@@ -57,8 +56,8 @@ pub fn install_location(registry: &dyn Registry) -> Option<PathBuf> {
 pub fn audit_files(
     layout: &Layout,
     phase: Phase,
-    tools: &[(&str, &str)],
-    sha256: &dyn Fn(&Path) -> Option<String>,
+    tools: &[&str],
+    trusted: &dyn Fn(&Path) -> Result<(), String>,
 ) -> Vec<Check> {
     let mut checks = Vec::new();
     match phase {
@@ -66,22 +65,29 @@ pub fn audit_files(
             let exe = layout.program_dir.join("bullet.exe");
             checks.push(check(exe.is_file(), format!("{} present", exe.display())));
             let tools_dir = layout.program_dir.join("tools");
-            for (name, audited) in tools {
+            for name in tools {
                 let path = tools_dir.join(name);
-                match sha256(&path) {
-                    Some(actual) => checks.push(check(
-                        actual.eq_ignore_ascii_case(audited),
-                        format!("{} has the audited hash (found {actual})", path.display()),
-                    )),
-                    None => checks.push(check(false, format!("{} present", path.display()))),
+                if !path.is_file() {
+                    checks.push(check(false, format!("{} present", path.display())));
+                    continue;
                 }
+                let verdict = trusted(&path);
+                checks.push(check(
+                    verdict.is_ok(),
+                    format!(
+                        "{} is signed by {} ({})",
+                        path.display(),
+                        bullet_inject::trust::LTK_PUBLISHER,
+                        verdict.err().unwrap_or_else(|| "verified".to_owned())
+                    ),
+                ));
             }
             let strays: Vec<String> = std::fs::read_dir(&tools_dir)
                 .map(|entries| {
                     entries
                         .flatten()
                         .map(|e| e.file_name().to_string_lossy().into_owned())
-                        .filter(|name| !tools.iter().any(|(t, _)| t.eq_ignore_ascii_case(name)))
+                        .filter(|name| !tools.iter().any(|t| t.eq_ignore_ascii_case(name)))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -258,29 +264,20 @@ pub(crate) fn run_install_audit(args: &[String]) {
     };
     let tools_dir = layout.program_dir.join("tools");
     let mut tools = Vec::with_capacity(USER_SUPPLIED_TOOLS.len());
-    for (name, constants) in USER_SUPPLIED_TOOLS {
-        if !tools_dir.join(name).is_file() {
+    for name in USER_SUPPLIED_TOOLS {
+        if tools_dir.join(name).is_file() {
+            tools.push(name);
+        } else {
             println!(
                 "  [INFO] {name} not in {} yet (the user supplies it)",
                 tools_dir.display()
             );
-            continue;
-        }
-        match constants.first().map(|c| audited_hash(c)) {
-            Some(Ok(hash)) => tools.push((name, hash)),
-            Some(Err(e)) => {
-                eprintln!("[ERRO] {e}");
-                std::process::exit(1);
-            }
-            None => {}
         }
     }
-    let sha256 = |path: &std::path::Path| -> Option<String> {
-        std::fs::read(path)
-            .ok()
-            .map(|bytes| bullet_inject::dll_validator::to_hex(&Sha256::digest(&bytes)))
+    let trusted = |path: &std::path::Path| -> Result<(), String> {
+        bullet_inject::trust::verify_injector_file(path).map_err(|e| e.to_string())
     };
-    let mut checks = audit_files(&layout, phase, &tools, &sha256);
+    let mut checks = audit_files(&layout, phase, &tools, &trusted);
     checks.extend(audit_registry(
         phase,
         &layout.program_dir.join("bullet.exe"),
@@ -334,10 +331,12 @@ mod tests {
         }
     }
 
-    fn content_hash(path: &Path) -> Option<String> {
-        std::fs::read(path)
-            .ok()
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
+    fn signed_marker(path: &Path) -> Result<(), String> {
+        match std::fs::read(path) {
+            Ok(bytes) if bytes == b"signed" => Ok(()),
+            Ok(_) => Err("not signed".to_owned()),
+            Err(e) => Err(e.to_string()),
+        }
     }
 
     fn layout(root: &Path) -> Layout {
@@ -347,7 +346,7 @@ mod tests {
         }
     }
 
-    const TOOLS: [(&str, &str); 1] = [("ltk_patcher_host.exe", "h1")];
+    const TOOLS: [&str; 1] = ["ltk_patcher_host.exe"];
 
     #[test]
     fn test_a_correct_install_passes_and_a_wrong_tool_or_stray_fails() {
@@ -356,18 +355,28 @@ mod tests {
         let tools = layout.program_dir.join("tools");
         std::fs::create_dir_all(&tools).expect("dir");
         std::fs::write(layout.program_dir.join("bullet.exe"), b"exe").expect("exe");
-        std::fs::write(tools.join("ltk_patcher_host.exe"), b"h1").expect("host");
-        let checks = audit_files(&layout, Phase::Installed, &TOOLS, &content_hash);
+        std::fs::write(tools.join("ltk_patcher_host.exe"), b"signed").expect("host");
+        let checks = audit_files(&layout, Phase::Installed, &TOOLS, &signed_marker);
         assert!(checks.iter().all(|c| c.ok), "{checks:#?}");
 
         std::fs::write(tools.join("cloudflared.exe"), b"x").expect("stray");
-        let failed: Vec<String> = audit_files(&layout, Phase::Installed, &TOOLS, &content_hash)
+        let failed: Vec<String> = audit_files(&layout, Phase::Installed, &TOOLS, &signed_marker)
             .into_iter()
             .filter(|c| !c.ok)
             .map(|c| c.what)
             .collect();
         assert_eq!(failed.len(), 1, "{failed:#?}");
         assert!(failed[0].contains("cloudflared.exe"));
+
+        std::fs::remove_file(tools.join("cloudflared.exe")).expect("rm stray");
+        std::fs::write(tools.join("ltk_patcher_host.exe"), b"patched").expect("patched");
+        let failed: Vec<String> = audit_files(&layout, Phase::Installed, &TOOLS, &signed_marker)
+            .into_iter()
+            .filter(|c| !c.ok)
+            .map(|c| c.what)
+            .collect();
+        assert_eq!(failed.len(), 1, "{failed:#?}");
+        assert!(failed[0].contains("not signed"), "{failed:#?}");
     }
 
     #[test]
@@ -380,7 +389,7 @@ mod tests {
                 kept_user_content: false,
             },
             &TOOLS,
-            &content_hash,
+            &signed_marker,
         );
         assert!(
             clean.iter().all(|c| c.ok),
@@ -392,7 +401,7 @@ mod tests {
         let kept = Phase::Uninstalled {
             kept_user_content: true,
         };
-        let checks = audit_files(&layout, kept, &TOOLS, &content_hash);
+        let checks = audit_files(&layout, kept, &TOOLS, &signed_marker);
         let failed: Vec<&Check> = checks.iter().filter(|c| !c.ok).collect();
         assert_eq!(failed.len(), 1, "{checks:#?}");
         assert!(failed[0].what.contains("overlay"), "the overlay is residue");
@@ -400,7 +409,7 @@ mod tests {
 
         std::fs::remove_dir_all(layout.data_dir.join("overlay")).expect("rm");
         assert!(
-            audit_files(&layout, kept, &TOOLS, &content_hash)
+            audit_files(&layout, kept, &TOOLS, &signed_marker)
                 .iter()
                 .all(|c| c.ok)
         );
@@ -408,7 +417,7 @@ mod tests {
             kept_user_content: false,
         };
         assert!(
-            audit_files(&layout, not_kept, &TOOLS, &content_hash)
+            audit_files(&layout, not_kept, &TOOLS, &signed_marker)
                 .iter()
                 .any(|c| !c.ok),
             "skins left when the user asked to remove them are residue"
@@ -416,7 +425,7 @@ mod tests {
 
         std::fs::create_dir_all(&layout.program_dir).expect("pf");
         assert!(
-            audit_files(&layout, kept, &TOOLS, &content_hash)
+            audit_files(&layout, kept, &TOOLS, &signed_marker)
                 .iter()
                 .any(|c| !c.ok && c.what.contains("Program Files"))
         );

@@ -117,32 +117,10 @@ pub(crate) fn run_package() {
     println!("  SHA-256:  {hash_hex}");
 }
 
-pub(crate) const USER_SUPPLIED_TOOLS: [(&str, &[&str]); 2] = [
-    ("ltk_patcher_host.exe", &["AUDITED_LTK_HOST_HASH"]),
-    ("ltk_patcher_dll.dll", &["AUDITED_LTK_DLL_HASH"]),
+pub(crate) const USER_SUPPLIED_TOOLS: [&str; 2] = [
+    bullet_inject::ltk_host::HOST_EXE,
+    bullet_inject::ltk_host::DLL_FILE,
 ];
-
-const TRIGGER_SOURCE: &str = include_str!("../../../crates/bullet-app/src/trigger.rs");
-
-pub(crate) fn audited_hash(name: &str) -> Result<&'static str, String> {
-    let declaration = format!("pub const {name}: &str =");
-    let after = TRIGGER_SOURCE
-        .split_once(declaration.as_str())
-        .map(|(_, rest)| rest)
-        .ok_or_else(|| format!("{name} is not declared in crates/bullet-app/src/trigger.rs"))?;
-    let hash = after
-        .trim_start()
-        .strip_prefix('"')
-        .and_then(|rest| rest.split_once('"'))
-        .map(|(hash, _)| hash)
-        .ok_or_else(|| {
-            format!("{name} in crates/bullet-app/src/trigger.rs is not a string literal")
-        })?;
-    if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(format!("{name} is not a SHA-256 hex digest: {hash:?}"));
-    }
-    Ok(hash)
-}
 
 pub(crate) fn clean_dist(dist_dir: &std::path::Path) {
     if !dist_dir.exists() {

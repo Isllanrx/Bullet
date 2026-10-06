@@ -2,8 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum InjectError {
-    #[error("DLL hash mismatch: expected {expected}, got {actual}")]
-    DllHashMismatch { expected: String, actual: String },
+    #[error("the LTK injector at {path} is not trusted: {reason}")]
+    UntrustedInjector { path: String, reason: String },
     #[error("overlay build failed: {0}")]
     Overlay(String),
 

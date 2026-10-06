@@ -41,8 +41,9 @@ and the crate READMEs, in English, without internal references.
   Bullet running **unelevated**.
 - Blind, ARAM, Swiftplay, Arena, rotating modes and reconnect are implemented but **not yet proven in game**.
 - Party mode works against the public relay; not yet proven with several players in one match.
-- **The LTK DLL refuses game builds newer than 2026-10-18 07:00Z** (`0x6ad46e70`, LTK Manager 1.27.0, checked on the game exe's
-  `TimeDateStamp`). A refreshed DLL is needed for the first patch built after that.
+- **Each LTK DLL refuses game builds newer than a limit compiled into it** (1.27.0: `0x6ad46e70`, 2026-10-18 07:00Z,
+  checked on the game exe's `TimeDateStamp`). Bullet reads the limit from the installed DLL and offers the newest
+  signed LTK Manager release from the panel (ADR-036).
 - Known gaps: large custom mods are slow to build inside champion select; skin packages are generated per
   patch; no "disable mods" option on the reconnect screen yet.
 - 2026-09-30 (not released, no match proof yet): companion characters are found by scanning the champion's
@@ -88,10 +89,10 @@ and the crate READMEs, in English, without internal references.
   - Mods: `.modpkg` import (RuneForge/DivineSkins); zips with a wrong CRC, nested WAD folders and `.wad` files
     are accepted.
   - WeGame layouts are found.
-  - The compatible LTK Manager release is found at run time (panel line, tray notice). Startup offers to
-    install the audited injector from GitHub with an elevated copy that re-verifies the hashes.
-  - Audited injector moved to LTK Manager 1.27.0 (patch 26.20, signed by the same publisher, valid until
-    2026-10-18); LTK now ships a DLL per patch, so each release needs this audit.
+  - The injector is trusted by its Authenticode signature (publisher Natoken LLC), not by fixed hashes (ADR-036):
+    LTK now ships a DLL per patch. The newest signed LTK Manager release is found at run time; the panel's
+    "Install injector" and the startup refusal download it, verify the signature and copy it (elevated only for
+    the copy). The DLL's game-build limit is read from its bytes. Not yet proven in a match.
   - Modules were grouped into segment folders in every crate and in `xtask` (`docs/architecture.md`).
   - The native patcher experiment lives on `experiment/native-patcher`, not on dev.
   - The interface moved from WebView2/HTML to Slint (ADR-035): overlay, control panel, About and party dialog
@@ -128,8 +129,8 @@ in `docs/architecture.md` ("Source layout"). New modules go into the folder of t
 | The overlay is built natively and byte-faithful: unchanged entries keep the game's exact compressed bytes, and every cloned WAD keeps the game's header (signature and checksum) | Patch 16.19 rejects a map WAD rewritten with another header or recompressed as corrupt (`Map11.wad.client`) |
 | A path a map WAD also holds changes in every WAD that holds it | Changing only one side is the "Inconsistent" crash; leaving it out left Zed's shadow on its default look |
 | A WAD whose mod only replaces entries is the game file copied byte for byte plus the new entries; the copy is reused until the game file changes and prepared when the champion locks | Rewriting a 2.5 GB map takes 24 s; without suspension the game would start before the patcher is armed |
-| Bullet runs unelevated (`asInvoker`); only `--install-injector` runs elevated, re-verifies the audited hashes and copies two files into Bullet's own `tools` | Least privilege; proven to work in a match |
-| Third-party binaries only from Bullet's own folder, SHA-256 checked against `AUDITED_*_HASH` in `bullet-app::trigger` | Hash is the trust anchor; the byte-patched "2040" DLL failed in a match and is refused |
+| Bullet runs unelevated (`asInvoker`); only `--install-injector` runs elevated, re-verifies the publisher's signature and copies two files into Bullet's own `tools` | Least privilege; proven to work in a match |
+| Third-party binaries only from Bullet's own folder, with a valid Authenticode signature from `LTK_PUBLISHER` (`bullet-inject::trust`) | The signature is the trust anchor and survives LTK's per-patch DLLs; any changed byte (the "2040" DLL that failed in a match) breaks it and is refused |
 | `bullet-wad` stays our own parser (no `cdragon-*`) | Full control over all five entry types and bounds checks |
 | Party: relay only, no P2P, XChaCha20-Poly1305 blobs, nothing identifying in clear, anti-spoof against the real roster | Privacy and safety of other players |
 | No new third-party dependency without a written justification | Minimizing third-party trust is a product goal |
@@ -149,13 +150,13 @@ in `docs/architecture.md` ("Source layout"). New modules go into the folder of t
    diagnostics.
 9. **User-facing text goes through `bullet_platform::i18n`** or the overlay dictionaries; paths come from
    `bullet_platform::paths` discovery. Never a literal in one language, never a drive letter.
-10. **The LTK injector lives in Bullet's own folder, is hash-validated, and its absence tells the user.**
+10. **The LTK injector lives in Bullet's own folder, is signature-validated, and its absence tells the user.**
     Never patch the DLL bytes or strip its signature. **Never bundle it:** the LTK Patcher License forbids
     redistributing League Toolkit's signed binaries outside an official LTK Manager release, so users copy
     host + DLL from that release into `tools\` (the README also links a convenience mirror, `tools.zip` on
-    chosen by the maintainer). The audited hashes match **LTK Manager 1.27.0**
-    (`src-tauri/resources/`, installed to `%LOCALAPPDATA%\LTK Manager`). Changing `AUDITED_*_HASH` means
-    updating the version and hashes in the README's "Step 2 — Add the injector".
+    chosen by the maintainer). Trust is the publisher's Authenticode signature (`LTK_PUBLISHER` in
+    `bullet-inject::trust`); no version or hash is hardcoded. Changing the publisher means a new ADR and the
+    README's "Step 2 — Add the injector".
 11. **Never perform git commit or git push without explicit user approval.** Code modifications are made,
     tested, and presented to the user; commits/pushes are executed only when the user explicitly requests it.
     Commits and PRs never carry `Co-Authored-By` or any AI attribution trailer.
@@ -207,7 +208,7 @@ An approved PR into `main` → `automerge.yml` enables squash auto-merge once "C
 `release.yml` picks the next version (last tag + 1 minor, next major with the `breaking` label, Cargo.toml as a
 floor; docs-only merges skip), stamps it with `cargo xtask set-version`, builds, attests and publishes a
 **pre-release** → tested in a match → `promote.yml` marks it latest. Protected paths (workflows, installer,
-xtask, toolchain, lockfile, trigger/hashes, injector code, party cipher) never auto-merge.
+xtask, toolchain, lockfile, trigger, injector trust and code, party cipher) never auto-merge.
 
 ## Game modes matrix (defines "done")
 

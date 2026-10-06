@@ -45,7 +45,7 @@ export enum PanelAction {
     open-tools,
     open-logs,
     open-release,
-    open-ltk,
+    install-injector,
     mark-problem,
     export-diagnostics,
     about,
@@ -234,7 +234,7 @@ export component ControlPanel inherits Window {
                 if root.ltk-line != "": Notice {
                     line: root.ltk-line;
                     action: root.ltk-download;
-                    activated => { root.action(PanelAction.open-ltk); }
+                    activated => { root.action(PanelAction.install-injector); }
                 }
                 Section {
                     heading: root.labels.section-options;
