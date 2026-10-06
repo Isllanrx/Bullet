@@ -36,7 +36,11 @@ find the characters.
 
 | File | Purpose |
 | --- | --- |
-| `generation/generator.rs` | `StandardChampion` and `ClassicChampion`: open a champion from the installed game and build the mod for a skin |
+| `generation/generator/mod.rs` | Shared names and paths (aliases, skin and animation bins, slot identity) and the re-exports of the four files below |
+| `generation/generator/retarget.rs` | Relocates a skin's bin and animation graph to slot 0 (`retarget_skin_bin`, `retarget_animation_bin`, form cycles) |
+| `generation/generator/characters.rs` | Finds companion and jade characters in a champion's bins, in on-disk order, with the per-WAD cache |
+| `generation/generator/classic.rs` | `ClassicChampion`: builds a Classic Rift mod |
+| `generation/generator/standard.rs` | `StandardChampion`: builds a store skin's mod; companion prewarm and alias resolution |
 | `generation/builder.rs` | Classic id offsets: tells a classic champion id apart and converts classic champion and skin ids back to the regular ones |
 | `animation/forms.rs` | Bakes one form of a skin with gears into the slot-0 skin and strips HUD gear indicators |
 | `animation/gear_toggle.rs` | Adds the in-game form cycle (`Ctrl+5`) to the animation graph of a skin with gears |
