@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
+use bullet_core::phase::GamePhase;
 use bullet_core::state::StateReceiver;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -485,7 +486,8 @@ pub async fn run(
     };
     let mut watch: Option<MatchWatch> = None;
     loop {
-        let in_game = state_rx.borrow_and_update().phase.is_in_game();
+        let phase = state_rx.borrow_and_update().phase;
+        let in_game = match_running(phase, game_alive);
         match (&mut watch, in_game) {
             (None, true) => {
                 watch = Some(MatchWatch {
@@ -537,7 +539,27 @@ pub async fn run(
                     break;
                 }
             }
-            () = tokio::time::sleep(POLL_EVERY), if watch.is_some() => {}
+            () = tokio::time::sleep(POLL_EVERY), if watch.is_some() || phase == GamePhase::Reconnect => {}
+        }
+    }
+}
+
+#[must_use]
+pub fn match_running(phase: GamePhase, game_alive: impl FnOnce() -> bool) -> bool {
+    match phase {
+        GamePhase::Reconnect => game_alive(),
+        other => other.is_in_game(),
+    }
+}
+
+fn game_alive() -> bool {
+    match bullet_platform::process::ProcessFinder::find_process_by_name(
+        bullet_platform::game_version::GAME_EXE,
+    ) {
+        Ok(found) => found.is_some(),
+        Err(e) => {
+            debug!(error = %e, "Game process lookup failed; the match is treated as still running");
+            true
         }
     }
 }

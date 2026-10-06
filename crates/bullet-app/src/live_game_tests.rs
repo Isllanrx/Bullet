@@ -207,3 +207,15 @@ fn the_match_hook_hears_when_a_match_starts_and_ends() {
     live.match_changed(false);
     assert_eq!(*seen.lock().expect("lock"), vec![true, false]);
 }
+
+#[test]
+fn a_crashed_game_in_reconnect_ends_the_match_so_its_log_is_read() {
+    assert!(!match_running(GamePhase::Reconnect, || false));
+    assert!(match_running(GamePhase::Reconnect, || true));
+    for phase in [GamePhase::GameStart, GamePhase::InProgress] {
+        assert!(match_running(phase, || false), "{phase:?}");
+    }
+    for phase in [GamePhase::Lobby, GamePhase::EndOfGame, GamePhase::None] {
+        assert!(!match_running(phase, || true), "{phase:?}");
+    }
+}
