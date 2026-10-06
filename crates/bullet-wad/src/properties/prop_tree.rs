@@ -148,7 +148,7 @@ fn read_value(cursor: &mut Cursor<'_>, kind: u8, depth: usize) -> Result<Value, 
             let element = cursor.take(1, "list element type")?[0];
             let size = cursor.u32("list size")? as usize;
             let end = checked_end(cursor, size, "list")?;
-            let count = cursor.u32("list count")?;
+            let count = cursor.count("list count", &[element])?;
             let mut items = Vec::with_capacity((count as usize).min(size));
             for _ in 0..count {
                 items.push(read_value(cursor, element, depth + 1)?);
@@ -194,7 +194,7 @@ fn read_value(cursor: &mut Cursor<'_>, kind: u8, depth: usize) -> Result<Value, 
             let value = cursor.take(1, "map value type")?[0];
             let size = cursor.u32("map size")? as usize;
             let end = checked_end(cursor, size, "map")?;
-            let count = cursor.u32("map count")?;
+            let count = cursor.count("map count", &[key, value])?;
             let mut entries = Vec::with_capacity((count as usize).min(size));
             for _ in 0..count {
                 let k = read_value(cursor, key, depth + 1)?;
@@ -544,6 +544,26 @@ mod tests {
             element,
             items,
         }
+    }
+
+    #[test]
+    fn a_count_larger_than_the_bytes_left_is_refused_even_for_empty_items() {
+        let mut body = vec![1, 0];
+        body.extend_from_slice(&7u32.to_le_bytes());
+        body.push(FIELD_LIST);
+        body.push(0);
+        body.extend_from_slice(&4u32.to_le_bytes());
+        body.extend_from_slice(&0x0002_0000u32.to_le_bytes());
+        assert!(parse_fields(&body).is_err());
+        assert!(super::super::flatten_fields(&body).is_err());
+        assert!(super::super::reference_values(&body).is_err());
+
+        let mut map = vec![1, 0];
+        map.extend_from_slice(&7u32.to_le_bytes());
+        map.extend_from_slice(&[FIELD_MAP, 0, 0]);
+        map.extend_from_slice(&4u32.to_le_bytes());
+        map.extend_from_slice(&u32::MAX.to_le_bytes());
+        assert!(parse_fields(&map).is_err());
     }
 
     #[test]

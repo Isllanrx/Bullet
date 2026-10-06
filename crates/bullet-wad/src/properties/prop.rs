@@ -120,6 +120,22 @@ impl<'a> Cursor<'a> {
         let b = self.take(4, what)?;
         Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
     }
+
+    fn count(&mut self, what: &str, item_kinds: &[u8]) -> Result<u32, WadError> {
+        let count = self.u32(what)?;
+        let remaining = self.data.len().saturating_sub(self.at);
+        let item_size: usize = item_kinds
+            .iter()
+            .map(|kind| fixed_field_size(*kind).unwrap_or(1))
+            .sum();
+        let limit = remaining.checked_div(item_size).unwrap_or(MAX_EMPTY_ITEMS);
+        if count as usize > limit {
+            return Err(WadError::InvalidProp(format!(
+                "{what} of {count} with {remaining} bytes left"
+            )));
+        }
+        Ok(count)
+    }
 }
 
 #[path = "prop_tree.rs"]
@@ -240,6 +256,8 @@ fn find_in_fields<'a>(
 
 const MAX_FIELD_DEPTH: usize = 64;
 
+const MAX_EMPTY_ITEMS: usize = u16::MAX as usize;
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FlatField {
     pub path: String,
@@ -267,7 +285,7 @@ fn flatten_value(
         FIELD_LIST | FIELD_LIST2 => {
             let element = cursor.take(1, "list element type")?[0];
             cursor.u32("list size")?;
-            let count = cursor.u32("list count")?;
+            let count = cursor.count("list count", &[element])?;
             out.push(FlatField {
                 path: format!("{path}.len"),
                 kind,
@@ -305,7 +323,7 @@ fn flatten_value(
             let key_kind = cursor.take(1, "map key type")?[0];
             let value_kind = cursor.take(1, "map value type")?[0];
             cursor.u32("map size")?;
-            let count = cursor.u32("map count")?;
+            let count = cursor.count("map count", &[key_kind, value_kind])?;
             out.push(FlatField {
                 path: format!("{path}.len"),
                 kind,
@@ -421,7 +439,7 @@ fn reference_offsets_in_value(
         FIELD_LIST | FIELD_LIST2 => {
             let element = cursor.take(1, "list element type")?[0];
             cursor.u32("list size")?;
-            let count = cursor.u32("list count")?;
+            let count = cursor.count("list count", &[element])?;
             for _ in 0..count {
                 reference_offsets_in_value(cursor, element, depth + 1, out)?;
             }
@@ -442,7 +460,7 @@ fn reference_offsets_in_value(
             let key_kind = cursor.take(1, "map key type")?[0];
             let value_kind = cursor.take(1, "map value type")?[0];
             cursor.u32("map size")?;
-            let count = cursor.u32("map count")?;
+            let count = cursor.count("map count", &[key_kind, value_kind])?;
             for _ in 0..count {
                 if key_kind == FIELD_LINK {
                     out.push(cursor.at);
