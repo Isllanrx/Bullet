@@ -115,14 +115,14 @@ fn known_local_app_data(token: Option<HANDLE>) -> Option<PathBuf> {
     }
 }
 
-fn token_user(token: HANDLE) -> Result<Vec<u8>, String> {
+fn token_user(token: HANDLE) -> Result<Vec<u64>, String> {
     unsafe {
         let mut needed = 0u32;
         let _ = GetTokenInformation(token, TokenUser, None, 0, &mut needed); // ignore-ok: the size probe always "fails" with ERROR_INSUFFICIENT_BUFFER
         if needed == 0 {
             return Err("token user size unavailable".into());
         }
-        let mut buffer = vec![0u8; needed as usize];
+        let mut buffer = vec![0u64; (needed as usize).div_ceil(std::mem::size_of::<u64>())];
         GetTokenInformation(
             token,
             TokenUser,
@@ -135,7 +135,7 @@ fn token_user(token: HANDLE) -> Result<Vec<u8>, String> {
     }
 }
 
-fn same_user(a: &[u8], b: &[u8]) -> bool {
+fn same_user(a: &[u64], b: &[u64]) -> bool {
     unsafe {
         let a = &*(a.as_ptr().cast::<TOKEN_USER>());
         let b = &*(b.as_ptr().cast::<TOKEN_USER>());

@@ -151,11 +151,6 @@ impl ProcessFinder {
             let _ = CloseHandle(snapshot); // ignore-ok: the snapshot is released either way
         };
 
-        match found_pid {
-            Some(pid) => debug!(exe = ?exe_names, pid, "Process found"),
-            None => debug!(exe = ?exe_names, "Process not running"),
-        }
-
         Ok(found_pid)
     }
 

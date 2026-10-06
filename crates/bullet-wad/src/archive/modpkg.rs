@@ -195,6 +195,13 @@ impl ModPkg {
             .collect()
     }
 
+    #[must_use]
+    pub fn base_size(&self) -> u64 {
+        self.base_records()
+            .map(|record| record.uncompressed_size)
+            .fold(0, u64::saturating_add)
+    }
+
     fn base_records(&self) -> impl Iterator<Item = &Record> {
         self.records
             .iter()

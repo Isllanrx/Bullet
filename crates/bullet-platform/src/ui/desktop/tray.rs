@@ -307,12 +307,7 @@ fn run_tray_message_loop(
     };
 
     let initial_tip = format!("Bullet v{}: {}", crate::version::display_version(), title);
-    let tip_wide: Vec<u16> = initial_tip
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-    let copy_len = tip_wide.len().min(nid.szTip.len());
-    nid.szTip[..copy_len].copy_from_slice(&tip_wide[..copy_len]);
+    fill_wide(&mut nid.szTip, &initial_tip);
 
     unsafe {
         if !Shell_NotifyIconW(NIM_ADD, &nid).as_bool() {
@@ -412,10 +407,7 @@ unsafe extern "system" fn tray_wnd_proc(
                     crate::version::display_version(),
                     state.status_text
                 );
-                let tip_wide: Vec<u16> = tooltip.encode_utf16().chain(std::iter::once(0)).collect();
-                state.nid.szTip = [0; 128];
-                let copy_len = tip_wide.len().min(state.nid.szTip.len());
-                state.nid.szTip[..copy_len].copy_from_slice(&tip_wide[..copy_len]);
+                fill_wide(&mut state.nid.szTip, &tooltip);
                 state.nid.uFlags = NIF_TIP;
                 unsafe {
                     let _ = Shell_NotifyIconW(NIM_MODIFY, &state.nid); // ignore-ok: a refused status update leaves the previous tooltip text in place

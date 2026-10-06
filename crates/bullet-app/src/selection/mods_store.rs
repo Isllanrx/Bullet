@@ -389,6 +389,25 @@ fn archive_stamp(path: &Path) -> String {
     }
 }
 
+const STAGING_HEADROOM: u64 = 512 * 1024 * 1024;
+
+fn unpacked_size(path: &Path) -> u64 {
+    let on_disk = std::fs::metadata(path).map_or(0, |m| m.len());
+    let declared = if is_modpkg_file(path) {
+        read_modpkg(path).ok().map(|package| package.base_size())
+    } else {
+        std::fs::File::open(path)
+            .ok()
+            .and_then(|file| zip::ZipArchive::new(std::io::BufReader::new(file)).ok())
+            .map(|mut archive| {
+                (0..archive.len())
+                    .filter_map(|i| archive.by_index_raw(i).ok().map(|entry| entry.size()))
+                    .fold(0, u64::saturating_add)
+            })
+    };
+    declared.unwrap_or(0).max(on_disk)
+}
+
 fn is_modpkg_file(path: &Path) -> bool {
     use std::io::Read;
     let mut head = [0u8; 8];
@@ -421,8 +440,8 @@ fn unpack_modpkg(path: &Path, name: &str, into: &Path) -> Result<usize, String> 
         for (hash, entry) in entries {
             writer.insert(*hash, entry.clone());
         }
-        let bytes = writer.to_bytes().map_err(|e| failed(&e))?;
-        std::fs::write(wad_dir.join(format!("{stem}.wad.client")), bytes)
+        writer
+            .write_to_file(&wad_dir.join(format!("{stem}.wad.client")), &|| false)
             .map_err(|e| failed(&e))?;
     }
     Ok(wads.len() + 1)
@@ -448,11 +467,16 @@ fn stage_one(entry: &ModEntry, mods_dir: &Path) -> Result<String, String> {
                 return Ok(name);
             }
 
-            let archive_len = std::fs::metadata(&entry.path).map(|m| m.len()).unwrap_or(0);
+            let unpacked = unpacked_size(&entry.path);
+            if unpacked > CUSTOM_MOD_LIMITS.max_total_bytes {
+                return Err(format!(
+                    "the archive declares {unpacked} bytes, more than a mod may unpack to"
+                ));
+            }
             if let Ok(free) = bullet_platform::fs::get_disk_free_space(mods_dir) {
-                if free < archive_len.saturating_mul(2) {
+                if free < unpacked.saturating_add(STAGING_HEADROOM) {
                     return Err(format!(
-                        "not enough free disk space ({free} bytes) to extract a {archive_len}-byte archive"
+                        "not enough free disk space ({free} bytes) to unpack {unpacked} bytes"
                     ));
                 }
             }
