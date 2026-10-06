@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use bullet_wad::hash::{content_checksum, mount_name, relative_path_hash, wad_path_hash};
+use bullet_wad::hash::{mount_name, relative_path_hash, wad_path_hash};
 use bullet_wad::prop::tree::FieldShapes;
 use bullet_wad::prop::{is_prop, parse_prop_links, record_field_shapes, strings_to_files};
 use bullet_wad::wad::{CompressionType, WadFile};
@@ -728,14 +728,18 @@ fn drop_entries_identical_to_game(
     entries
         .iter()
         .filter(|(hash, entry)| {
-            let identical = base
-                .contains(**hash)
-                .then(|| base_wad.read(**hash).ok().flatten())
-                .flatten()
-                .zip(decoded_mod_entry(entry))
-                .is_some_and(|(game_bytes, mod_bytes)| {
-                    content_checksum(&game_bytes) == content_checksum(&mod_bytes)
-                });
+            let same_size = base.contains(**hash)
+                && base_wad
+                    .entry(**hash)
+                    .is_some_and(|game| game.uncompressed_size as u64 == entry.uncompressed_size);
+            let identical = same_size
+                && base_wad
+                    .read(**hash)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|game_bytes| {
+                        decoded_mod_entry(entry).is_some_and(|mod_bytes| mod_bytes == game_bytes)
+                    });
             !identical
         })
         .map(|(hash, entry)| (*hash, entry.clone()))
