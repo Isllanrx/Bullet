@@ -191,14 +191,23 @@ async fn main() -> Result<()> {
     }
 
     if paths.game_dir.is_dir() {
-        bullet_inject::overlay_builder::prewarm_game_index(&paths.game_dir);
+        bullet_inject::overlay_builder::persist_game_index_in(&state_dir_path);
         let gate_state = state_rx.clone();
         let gate_token = shutdown_token.clone();
         let game_dir = paths.game_dir.clone();
         let cache_dir = state_dir_path.clone();
         let spawned = std::thread::Builder::new()
-            .name("bullet-companion-prewarm".into())
+            .name("bullet-prewarm".into())
             .spawn(move || {
+                let started = std::time::Instant::now();
+                match bullet_inject::overlay_builder::get_or_index_game(&game_dir) {
+                    Ok(index) => info!(
+                        wads = index.len(),
+                        elapsed_ms = started.elapsed().as_millis(),
+                        "Game WAD index ready"
+                    ),
+                    Err(e) => warn!(error = %e, "Game WAD index not prewarmed; the first build indexes on demand"),
+                }
                 let _background = bullet_platform::process::BackgroundThread::enter();
                 bullet_classic::generator::prewarm_companions(&game_dir, &cache_dir, || {
                     if gate_token.is_cancelled() {
@@ -211,7 +220,7 @@ async fn main() -> Result<()> {
                 });
             });
         if let Err(e) = spawned {
-            warn!(error = %e, "Companion prewarm not started; each champion is indexed when picked");
+            warn!(error = %e, "Prewarm not started; the game is indexed and each champion scanned when needed");
         }
     }
 
