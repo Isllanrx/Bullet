@@ -189,19 +189,25 @@ async fn main() -> Result<()> {
         bullet_inject::overlay_builder::prewarm_game_index(&paths.game_dir);
         let gate_state = state_rx.clone();
         let gate_token = shutdown_token.clone();
-        bullet_classic::generator::prewarm_companions(
-            &paths.game_dir,
-            &state_dir_path,
-            move || {
-                if gate_token.is_cancelled() {
-                    bullet_classic::generator::PrewarmGate::Stop
-                } else if gate_state.borrow().phase.is_in_game() {
-                    bullet_classic::generator::PrewarmGate::Wait
-                } else {
-                    bullet_classic::generator::PrewarmGate::Go
-                }
-            },
-        );
+        let game_dir = paths.game_dir.clone();
+        let cache_dir = state_dir_path.clone();
+        let spawned = std::thread::Builder::new()
+            .name("bullet-companion-prewarm".into())
+            .spawn(move || {
+                let _background = bullet_platform::process::BackgroundThread::enter();
+                bullet_classic::generator::prewarm_companions(&game_dir, &cache_dir, || {
+                    if gate_token.is_cancelled() {
+                        bullet_classic::generator::PrewarmGate::Stop
+                    } else if bullet_app::update_check::is_busy(gate_state.borrow().phase) {
+                        bullet_classic::generator::PrewarmGate::Wait
+                    } else {
+                        bullet_classic::generator::PrewarmGate::Go
+                    }
+                });
+            });
+        if let Err(e) = spawned {
+            warn!(error = %e, "Companion prewarm not started; each champion is indexed when picked");
+        }
     }
 
     if library_has_content {

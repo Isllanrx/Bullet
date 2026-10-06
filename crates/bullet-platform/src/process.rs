@@ -8,8 +8,9 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
 use windows::Win32::System::Threading::{
-    GetProcessTimes, OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
-    QueryFullProcessImageNameW,
+    GetCurrentThread, GetProcessTimes, OpenProcess, PROCESS_NAME_FORMAT,
+    PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW, SetThreadPriority,
+    THREAD_MODE_BACKGROUND_BEGIN, THREAD_MODE_BACKGROUND_END,
 };
 use windows::core::PWSTR;
 
@@ -18,6 +19,27 @@ use tracing::debug;
 use crate::error::PlatformError;
 
 const FILETIME_UNIX_OFFSET_SECS: u64 = 11_644_473_600;
+
+#[must_use = "the thread leaves background mode when this is dropped"]
+pub struct BackgroundThread(());
+
+impl BackgroundThread {
+    pub fn enter() -> Option<Self> {
+        match unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN) } {
+            Ok(()) => Some(Self(())),
+            Err(e) => {
+                debug!(error = %e, "Background thread mode unavailable; the work runs at normal priority");
+                None
+            }
+        }
+    }
+}
+
+impl Drop for BackgroundThread {
+    fn drop(&mut self) {
+        let _ = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END) }; // ignore-ok: the thread is ending its background work; a failure only leaves it at low priority
+    }
+}
 const FILETIME_TICKS_PER_SEC: u64 = 10_000_000;
 
 #[must_use]
@@ -165,6 +187,18 @@ impl ProcessFinder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn background_mode_is_entered_once_and_left_on_drop() {
+        let guard = BackgroundThread::enter().expect("background mode");
+        assert!(
+            BackgroundThread::enter().is_none(),
+            "Windows refuses a nested background mode"
+        );
+        drop(guard);
+        let again = BackgroundThread::enter();
+        assert!(again.is_some(), "leaving restores normal mode");
+    }
 
     #[test]
     fn test_find_current_process() {

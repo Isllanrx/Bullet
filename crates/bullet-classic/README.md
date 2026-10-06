@@ -79,7 +79,8 @@ find the characters.
   the champion's own record (`GarenE`). Recall or respawn clips on the same track never qualify.
 - **Companion characters are indexed once per champion and patch.** Every builder of the same champion and game
   archive shares one scan (a second caller waits for the first instead of scanning again), and at startup every
-  champion is indexed in the background, one at a time, paused while a match runs, with the result cached on disk.
+  champion is indexed one at a time on a thread in Windows background mode (low CPU, disk and memory priority),
+  paused from the ready check until the match ends, with the result cached on disk. The caller owns that thread.
   The first champion select after a patch no longer waits for the scan.
 - **Skin scripts the game runs by skin id do not run.** Some skins have a script of their own that the game
   starts only for the owner's skin id (special idle behaviours, music switching, effects reacting to the match).
