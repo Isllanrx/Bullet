@@ -130,3 +130,26 @@ fn closing_the_window_answers_nothing() {
         .dispatch_event(slint::platform::WindowEvent::CloseRequested);
     assert_eq!(answers.try_recv().ok(), Some(None));
 }
+
+#[test]
+fn a_long_code_never_runs_under_the_inline_button() {
+    use i_slint_backend_testing::{AccessibleRole, ElementRoot};
+    let text = Language::Portuguese.text();
+    let code = "BULLET1:AQAAAABqxLgJABIZ_75__ZlyDx7-Ja4WqQ26WNsR4D8nQkLmN0pQrStUvWxYz";
+    let (dialog, _answers) = open(&created_content(text, code));
+    let field = dialog
+        .root_element()
+        .query_descendants()
+        .match_accessible_role(AccessibleRole::TextInput)
+        .find_first()
+        .expect("the code field");
+    let button = ElementHandle::find_by_accessible_label(&dialog, text.party_dialog_btn_copy)
+        .next()
+        .expect("the copy button");
+    let field_right = field.absolute_position().x + field.size().width;
+    assert!(
+        field_right <= button.absolute_position().x,
+        "the text area ends at {field_right} but the button starts at {}",
+        button.absolute_position().x
+    );
+}

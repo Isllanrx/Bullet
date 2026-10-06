@@ -194,9 +194,9 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
         (text.menu_autostart, PanelAction::ToggleAutostart),
         (text.menu_party_create, PanelAction::PartyCreate),
         (text.menu_party_join, PanelAction::PartyJoin),
-        (text.menu_open_mods, PanelAction::OpenMods),
-        (text.menu_open_tools, PanelAction::OpenTools),
-        (text.menu_open_logs, PanelAction::OpenLogs),
+        (text.folder_mods, PanelAction::OpenMods),
+        (text.folder_tools, PanelAction::OpenTools),
+        (text.folder_logs, PanelAction::OpenLogs),
         (text.panel_mark_problem, PanelAction::MarkProblem),
         (
             text.panel_export_diagnostics,

@@ -143,11 +143,11 @@ export component PartyDialog inherits Window {
                     text <=> root.code;
                     placeholder: root.placeholder;
                     read-only: root.read-only;
-                    trailing: 70px;
+                    trailing: inline.width + 10px;
                     accepted => { root.confirm(); }
                     cancelled => { root.cancel(); }
                     edited => { root.show-error = false; }
-                    InlineButton {
+                    inline := InlineButton {
                         x: parent.width - self.width - 5px;
                         y: 5px;
                         height: parent.height - 10px;
