@@ -96,5 +96,4 @@ pub(crate) fn stamp_lock(text: &str, version: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
-#[path = "version_tests.rs"]
 mod tests;

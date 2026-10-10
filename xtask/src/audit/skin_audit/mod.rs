@@ -37,6 +37,7 @@ pub struct ChampionReport {
     pub companion_skins: BTreeMap<String, BTreeSet<u32>>,
     pub skins: BTreeMap<u32, SkinFinding>,
     pub forms: BTreeMap<(u32, u32), SkinFinding>,
+    pub form_cycles: BTreeMap<u32, (usize, bullet_classic::form_gear::GearCoverage)>,
     pub scan_ms: u128,
 }
 
@@ -84,136 +85,6 @@ pub fn map_hashes(game: &Path) -> MapIndex {
         .collect();
     maps.sort_by(|a, b| a.0.cmp(&b.0));
     maps
-}
-
-fn maps_holding(maps: &MapIndex, hash: u64) -> Vec<&str> {
-    maps.iter()
-        .filter(|(_, hashes)| hashes.contains(&hash))
-        .map(|(name, _)| name.as_str())
-        .collect()
-}
-
-fn skin_bin(character: &str, skin: u32) -> String {
-    format!("data/characters/{character}/skins/skin{skin}.bin")
-}
-
-fn keeps_source_links(
-    champion: &StandardChampion,
-    main: &str,
-    skin: u32,
-    character_dir: &Path,
-) -> bool {
-    let links = |bytes: Vec<u8>| {
-        bullet_wad::prop::parse_prop_file(&bytes)
-            .ok()
-            .map(|bin| bin.links)
-    };
-    let source = champion
-        .read_skin_bin(main, skin)
-        .ok()
-        .flatten()
-        .and_then(links);
-    let generated = std::fs::read(character_dir.join("skins").join("skin0.bin"))
-        .ok()
-        .and_then(links);
-    match (source, generated) {
-        (Some(source), Some(generated)) => source.iter().all(|link| generated.contains(link)),
-        _ => false,
-    }
-}
-
-fn source_keys(character: &str, links: &[String]) -> HashSet<u32> {
-    let source = links.first().and_then(|link| {
-        let lower = link.to_ascii_lowercase();
-        let number = lower
-            .strip_prefix(&format!(
-                "data/characters/{}/skins/skin",
-                character.to_ascii_lowercase()
-            ))?
-            .strip_suffix(".bin")?;
-        number.parse::<u32>().ok()
-    });
-    source
-        .into_iter()
-        .flat_map(|n| {
-            let object = format!("Characters/{character}/Skins/Skin{n}");
-            [
-                bullet_wad::hash::prop_key_hash(&object),
-                bullet_wad::hash::prop_key_hash(&format!("{object}/Resources")),
-            ]
-        })
-        .collect()
-}
-
-fn check_generated_bins(
-    champion: &StandardChampion,
-    maps: &MapIndex,
-    characters: &Path,
-    written: &HashSet<String>,
-    finding: &mut SkinFinding,
-) {
-    let Ok(entries) = std::fs::read_dir(characters) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let character = entry.file_name().to_string_lossy().into_owned();
-        let Ok(bytes) = std::fs::read(entry.path().join("skins").join("skin0.bin")) else {
-            continue;
-        };
-        let Ok(bin) = bullet_wad::prop::parse_prop_file(&bytes) else {
-            finding
-                .stale_references
-                .push(format!("{character}: generated bin unreadable"));
-            continue;
-        };
-        let stale = source_keys(&character, &bin.links);
-        let stuck = bin
-            .entries
-            .iter()
-            .filter_map(|e| bullet_wad::prop::reference_values(&e.body).ok())
-            .flatten()
-            .filter(|value| stale.contains(value))
-            .count();
-        if stuck > 0 {
-            finding
-                .stale_references
-                .push(format!("{character}: {stuck} reference(s) to a source key"));
-        }
-        for link in &bin.links {
-            let hash = wad_path_hash(&link.to_ascii_lowercase());
-            if !written.contains(&link.to_ascii_lowercase())
-                && !champion.contains_path(link)
-                && maps_holding(maps, hash).is_empty()
-            {
-                finding.missing_links.push(format!("{character}: {link}"));
-            }
-        }
-    }
-}
-
-fn generated_paths(wad_root: &Path) -> Vec<String> {
-    let mut paths = Vec::new();
-    let mut stack = vec![wad_root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if let Ok(relative) = path.strip_prefix(wad_root) {
-                paths.push(
-                    relative
-                        .to_string_lossy()
-                        .replace('\\', "/")
-                        .to_ascii_lowercase(),
-                );
-            }
-        }
-    }
-    paths.sort();
-    paths
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -300,6 +171,9 @@ pub fn audit_champion(
             Err(e) => finding.build_error = Some(e.to_string()),
         }
         report.skins.insert(skin, finding);
+        if let Ok(Some(coverage)) = champion.form_coverage(skin) {
+            report.form_cycles.insert(skin, coverage);
+        }
         if settings.forms {
             for form in 0..champion.gear_count(skin) as u32 {
                 let mut finding = SkinFinding::default();
@@ -360,128 +234,6 @@ pub fn missed_companions(
         }
     }
     missed
-}
-
-#[must_use]
-pub fn render(reports: &[ChampionReport], missed: &BTreeMap<String, BTreeSet<String>>) -> String {
-    let skins: usize = reports.iter().map(|r| r.skins.len()).sum();
-    let clean: usize = reports
-        .iter()
-        .flat_map(|r| r.skins.values())
-        .filter(|f| f.is_clean())
-        .count();
-    let with_companions = reports
-        .iter()
-        .filter(|r| !r.companion_skins.is_empty())
-        .count();
-
-    let mut lines = vec![
-        "# Skin audit".to_owned(),
-        String::new(),
-        format!(
-            "- champions: {} | skins and chromas generated: {skins} | clean: {clean} | with findings: {}",
-            reports.len(),
-            skins - clean
-        ),
-        format!("- champions with companion characters: {with_companions}"),
-        String::new(),
-        "## Companion characters per champion".to_owned(),
-        String::new(),
-        "| Champion | Companion | Skin numbers with their own bin |".to_owned(),
-        "| --- | --- | --- |".to_owned(),
-    ];
-    for report in reports {
-        for (companion, numbers) in &report.companion_skins {
-            lines.push(format!("| {} | {companion} | {numbers:?} |", report.alias));
-        }
-    }
-    lines.extend([
-        String::new(),
-        "## Findings per skin".to_owned(),
-        String::new(),
-        "| Champion | Skin | Build error | Source links dropped | Stale references | Missing links | Paths also written into a map WAD |"
-            .to_owned(),
-        "| --- | --- | --- | --- | --- | --- | --- |".to_owned(),
-    ]);
-    for report in reports {
-        if let Some(error) = &report.open_error {
-            lines.push(format!(
-                "| {} | - | WAD not opened: {error} | | | | |",
-                report.alias
-            ));
-            continue;
-        }
-        for (skin, finding) in report
-            .skins
-            .iter()
-            .filter(|(_, f)| !f.is_clean() || !f.shared_with_map.is_empty())
-        {
-            lines.push(format!(
-                "| {} | {skin} | {} | {} | {} | {} | {} |",
-                report.alias,
-                finding.build_error.as_deref().unwrap_or(""),
-                if finding.source_links_dropped {
-                    "yes"
-                } else {
-                    ""
-                },
-                finding.stale_references.join("; "),
-                finding.missing_links.join("; "),
-                finding.shared_with_map.join(", ")
-            ));
-        }
-    }
-    let forms: Vec<String> = reports
-        .iter()
-        .flat_map(|report| {
-            report.forms.iter().filter(|(_, f)| !f.is_clean()).map(
-                move |((skin, form), finding)| {
-                    format!(
-                        "| {} | {skin} | {form} | {} | {} | {} |",
-                        report.alias,
-                        finding.build_error.as_deref().unwrap_or(""),
-                        finding.stale_references.join("; "),
-                        finding.missing_links.join("; ")
-                    )
-                },
-            )
-        })
-        .collect();
-    if reports.iter().any(|r| !r.forms.is_empty()) {
-        lines.extend([
-            String::new(),
-            "## Findings per form".to_owned(),
-            String::new(),
-        ]);
-        if forms.is_empty() {
-            lines.push("None.".to_owned());
-        } else {
-            lines.push(
-                "| Champion | Skin | Form | Build error | Stale references | Missing links |"
-                    .to_owned(),
-            );
-            lines.push("| --- | --- | --- | --- | --- | --- |".to_owned());
-            lines.extend(forms);
-        }
-    }
-    lines.extend([
-        String::new(),
-        "## Characters with skin bins that the scan did not attach".to_owned(),
-        String::new(),
-    ]);
-    if missed.is_empty() {
-        lines.push("None.".to_owned());
-    }
-    for (alias, names) in missed {
-        lines.push(format!("- {alias}: {names:?}"));
-    }
-    lines.push(String::new());
-    lines.join("\n")
-}
-
-#[must_use]
-pub fn default_report_path() -> PathBuf {
-    std::env::temp_dir().join("bullet_skin_audit.md")
 }
 
 pub(crate) fn run_skin_audit(args: &[String]) {
@@ -581,3 +333,9 @@ relatorio: {} ({} s)",
         let _ = std::fs::remove_dir_all(&staging); // ignore-ok: probe scratch folder
     }
 }
+
+mod checks;
+mod report;
+
+use checks::{check_generated_bins, generated_paths, keeps_source_links, maps_holding, skin_bin};
+pub use report::{default_report_path, render};

@@ -268,5 +268,4 @@ fn write_report(path: &Path, findings: &[Finding]) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
-#[path = "comments_tests.rs"]
 mod tests;

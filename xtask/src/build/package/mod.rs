@@ -210,5 +210,4 @@ pub(crate) fn run_installer(args: &[String]) {
 }
 
 #[cfg(test)]
-#[path = "package_tests.rs"]
 mod tests;
