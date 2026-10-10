@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use bullet_wad::hash::prop_key_hash;
 use bullet_wad::prop::tree::{self, Field, Value};
@@ -7,13 +7,10 @@ use bullet_wad::prop::{parse_prop_file, serialize_prop_file};
 use crate::error::ClassicError;
 
 const FIELD_BOOL: u8 = 1;
-const FIELD_STRING: u8 = 16;
 pub(crate) const FIELD_HASH: u8 = 17;
 const FIELD_LIST: u8 = 0x80;
 const FIELD_POINTER: u8 = 0x82;
 const MAX_CLIP_DEPTH: usize = 64;
-const TOGGLE_CLIP: &str = "Toggle";
-const CARRIER_FALLBACKS: [&str; 3] = ["Idle1", "Idle1_Base", "Idle_Base"];
 const SINGLE_CLIP_FIELDS: [&str; 3] = [
     "mTrueConditionClipName",
     "mFalseConditionClipName",
@@ -36,7 +33,7 @@ pub(crate) fn hash_value(hash: u32) -> Value {
     }
 }
 
-fn hash_list(hashes: &[u32]) -> Value {
+pub(crate) fn hash_list(hashes: &[u32]) -> Value {
     Value::List {
         kind: FIELD_LIST,
         element: FIELD_HASH,
@@ -44,7 +41,7 @@ fn hash_list(hashes: &[u32]) -> Value {
     }
 }
 
-fn pointer(class: &str, fields: Vec<Field>) -> Value {
+pub(crate) fn pointer(class: &str, fields: Vec<Field>) -> Value {
     Value::Struct {
         kind: FIELD_POINTER,
         class: h(class),
@@ -52,7 +49,7 @@ fn pointer(class: &str, fields: Vec<Field>) -> Value {
     }
 }
 
-fn named(name: &str, value: Value) -> Field {
+pub(crate) fn named(name: &str, value: Value) -> Field {
     Field {
         name: h(name),
         value,
@@ -71,6 +68,7 @@ pub struct GearSwap {
     pub show: Vec<u32>,
     pub hide: Vec<u32>,
     pub equip: Option<String>,
+    pub transition: Option<u32>,
 }
 
 pub fn gear_swap(gear_body: &[u8]) -> Result<GearSwap, ClassicError> {
@@ -78,39 +76,18 @@ pub fn gear_swap(gear_body: &[u8]) -> Result<GearSwap, ClassicError> {
     let data = tree::field(&gear, h("mGearData"))
         .and_then(Value::fields)
         .unwrap_or_default();
-    let equip = tree::field(data, h("mEquipAnimation")).and_then(|v| match v {
-        Value::Raw { kind, bytes } if *kind == FIELD_STRING && bytes.len() > 2 => {
-            Some(String::from_utf8_lossy(&bytes[2..]).into_owned())
-        }
-        _ => None,
-    });
+    let equip = tree::field(data, h("mEquipAnimation"))
+        .and_then(crate::vfx_markers::raw_text)
+        .filter(|name| !name.is_empty());
     Ok(GearSwap {
         show: hashes_in(data, "mCharacterSubmeshesToShow"),
         hide: hashes_in(data, "mCharacterSubmeshesToHide"),
         equip,
+        transition: None,
     })
 }
 
-#[must_use]
-pub fn markers(swaps: &[GearSwap]) -> Option<Vec<u32>> {
-    if swaps.len() < 2 {
-        return None;
-    }
-    swaps
-        .iter()
-        .enumerate()
-        .map(|(i, swap)| {
-            swap.show.iter().copied().find(|part| {
-                swaps
-                    .iter()
-                    .enumerate()
-                    .all(|(j, other)| j == i || !other.show.contains(part))
-            })
-        })
-        .collect()
-}
-
-fn visibility_event(show: &[u32], hide: &[u32]) -> Value {
+pub(crate) fn visibility_event(show: &[u32], hide: &[u32]) -> Value {
     pointer(
         "SubmeshVisibilityEventData",
         vec![
@@ -120,7 +97,7 @@ fn visibility_event(show: &[u32], hide: &[u32]) -> Value {
     )
 }
 
-fn condition_on_part(part: u32, visible: u32, otherwise: u32) -> Value {
+pub(crate) fn condition_on_part(part: u32, visible: u32, otherwise: u32) -> Value {
     let driver = part_visible(FIELD_POINTER, part);
     pointer(
         "ConditionBoolClipData",
@@ -173,7 +150,7 @@ pub(crate) fn clip_refs(value: &Value, out: &mut Vec<u32>) {
     }
 }
 
-fn rename_refs(value: &mut Value, renames: &BTreeMap<u32, u32>) {
+pub(crate) fn rename_refs(value: &mut Value, renames: &BTreeMap<u32, u32>) {
     let rename = |v: &mut Value| {
         if let Some(new) = v.as_u32().and_then(|old| renames.get(&old)) {
             *v = hash_value(*new);
@@ -204,7 +181,7 @@ fn rename_refs(value: &mut Value, renames: &BTreeMap<u32, u32>) {
     }
 }
 
-fn add_event(clip: &mut Value, event: &Value) -> Result<(), ClassicError> {
+pub(crate) fn add_event(clip: &mut Value, event: &Value) -> Result<(), ClassicError> {
     let fields = clip
         .fields_mut()
         .ok_or_else(|| ClassicError::Bin("an atomic clip is not a structure".into()))?;
@@ -232,128 +209,7 @@ fn add_event(clip: &mut Value, event: &Value) -> Result<(), ClassicError> {
     Ok(())
 }
 
-struct Copier<'a> {
-    form: usize,
-    event: &'a Value,
-    copies: BTreeMap<u32, u32>,
-}
-
-impl Copier<'_> {
-    fn copy(
-        &mut self,
-        entries: &mut ClipEntries,
-        key: u32,
-        depth: usize,
-    ) -> Result<u32, ClassicError> {
-        if let Some(copy) = self.copies.get(&key) {
-            return Ok(*copy);
-        }
-        if depth > MAX_CLIP_DEPTH {
-            return Err(ClassicError::Bin("animation clips nested too deep".into()));
-        }
-        let at = clip_at(entries, key)
-            .ok_or_else(|| ClassicError::Bin(format!("clip {key:08x} is not in the graph")))?;
-        let new_key = h(&format!("BulletGear{}_{key:08x}", self.form));
-        self.copies.insert(key, new_key);
-        let mut clip = entries[at].1.clone();
-        if clip.class() == Some(h("AtomicClipData")) {
-            add_event(&mut clip, self.event)?;
-        } else {
-            let mut refs = Vec::new();
-            clip_refs(&clip, &mut refs);
-            let mut renames = BTreeMap::new();
-            for child in refs {
-                if clip_at(entries, child).is_some() {
-                    renames.insert(child, self.copy(entries, child, depth + 1)?);
-                }
-            }
-            rename_refs(&mut clip, &renames);
-        }
-        entries.push((hash_value(new_key), clip));
-        Ok(new_key)
-    }
-}
-
-pub fn add_toggle(
-    graph_bin: &[u8],
-    graph_key: u32,
-    swaps: &[GearSwap],
-) -> Result<Option<Vec<u8>>, ClassicError> {
-    let Some(markers) = markers(swaps) else {
-        return Ok(None);
-    };
-    let mut file = parse_prop_file(graph_bin).map_err(bin_error)?;
-    let Some(at) = file.entries.iter().position(|e| e.key_hash == graph_key) else {
-        return Ok(None);
-    };
-    let mut graph = tree::parse_fields(&file.entries[at].body).map_err(bin_error)?;
-    let Some(Value::Map {
-        key: FIELD_HASH,
-        entries,
-        ..
-    }) = tree::field_mut(&mut graph, h("mClipDataMap"))
-    else {
-        return Ok(None);
-    };
-    if clip_at(entries, h(TOGGLE_CLIP)).is_some() {
-        return Ok(None);
-    }
-
-    let shown_anywhere: BTreeSet<u32> = swaps.iter().flat_map(|s| s.show.iter().copied()).collect();
-    let mut carriers = Vec::with_capacity(swaps.len());
-    for (form, swap) in swaps.iter().enumerate() {
-        let hide: Vec<u32> = shown_anywhere
-            .iter()
-            .chain(swap.hide.iter())
-            .copied()
-            .filter(|part| !swap.show.contains(part))
-            .collect::<BTreeSet<u32>>()
-            .into_iter()
-            .collect();
-        let event = visibility_event(&swap.show, &hide);
-        let start = swap
-            .equip
-            .as_deref()
-            .map(h)
-            .into_iter()
-            .chain(CARRIER_FALLBACKS.iter().map(|name| h(name)))
-            .find(|key| clip_at(entries, *key).is_some());
-        let Some(start) = start else {
-            return Ok(None);
-        };
-        let mut copier = Copier {
-            form,
-            event: &event,
-            copies: BTreeMap::new(),
-        };
-        carriers.push(copier.copy(entries, start, 0)?);
-    }
-
-    let count = swaps.len();
-    let link_name = |i: usize| {
-        if i == 0 {
-            h(TOGGLE_CLIP)
-        } else {
-            h(&format!("BulletToggle{i}"))
-        }
-    };
-    for i in 0..count {
-        let otherwise = if i + 1 < count {
-            link_name(i + 1)
-        } else {
-            carriers[1]
-        };
-        entries.push((
-            hash_value(link_name(i)),
-            condition_on_part(markers[i], carriers[(i + 1) % count], otherwise),
-        ));
-    }
-
-    file.entries[at].body = tree::write_fields(&graph).map_err(bin_error)?;
-    serialize_prop_file(&file).map(Some).map_err(bin_error)
-}
-
-fn part_visible(kind: u8, part: u32) -> Value {
+pub(crate) fn part_visible(kind: u8, part: u32) -> Value {
     Value::Struct {
         kind,
         class: h("SubmeshVisibilityBoolDriver"),
@@ -407,26 +263,31 @@ fn highest_gear_index(value: &mut Value, depth: usize) -> Result<Option<u8>, Cla
     Ok(highest)
 }
 
-fn redrive(value: &mut Value, markers: &[u32], depth: usize) -> usize {
+fn redrive(value: &mut Value, drivers: &[Value], depth: usize) -> usize {
     if value.class() == Some(h("HasGearDynamicMaterialBoolDriver")) {
-        if let Some(part) = markers.get(usize::from(gear_index(value))) {
-            *value = part_visible(value.kind(), *part);
-            return 1;
-        }
-        return 0;
+        let Some(Value::Struct { class, fields, .. }) = drivers.get(usize::from(gear_index(value)))
+        else {
+            return 0;
+        };
+        *value = Value::Struct {
+            kind: value.kind(),
+            class: *class,
+            fields: fields.clone(),
+        };
+        return 1;
     }
     if depth > MAX_CLIP_DEPTH {
         return 0;
     }
     children_mut(value)
         .into_iter()
-        .map(|child| redrive(child, markers, depth + 1))
+        .map(|child| redrive(child, drivers, depth + 1))
         .sum()
 }
 
 pub fn drive_by_parts(
     bin: &[u8],
-    markers: &[u32],
+    drivers: &[Value],
 ) -> Result<Option<(Vec<u8>, usize)>, ClassicError> {
     let needle = h("HasGearDynamicMaterialBoolDriver").to_le_bytes();
     let holds_driver = |bytes: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
@@ -447,14 +308,14 @@ pub fn drive_by_parts(
         parsed.push((at, fields));
     }
     match highest {
-        Some(index) if usize::from(index) < markers.len() => {}
+        Some(index) if usize::from(index) < drivers.len() => {}
         _ => return Ok(None),
     }
     let mut total = 0;
     for (at, mut fields) in parsed {
         let changed: usize = fields
             .iter_mut()
-            .map(|field| redrive(&mut field.value, markers, 0))
+            .map(|field| redrive(&mut field.value, drivers, 0))
             .sum();
         if changed > 0 {
             file.entries[at].body = tree::write_fields(&fields).map_err(bin_error)?;
@@ -470,5 +331,4 @@ pub fn drive_by_parts(
 }
 
 #[cfg(test)]
-#[path = "gear_toggle_tests.rs"]
 mod tests;

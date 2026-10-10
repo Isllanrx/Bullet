@@ -135,6 +135,7 @@ impl ClassicChampion {
             self.alias.to_ascii_lowercase()
         );
         let final_dir = mods_dir.join(&folder);
+        let _claim = reuse::Claim::wait_for(&final_dir);
         let partial = mods_dir.join(format!("{folder}.partial"));
         remove_if_present(&partial)?;
 
