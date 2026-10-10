@@ -263,6 +263,8 @@ pub(crate) struct FormCycle {
     pub(crate) skin0: Vec<u8>,
     pub(crate) forms: usize,
     pub(crate) drivers: usize,
+    pub(crate) effects: usize,
+    pub(crate) coverage: crate::form_gear::GearCoverage,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

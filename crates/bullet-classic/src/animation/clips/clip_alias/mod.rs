@@ -228,5 +228,4 @@ pub fn spell_names(record_bin: &[u8]) -> Vec<String> {
 }
 
 #[cfg(test)]
-#[path = "clip_alias_tests.rs"]
 mod tests;
