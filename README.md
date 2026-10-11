@@ -262,8 +262,16 @@ select them in the **Mods** tab of Bullet's window. You can pick at most one ski
 announcer at a time. The other categories can be combined.
 
 Before a mod is used, Bullet checks that every internal reference it contains still exists in the current
-game. After a patch, a mod whose references are gone is left out, with a warning, so it cannot crash the
-loading screen.
+game. When a patch adds a skin, the game renames the files it shares between skins, and a mod made for an
+older patch points at names that are gone. At startup, after a patch or when a mod file changes, Bullet looks
+up the single new name of each one in your installed game and updates your `.fantome`, `.zip` or mod folder in
+place; only those references change, and the file you had is kept once under
+`%LOCALAPPDATA%\Bullet\state\mod_originals`. A mod whose references cannot all be matched this way is left
+untouched and left out, with a warning, so it cannot crash the loading screen. A tray notice tells you how
+many mods were adjusted or left out, and the control panel shows the same count under **Custom mods**. If an
+adjusted mod looks wrong, **Restore original mods** in the panel puts back the original of every mod that is still
+the repaired file (a mod you replaced since is never touched); those files are then left as they are until you
+replace them. In a match, a broken link that would crash the game is still fixed on the prepared copy.
 
 ### Party mode
 
@@ -338,7 +346,8 @@ C:\Program Files\Bullet\              installed program (read-only for users)
 ├── library\                         skin library (generated or synced)
 ├── mods\                            mods generated from the game for the current match
 ├── overlay\                         built overlays, reused while the game build is unchanged
-└── state\                           settings, party.json, selections
+└── state\                           settings, party.json, selections; mod_originals\ keeps each custom
+                                     mod as it was before Bullet updated it for a patch
 ```
 
 - **Open them from the tray icon:** it has entries for the mods folder and the logs folder.

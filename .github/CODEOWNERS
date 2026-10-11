@@ -11,10 +11,9 @@
 /.gitleaks.toml                     @Isllanrx
 /Cargo.lock                         @Isllanrx
 /crates/bullet-app/build.rs         @Isllanrx
-/crates/bullet-app/src/trigger.rs   @Isllanrx
 /crates/bullet-app/src/trigger/    @Isllanrx
 /crates/bullet-app/src/updates/injector_install.rs @Isllanrx
 /crates/bullet-inject/src/injector/ @Isllanrx
 /crates/bullet-party/src/security/  @Isllanrx
-/crates/bullet-platform/src/os/system/authenticode.rs @Isllanrx
+/crates/bullet-platform/src/os/system/authenticode/ @Isllanrx
 /relay-worker/wrangler.toml         @Isllanrx
