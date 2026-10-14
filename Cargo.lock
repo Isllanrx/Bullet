@@ -6563,6 +6563,7 @@ dependencies = [
  "bullet-party",
  "bullet-platform",
  "bullet-wad",
+ "ring",
  "serde_json",
  "sha2",
  "tokio",
