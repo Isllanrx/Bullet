@@ -149,6 +149,31 @@ Setup takes three steps: install Bullet, add the injector, start Bullet.
 3. Run the installer. Windows asks for administrator permission **once, to install** into
    `C:\Program Files\Bullet`. Bullet itself never runs as administrator.
 
+#### From a terminal
+
+Open PowerShell (not as administrator) and run:
+
+```powershell
+irm https://raw.githubusercontent.com/Isllanrx/Bullet/main/install.ps1 | iex
+```
+
+The script reads the newest release from GitHub, checks the installer against the release's `SHA256SUMS` and its
+signature, installs silently (Windows asks for administrator permission once) and starts Bullet. Nothing is
+installed if a check fails, and every failure ends with an error that says why, so scripts and coding agents can run
+the same command unattended:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/Isllanrx/Bullet/main/install.ps1 | iex"
+```
+
+| Option | Environment variable | Effect |
+| --- | --- | --- |
+| `-Version 1.3` | `BULLET_VERSION=1.3` | Installs that release instead of the newest |
+| `-PreRelease` | `BULLET_PRERELEASE=1` | Installs the newest release, pre-releases included |
+| `-NoLaunch` | `BULLET_NO_LAUNCH=1` | Installs without starting Bullet |
+
+Options are passed with `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Isllanrx/Bullet/main/install.ps1))) -NoLaunch`.
+
 ### Step 2 — Add the injector
 
 Bullet needs two files made by League Toolkit, `ltk_patcher_host.exe` and `ltk_patcher_dll.dll`. They are not
