@@ -61,6 +61,13 @@ pub(super) static SPANISH: Text = Text {
     detail_not_elevated: "ejecutando sin elevación",
     update_available_title: "Bullet {version} disponible",
     update_available_body: "Haz clic aquí para abrir la página de descarga. No se descarga ni se instala nada sin ti.",
+    update_offer_title: "Actualización disponible: Bullet {version}",
+    update_offer_body: "Bullet {version} está disponible. ¿Actualizar ahora?
+
+Sí: Bullet descarga el instalador verificado, se cierra, se actualiza y se abre de nuevo (Windows pedirá permiso).
+No: sigues con esta versión; puedes actualizar después desde la página de descarga.",
+    update_failed_title: "No se pudo instalar la actualización",
+    update_failed_body: "Se abre la página de descarga para que actualices a mano.",
     panel_update_line: "Nueva versión {version} disponible (usas la {current}).",
     panel_update_download: "Abrir página de descarga",
     check_ltk: "Inyector LTK",

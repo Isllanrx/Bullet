@@ -42,7 +42,7 @@ The default was set to `info` after measuring that most `debug` output was "wait
 | Export | `Match diagnostics exported automatically` when a match ends |
 | Injector | `Patcher armed`, `DLL attached to the game`, and any hook failure with its reason |
 | Mods | A custom mod with asset formats the game no longer uses: `Custom mod carries asset formats the installed game no longer uses` (formats such as `skn v65537`); a `.modpkg` that needs repairs: `Custom mod package needs repairs for the installed patch`; `Custom mods restored to their original files at the user's request` (mods, files) from the panel. At startup `Custom mods checked against the installed patch` (checked, unchanged, repaired, incompatible, elapsed_ms), one `Custom mod repaired for the installed patch` per rewritten mod with its backup folder; `Custom mod relinked to the shared skin files of the installed patch` when a prepared copy is fixed at build time; a custom mod refused because of a dangling link |
-| Updates | `A newer Bullet release is available` with the current and latest versions; failed checks only at `debug` |
+| Updates | `A newer Bullet release is available` with the current and latest versions; failed checks only at `debug`. The answer: `The user accepted the update` / `The user declined the update`; `Update verified; closing Bullet to install it`, `Installer started`; failures `The update was not downloaded or failed verification` (with the reason) and `The installer stopped before updating, or Windows permission was declined` (with the exit code) |
 
 ## Byte-level records
 

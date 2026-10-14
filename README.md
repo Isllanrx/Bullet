@@ -405,7 +405,10 @@ C:\Program Files\Bullet\              installed program (read-only for users)
   latest Bullet release number and compare the injector files of LTK Manager releases with the audited ones
   (both off with `BULLET_UPDATE_CHECK=0`) and, in party mode, to the relay. The relay only receives encrypted
   data.
-- It never downloads or runs an update. A new release is only announced; you install it yourself.
+- It never updates without asking. When a newer release is out, Bullet asks once, outside champion select and
+  matches, whether to update. **Yes** downloads the installer, checks it against the release's signed checksum
+  list, closes Bullet and runs the installer (Windows asks for permission), which opens the new version; **No**
+  keeps your version. Anything that fails the check is never run: the download page opens instead.
 - Every failure is logged with its cause in `%LOCALAPPDATA%\Bullet\logs`.
 
 ### What you should know
