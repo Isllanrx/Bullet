@@ -21,5 +21,6 @@ bullet-party = { path = "../crates/bullet-party" }
 bullet-platform = { path = "../crates/bullet-platform" }
 bullet-wad = { path = "../crates/bullet-wad" }
 serde_json.workspace = true
+ring.workspace = true
 sha2.workspace = true
 tokio = { workspace = true }
