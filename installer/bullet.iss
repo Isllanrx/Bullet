@@ -93,6 +93,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: ShouldRelaunch
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Bullet\logs"
@@ -113,6 +114,11 @@ english.DeleteUserContent=Also remove the skins and custom mods saved by Bullet?
 spanish.DeleteUserContent=¿Quitar también los aspectos y los mods personalizados guardados por Bullet?%n%n%1%n%nElige "No" para conservarlos.
 
 [Code]
+function ShouldRelaunch: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:relaunch|0}') = '1');
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir, Listing: String;
