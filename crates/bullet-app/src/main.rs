@@ -142,6 +142,7 @@ async fn main() -> Result<()> {
     let game_build =
         boot::reports::report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
     boot::reports::report_ltk_dll_support(game_build, installed_dll.read(&paths.ltk_dll_path));
+    boot::reports::report_injector_files(&[&paths.ltk_host_exe, &paths.ltk_dll_path]);
 
     let required_tools = trigger::required_tool_files(&paths);
 
