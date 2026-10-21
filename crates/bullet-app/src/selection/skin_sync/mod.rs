@@ -192,7 +192,7 @@ fn extract_skins<B: AsRef<[u8]>>(
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)?;
-        let raw_name = entry.name().to_string();
+        let raw_name = entry.name()?.into_owned();
 
         let relative_skin_path = if let Some(idx) = raw_name.find("/skins/") {
             &raw_name[idx + "/skins/".len()..]

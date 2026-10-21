@@ -95,7 +95,7 @@ pub fn spawn_mark_problem_hotkey(events: UnboundedSender<TrayEvent>) -> Option<M
                 }
                 if got.0 < 0 {
                     error!(
-                        error = %windows::core::Error::from_win32(),
+                        error = %windows::core::Error::from_thread(),
                         "The mark-a-problem shortcut message loop failed; the shortcut stops working"
                     );
                     break;

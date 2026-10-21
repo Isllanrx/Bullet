@@ -55,7 +55,7 @@ pub fn run_elevated(exe: &Path, parameters: &str) -> Result<ElevatedRun, Platfor
             source: std::io::ErrorKind::TimedOut.into(),
         })
     } else {
-        Err(PlatformError::Win32(windows::core::Error::from_win32()))
+        Err(PlatformError::Win32(windows::core::Error::from_thread()))
     };
     let _ = unsafe { CloseHandle(info.hProcess) }; // ignore-ok: the handle is released whether the elevated process finished or not
     result.map(ElevatedRun::Finished)

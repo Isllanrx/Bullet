@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use tracing::debug;
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE,
     GetVolumeNameForVolumeMountPointW, GetVolumePathNameW, OPEN_EXISTING,
@@ -69,7 +69,7 @@ fn seek_penalty(device: &str) -> Option<bool> {
             None,
             OPEN_EXISTING,
             FILE_FLAGS_AND_ATTRIBUTES(0),
-            HANDLE::default(),
+            None,
         )
     }
     .inspect_err(|e| debug!(error = %e, "Volume device not openable for the seek-penalty query"))
@@ -98,7 +98,7 @@ fn seek_penalty(device: &str) -> Option<bool> {
         .inspect_err(|e| debug!(error = %e, "Seek-penalty query refused by the volume"))
         .ok()?;
     (returned as usize >= size_of::<DEVICE_SEEK_PENALTY_DESCRIPTOR>())
-        .then_some(descriptor.IncursSeekPenalty.as_bool())
+        .then_some(descriptor.IncursSeekPenalty)
 }
 
 #[cfg(test)]

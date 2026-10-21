@@ -45,7 +45,15 @@ impl Overlay {
         let target = HWND(self.hwnd as *mut _);
         let (x, y, width, height) = (rect.left, rect.top, rect.width(), rect.height());
         unsafe {
-            match SetWindowPos(target, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE) {
+            match SetWindowPos(
+                target,
+                Some(HWND_TOPMOST),
+                x,
+                y,
+                width,
+                height,
+                SWP_NOACTIVATE,
+            ) {
                 Ok(()) => {
                     if REPOSITION_FAILED.swap(false, Ordering::Relaxed) {
                         debug!("Overlay window repositioned after a refusal");

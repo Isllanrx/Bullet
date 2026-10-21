@@ -92,7 +92,7 @@ pub(crate) fn note_if_not_shown(answer: i32, title: &str) -> bool {
     if answer == 0 {
         warn!(
             title,
-            error = %windows::core::Error::from_win32(),
+            error = %windows::core::Error::from_thread(),
             "Windows could not show a message box"
         );
         return false;
@@ -147,7 +147,7 @@ pub fn dismiss_question(title: &str) -> bool {
         let mut owner = 0u32;
         GetWindowThreadProcessId(dialog, Some(&mut owner));
         owner == GetCurrentProcessId()
-            && PostMessageW(dialog, WM_COMMAND, WPARAM(IDNO.0 as usize), LPARAM(0)).is_ok()
+            && PostMessageW(Some(dialog), WM_COMMAND, WPARAM(IDNO.0 as usize), LPARAM(0)).is_ok()
     }
 }
 
