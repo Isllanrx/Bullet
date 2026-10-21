@@ -127,6 +127,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run check
+      - run: npm test
 
   workflow-lint:
     name: Workflow lint and audit
