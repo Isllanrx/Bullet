@@ -1,5 +1,6 @@
 use std::io::{Read, Seek};
 
+use tracing::warn;
 use zip::ZipArchive;
 
 use crate::error::WadError;
@@ -71,11 +72,24 @@ pub fn mod_archive_shape<R: Read + Seek>(reader: R) -> Result<ModArchiveShape, W
         } else if name.eq_ignore_ascii_case("META/info.json") && file.size() <= MAX_MANIFEST {
             let mut text = String::new();
             let size = file.size();
-            if file.take(size).read_to_string(&mut text).is_ok() {
-                shape.manifest =
-                    serde_json::from_str::<serde_json::Value>(text.trim_start_matches('\u{feff}'))
-                        .is_ok_and(|v| v.is_object());
+            match file.take(size).read_to_string(&mut text) {
+                Ok(_) => {
+                    shape.manifest = serde_json::from_str::<serde_json::Value>(
+                        text.trim_start_matches('\u{feff}'),
+                    )
+                    .is_ok_and(|v| v.is_object());
+                    if !shape.manifest {
+                        warn!("META/info.json is not a JSON object");
+                    }
+                }
+                Err(e) => warn!(error = %e, "META/info.json could not be read as text"),
             }
+        } else if name.eq_ignore_ascii_case("META/info.json") {
+            warn!(
+                bytes = file.size(),
+                limit = MAX_MANIFEST,
+                "META/info.json is larger than allowed"
+            );
         }
     }
     Ok(shape)
