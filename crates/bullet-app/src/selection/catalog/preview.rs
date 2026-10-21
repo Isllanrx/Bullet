@@ -5,7 +5,6 @@ pub(super) const PREVIEW_FETCHES: usize = 4;
 pub type PreviewFetches =
     futures_util::stream::BoxStream<'static, (u32, Result<Arc<[u8]>, String>)>;
 
-#[must_use]
 pub fn chroma_preview_fetches(previews: Vec<(u32, String)>) -> PreviewFetches {
     use futures_util::StreamExt;
     futures_util::stream::once(lcu_client())
