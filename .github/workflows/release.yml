@@ -189,8 +189,8 @@ jobs:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
           if (-not $env:RELEASE_SIGNING_KEY) {
-            "::warning::RELEASE_SIGNING_KEY is not set; installed copies will only be pointed at the download page"
-            exit 0
+            "::error::RELEASE_SIGNING_KEY is not set; a release without SHA256SUMS.sig cannot update installed copies"
+            exit 1
           }
           cargo xtask sign-sums dist/installer/SHA256SUMS
           if ($LASTEXITCODE -ne 0) { throw "sign-sums failed" }
