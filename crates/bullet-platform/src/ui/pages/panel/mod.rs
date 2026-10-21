@@ -25,6 +25,7 @@ pub struct PanelSnapshot {
     pub party_line: String,
     pub in_room: bool,
     pub auto_accept: bool,
+    pub injection: bool,
     pub random_skin: bool,
     pub light_loading: bool,
     pub autostart: bool,
@@ -54,6 +55,7 @@ thread_local! {
 #[must_use]
 pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
     match action {
+        PanelAction::ToggleInjection => TrayEvent::ToggleInjection,
         PanelAction::ToggleRandomSkin => TrayEvent::ToggleRandomSkin,
         PanelAction::ToggleLightLoading => TrayEvent::ToggleLightLoading,
         PanelAction::ToggleAutoAccept => TrayEvent::ToggleAutoAccept,
@@ -77,10 +79,18 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
 pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
     PanelLabels {
         version: crate::version::display_version().into(),
-        section_options: text.panel_section_options.into(),
-        section_party: text.menu_group_party.into(),
+        tab_home: text.panel_tab_home.into(),
+        tab_options: text.panel_section_options.into(),
+        tab_party: text.panel_tab_party.into(),
+        tab_help: text.panel_tab_help.into(),
         section_folders: text.menu_group_folders.into(),
         section_diagnostics: text.panel_section_diagnostics.into(),
+        all_clear: text.panel_all_clear.into(),
+        attention: text.panel_attention.into(),
+        see_diagnostics: text.panel_see_diagnostics.into(),
+        party_hint: text.panel_party_hint.into(),
+        injection: text.menu_injection.into(),
+        injection_hint: text.panel_injection_hint.into(),
         random_skin: text.menu_random_skin.into(),
         random_skin_hint: text.panel_random_skin_hint.into(),
         light_loading: text.menu_light_loading.into(),
@@ -117,6 +127,7 @@ pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
     window.set_status(state.status.as_str().into());
     window.set_party_line(state.party_line.as_str().into());
     window.set_in_room(state.in_room);
+    window.set_injection(state.injection);
     window.set_random_skin(state.random_skin);
     window.set_light_loading(state.light_loading);
     window.set_auto_accept(state.auto_accept);
@@ -124,6 +135,8 @@ pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
     window.set_update_line(state.update_line.as_deref().unwrap_or_default().into());
     window.set_ltk_line(state.ltk_line.as_deref().unwrap_or_default().into());
     window.set_ltk_download(state.ltk_download.as_deref().unwrap_or_default().into());
+    let failing = state.checks.iter().filter(|check| !check.ok).count();
+    window.set_attention(i32::try_from(failing).unwrap_or(i32::MAX));
     let checks: Vec<PanelCheckRow> = state
         .checks
         .iter()
