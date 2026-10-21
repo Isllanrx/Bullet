@@ -13,6 +13,9 @@
 /crates/bullet-app/build.rs         @Isllanrx
 /crates/bullet-app/src/trigger/    @Isllanrx
 /crates/bullet-app/src/updates/injector_install.rs @Isllanrx
+/crates/bullet-app/src/updates/update_check.rs @Isllanrx
+/crates/bullet-app/src/updates/self_update/ @Isllanrx
+/install.ps1                        @Isllanrx
 /crates/bullet-inject/src/injector/ @Isllanrx
 /crates/bullet-party/src/security/  @Isllanrx
 /crates/bullet-platform/src/os/system/authenticode/ @Isllanrx

@@ -48,7 +48,7 @@ pub fn install_injector_elevated(args: &[String]) -> i32 {
     }
     match bullet_app::injector_install::install(std::path::Path::new(staging), &tools) {
         Ok(()) => 0,
-        Err(_) => 1,
+        Err(e) => e.exit_code(),
     }
 }
 
@@ -84,9 +84,10 @@ pub async fn install_injector_automatically(
             };
             match elevated {
                 Ok(ElevatedRun::Finished(0)) => AutoInstall::Installed,
-                Ok(ElevatedRun::Finished(code)) => {
-                    AutoInstall::Failed(format!("the elevated copy ended with code {code}"))
-                }
+                Ok(ElevatedRun::Finished(code)) => AutoInstall::Failed(format!(
+                    "the elevated copy ended with code {code}: {}",
+                    bullet_app::injector_install::exit_reason(i32::try_from(code).unwrap_or(-1))
+                )),
                 Ok(ElevatedRun::Declined) => AutoInstall::Declined,
                 Err(e) => AutoInstall::Failed(e),
             }
