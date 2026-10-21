@@ -19,7 +19,10 @@ async fn main() -> Result<()> {
         std::process::exit(boot::injector::install_injector_elevated(&args[2..]));
     }
 
-    let state_dir_path = state_dir().unwrap_or_else(|_| std::env::temp_dir().join("Bullet_state"));
+    let state_dir_resolved = state_dir();
+    let state_dir_path = state_dir_resolved
+        .as_ref()
+        .map_or_else(|_| std::env::temp_dir().join("Bullet_state"), Clone::clone);
 
     let mut lock_failure = None;
     let instance_guard = match bullet_platform::single_instance::SingleInstanceGuard::acquire(
@@ -43,9 +46,13 @@ async fn main() -> Result<()> {
         }
     };
 
-    let logs_dir_path = bullet_platform::paths::logs_dir()
-        .unwrap_or_else(|_| std::env::temp_dir().join("Bullet").join("logs"));
-    let logging = logging::init(&logs_dir_path)?;
+    let logs_dir_resolved = bullet_platform::paths::logs_dir();
+    let logs_dir_path = logs_dir_resolved.as_ref().map_or_else(
+        |_| std::env::temp_dir().join("Bullet").join("logs"),
+        Clone::clone,
+    );
+    let logging = logging::init_or_explain(&logs_dir_path)?;
+    logging::install_panic_hook();
     let elevated = bullet_platform::elevation::is_elevated();
 
     info!(
@@ -57,6 +64,8 @@ async fn main() -> Result<()> {
     );
 
     boot::reports::log_profile_resolution();
+    boot::reports::report_dir_fallback("state", &state_dir_resolved, &state_dir_path);
+    boot::reports::report_dir_fallback("logs", &logs_dir_resolved, &logs_dir_path);
     if let Some(e) = lock_failure {
         warn!(error = %e, "Single-instance lock unavailable; a second launch will not be blocked");
     }
@@ -76,30 +85,11 @@ async fn main() -> Result<()> {
     boot::reports::remove_retired_files(&state_dir_path);
 
     let lcu_observer = bullet_lcu::observer::LcuObserver::new(state_tx.clone(), None);
-    supervisor.spawn("lcu-observer", move |child_token| async move {
+    supervisor.spawn_essential("lcu-observer", move |child_token| async move {
         lcu_observer.run(child_token).await;
     });
 
-    let dropped_lines = logging.dropped.clone();
-    supervisor.spawn("log-drop-monitor", move |child_token| async move {
-        let mut reported = 0usize;
-        loop {
-            tokio::select! {
-                _ = child_token.cancelled() => break,
-                () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
-                    let now = dropped_lines.dropped_lines();
-                    if now > reported {
-                        warn!(
-                            dropped_lines = now,
-                            since_last_report = now - reported,
-                            "Log writer queue overflowed; lines were dropped"
-                        );
-                        reported = now;
-                    }
-                }
-            }
-        }
-    });
+    boot::tasks::spawn_log_drop_monitor(&mut supervisor, logging.dropped.clone());
 
     let (party_tx, party_rx) =
         tokio::sync::mpsc::unbounded_channel::<bullet_app::party_manager::PartyCommand>();
@@ -109,7 +99,7 @@ async fn main() -> Result<()> {
             state_rx.clone(),
             state_dir_path.clone(),
         );
-        supervisor.spawn("party-manager", move |child_token| async move {
+        supervisor.spawn_essential("party-manager", move |child_token| async move {
             manager.run(child_token, party_rx).await;
         });
     }
@@ -161,6 +151,8 @@ async fn main() -> Result<()> {
             None
         }
     };
+    let injection = bullet_platform::preferences::INJECTION.load();
+    info!(enabled = injection, "Skin injection setting loaded");
     let random_skin = bullet_platform::preferences::RANDOM_SKIN.load();
     info!(
         enabled = random_skin,
@@ -178,7 +170,7 @@ async fn main() -> Result<()> {
     let live_state = state_rx.clone();
     let live_game_dir = paths.game_dir.clone();
     let live_for_task = live_game.clone();
-    let live_logs_dir = bullet_platform::paths::logs_dir().ok();
+    let live_logs_dir = Some(logs_dir_path.clone());
     supervisor.spawn("live-game", move |child_token| {
         bullet_app::live_game::run(
             live_state,
@@ -191,7 +183,7 @@ async fn main() -> Result<()> {
     let mut panel_links: Option<bullet_platform::panel::PanelLinks> = None;
     if let Some(tray) = tray {
         let tray_shutdown = shutdown_token.clone();
-        let tray_logs_dir = bullet_platform::paths::logs_dir().ok();
+        let tray_logs_dir = Some(logs_dir_path.clone());
         let tray_tools_dir = paths.tools_dir.clone();
         let tray_mods_dir = paths.custom_mods_root.clone();
         let tray_controller = tray.controller();
@@ -260,14 +252,17 @@ async fn main() -> Result<()> {
             install_tx,
         };
 
-        supervisor.spawn("tray-events", move |child_token| async move {
+        supervisor.spawn_essential("tray-events", move |child_token| async move {
             let mut tray = tray;
             loop {
                 tokio::select! {
                     _ = child_token.cancelled() => break,
                     event = tray.recv_event() => match event {
                         Some(event) => actions.handle(event),
-                        None => break,
+                        None => {
+                            error!("The tray event channel closed; the tray icon no longer responds");
+                            break;
+                        }
                     },
                 }
             }
@@ -317,7 +312,7 @@ async fn main() -> Result<()> {
         "Automatic match accept setting loaded"
     );
     let state_rx_accept = state_rx.clone();
-    supervisor.spawn("auto-accept", move |child_token| {
+    supervisor.spawn_essential("auto-accept", move |child_token| {
         bullet_app::auto_accept::run(state_rx_accept, child_token)
     });
 
@@ -348,7 +343,7 @@ async fn main() -> Result<()> {
                 library_root,
                 mods_config,
             );
-            supervisor.spawn("overlay-session", move |child_token| async move {
+            supervisor.spawn_essential("overlay-session", move |child_token| async move {
                 session.run(child_token).await;
 
                 drop(overlay);
@@ -361,7 +356,7 @@ async fn main() -> Result<()> {
 
     let injection_trigger =
         trigger::InjectionTrigger::new(state_tx.clone(), state_rx.clone(), paths);
-    supervisor.spawn("injection-trigger", move |child_token| async move {
+    supervisor.spawn_essential("injection-trigger", move |child_token| async move {
         injection_trigger.run(child_token).await;
     });
 
@@ -385,8 +380,8 @@ async fn main() -> Result<()> {
     }
     info!("Bullet shut down cleanly");
     let update = boot::update::prepare_install(&pending_update);
-    drop(logging);
     boot::update::run_installer(update, instance_guard);
+    drop(logging);
 
     Ok(())
 }
