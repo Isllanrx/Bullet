@@ -7,6 +7,7 @@ fn facts() -> Facts {
         party_line: "p".into(),
         in_room: false,
         auto_accept: false,
+        injection: true,
         random_skin: true,
         light_loading: true,
         autostart: false,

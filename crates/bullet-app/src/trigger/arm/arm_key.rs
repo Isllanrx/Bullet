@@ -202,6 +202,17 @@ pub(crate) fn wanted_skin(state: &bullet_core::state::AppState) -> WantedSkin {
     }
 }
 
+pub(crate) fn wanted_skin_when(
+    state: &bullet_core::state::AppState,
+    injection_enabled: bool,
+) -> WantedSkin {
+    if injection_enabled {
+        wanted_skin(state)
+    } else {
+        WantedSkin::Nothing
+    }
+}
+
 pub(crate) fn should_disarm(wanted: WantedSkin, key: ArmKey) -> bool {
     match wanted {
         WantedSkin::Unknown => false,
