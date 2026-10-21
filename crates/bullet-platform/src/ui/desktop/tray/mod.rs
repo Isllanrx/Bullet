@@ -89,7 +89,7 @@ impl TrayController {
             let hwnd = HWND(self.hwnd_raw as *mut _);
 
             unsafe {
-                let _ = PostMessageW(hwnd, WM_UPDATE_STATUS, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
+                let _ = PostMessageW(Some(hwnd), WM_UPDATE_STATUS, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
             }
         }
     }
@@ -129,7 +129,7 @@ impl TrayController {
         });
         let hwnd = HWND(self.hwnd_raw as *mut _);
         unsafe {
-            let _ = PostMessageW(hwnd, WM_TRAY_BALLOON, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
+            let _ = PostMessageW(Some(hwnd), WM_TRAY_BALLOON, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
         }
     }
 
@@ -137,7 +137,7 @@ impl TrayController {
         if self.alive.swap(false, Ordering::SeqCst) {
             let hwnd = HWND(self.hwnd_raw as *mut _);
             unsafe {
-                let _ = PostMessageW(hwnd, WM_TRAY_QUIT, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
+                let _ = PostMessageW(Some(hwnd), WM_TRAY_QUIT, WPARAM(0), LPARAM(0)); // ignore-ok: the target window is our own and `alive` was checked; a failure means it is already closed
             }
         }
     }

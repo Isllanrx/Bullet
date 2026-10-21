@@ -168,9 +168,9 @@ pub fn safe_extract_zip<R: Read + Seek>(
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
         let declared_size = file.size();
-        let raw_name = file.name();
+        let raw_name = file.name()?.into_owned();
 
-        let clean_relative = validate_archive_path(Path::new(raw_name))?;
+        let clean_relative = validate_archive_path(Path::new(&raw_name))?;
         let target_file_path = dest_dir.join(&clean_relative);
 
         let path_len = target_file_path.as_os_str().encode_wide().count();

@@ -42,7 +42,7 @@ pub(super) fn run_tray_message_loop(
 
     if unsafe { RegisterClassW(&wc) } == 0 {
         warn!(
-            error = %windows::core::Error::from_win32(),
+            error = %windows::core::Error::from_thread(),
             "The tray window class could not be registered"
         );
     }
@@ -77,7 +77,7 @@ pub(super) fn run_tray_message_loop(
     };
     #[allow(clippy::manual_dangling_ptr)]
     let icon = unsafe {
-        LoadIconW(hinstance, PCWSTR(1 as *const u16))
+        LoadIconW(Some(hinstance.into()), PCWSTR(1 as *const u16))
             .or_else(|e| {
                 warn!(error = %e, "The Bullet tray icon resource could not be loaded; using the default icon");
                 LoadIconW(None, IDI_APPLICATION)
@@ -132,7 +132,7 @@ pub(super) fn run_tray_message_loop(
             }
             if got.0 < 0 {
                 error!(
-                    error = %windows::core::Error::from_win32(),
+                    error = %windows::core::Error::from_thread(),
                     "The tray message loop failed; the tray icon stops responding"
                 );
                 break;
@@ -318,7 +318,7 @@ fn show_context_menu(hwnd: HWND, state: &TrayState) {
             TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
             pt.x,
             pt.y,
-            0,
+            None,
             hwnd,
             None,
         );

@@ -106,13 +106,9 @@ fn own_local_app_data() -> Option<PathBuf> {
 
 fn known_local_app_data(token: Option<HANDLE>) -> Option<PathBuf> {
     unsafe {
-        let pwstr = SHGetKnownFolderPath(
-            &FOLDERID_LocalAppData,
-            KF_FLAG_DEFAULT,
-            token.unwrap_or_default(),
-        )
-        .inspect_err(|e| debug!(error = %e, "SHGetKnownFolderPath(LocalAppData) failed"))
-        .ok()?;
+        let pwstr = SHGetKnownFolderPath(&FOLDERID_LocalAppData, KF_FLAG_DEFAULT, token)
+            .inspect_err(|e| debug!(error = %e, "SHGetKnownFolderPath(LocalAppData) failed"))
+            .ok()?;
         let path = pwstr.as_wide().to_vec();
         CoTaskMemFree(Some(pwstr.0 as *const _));
         if path.is_empty() {

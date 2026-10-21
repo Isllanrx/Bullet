@@ -44,7 +44,7 @@ pub fn set_text(text: &str) -> Result<(), PlatformError> {
         let target = GlobalLock(block) as *mut u16;
         if target.is_null() {
             // ignore-ok: freeing our own block after a failure already being reported
-            let _ = GlobalFree(block);
+            let _ = GlobalFree(Some(block));
             return Err(PlatformError::Window(
                 "clipboard memory could not be locked".into(),
             ));
@@ -54,9 +54,9 @@ pub fn set_text(text: &str) -> Result<(), PlatformError> {
         // ignore-ok: GlobalUnlock reports "not locked any more" as an error on success
         let _ = GlobalUnlock(block);
 
-        if let Err(e) = SetClipboardData(u32::from(CF_UNICODETEXT.0), HANDLE(block.0)) {
+        if let Err(e) = SetClipboardData(u32::from(CF_UNICODETEXT.0), Some(HANDLE(block.0))) {
             // ignore-ok: the clipboard refused the block, so it is still ours to free
-            let _ = GlobalFree(block);
+            let _ = GlobalFree(Some(block));
             return Err(PlatformError::Window(format!(
                 "clipboard refused the text: {e}"
             )));
@@ -80,7 +80,7 @@ pub fn get_text() -> Result<Option<String>, PlatformError> {
         let source = GlobalLock(block) as *const u16;
         if source.is_null() {
             debug!(
-                error = %windows::core::Error::from_win32(),
+                error = %windows::core::Error::from_thread(),
                 "The clipboard text could not be locked"
             );
             return Ok(None);

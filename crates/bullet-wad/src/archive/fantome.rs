@@ -15,7 +15,10 @@ pub fn wad_names_in_archive<R: Read + Seek>(
         let file = archive
             .by_index(i)
             .map_err(|e| WadError::InvalidFantome(format!("zip read error: {e}")))?;
-        if let Some(wad) = wad_name_in_path(&file.name().replace('\\', "/")) {
+        let name = file
+            .name()
+            .map_err(|e| WadError::InvalidFantome(format!("zip entry name error: {e}")))?;
+        if let Some(wad) = wad_name_in_path(&name.replace('\\', "/")) {
             names.insert(wad);
         }
     }
@@ -63,7 +66,10 @@ pub fn mod_archive_shape<R: Read + Seek>(reader: R) -> Result<ModArchiveShape, W
         if file.is_dir() {
             continue;
         }
-        let name = file.name().replace('\\', "/");
+        let name = file
+            .name()
+            .map_err(|e| WadError::InvalidFantome(format!("zip entry name error: {e}")))?
+            .replace('\\', "/");
         let root = name.split('/').next().unwrap_or_default();
         if (root.eq_ignore_ascii_case("WAD") || root.eq_ignore_ascii_case("RAW"))
             && name.len() > root.len() + 1
