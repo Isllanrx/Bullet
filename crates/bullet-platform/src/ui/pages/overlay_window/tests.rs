@@ -217,3 +217,27 @@ fn the_historic_origin_tags_the_selected_card() {
     assert_eq!(view.get_origin(), views::SelectionOrigin::Historic);
     assert_eq!(view.get_selected_skin(), 238_001);
 }
+
+#[test]
+fn the_party_line_shows_the_room_and_teammate_skins_and_goes_away_outside_a_party() {
+    let (view, _commands) = open_overlay();
+    assert_eq!(view.get_party_line(), "");
+
+    with_overlay(|overlay| {
+        overlay.party = Some(bullet_core::party::PartySummary {
+            members: 3,
+            teammate_skins: 2,
+        });
+        overlay.render_party();
+    });
+    assert_eq!(
+        view.get_party_line(),
+        "party: 3 in the room, 2 teammate skin(s)"
+    );
+
+    with_overlay(|overlay| {
+        overlay.party = None;
+        overlay.render_party();
+    });
+    assert_eq!(view.get_party_line(), "");
+}
