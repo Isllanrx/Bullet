@@ -67,6 +67,8 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 Type: filesandordirs; Name: "{localappdata}\Programs\Bullet"
 Type: files; Name: "{app}\tools\*.orig"
 Type: files; Name: "{app}\tools\*.bak"
+Type: files; Name: "{app}\tools\cloudflared.exe"
+Type: files; Name: "{app}\tools\tools.zip"
 Type: filesandordirs; Name: "{localappdata}\Bullet\webview2"
 
 [Dirs]
