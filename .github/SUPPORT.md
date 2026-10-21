@@ -8,6 +8,6 @@
 | Contact the maintainer | [isllan.dev](https://isllan.dev/) |
 | Report a security issue | [Private advisory](https://github.com/Isllanrx/Bullet/security/advisories/new), never in public |
 
-Before asking, check the README's [Troubleshooting](README.md#troubleshooting) section. Most problems show up
+Before asking, check the README's [Troubleshooting](../README.md#troubleshooting) section. Most problems show up
 in the log: `%LOCALAPPDATA%\Bullet\logs`. Set `BULLET_LOG=debug`, reproduce the problem, and attach the newest
 file.
