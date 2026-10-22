@@ -5,4 +5,7 @@ pub mod welcome;
 
 mod overlay_model;
 mod runtime;
+
+#[cfg(target_os = "macos")]
+pub use runtime::run_interface_on_main_thread;
 mod views;
