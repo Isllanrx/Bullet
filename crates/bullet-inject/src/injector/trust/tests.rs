@@ -113,3 +113,11 @@ fn the_installed_injector_is_trusted_and_names_its_limit() {
     let dll = std::fs::read(tools.join("ltk_patcher_dll.dll")).expect("dll");
     assert!(dll_build_limit(&dll).is_some());
 }
+
+#[test]
+fn a_dll_that_only_serves_ltk_manager_is_recognised() {
+    let mut dll = vec![0x90; 64];
+    dll.extend_from_slice(b"host verification failed, refusing overlay: ");
+    assert!(dll_refuses_other_hosts(&dll));
+    assert!(!dll_refuses_other_hosts(&[0x90; 64]));
+}
