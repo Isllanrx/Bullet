@@ -42,10 +42,10 @@ impl InstallError {
 #[must_use]
 pub fn exit_reason(code: i32) -> &'static str {
     match code {
-        2 => "the elevated copy received the wrong arguments",
+        2 => "the elevated copy received the wrong arguments or no release version",
         3 => "the target is not Bullet's own tools folder",
         EXIT_DENIED => "Windows denied writing to the tools folder even when elevated",
-        EXIT_NOT_TRUSTED => "a staged injector file is not signed by its publisher",
+        EXIT_NOT_TRUSTED => "a staged injector file carries a foreign or broken signature",
         EXIT_FAILED => "reading, writing or replacing the injector files failed",
         _ => "unknown",
     }
@@ -61,6 +61,7 @@ fn io_error(context: &str, e: &std::io::Error) -> InstallError {
 
 fn verify(name: &'static str, path: &Path) -> Result<(), InstallError> {
     bullet_inject::trust::verify_injector_file(path)
+        .map(|_| ())
         .map_err(|e| InstallError::NotTrusted(name, e.to_string()))
 }
 
@@ -85,6 +86,17 @@ pub fn install(staging: &Path, tools: &Path) -> Result<(), InstallError> {
             std::fs::read(staging.join(name)).map_err(|e| io_error("reading a staged file", &e))?;
         files.push((name, bytes));
     }
+    install_files(files, tools)
+}
+
+pub async fn install_release(version: &str, tools: &Path) -> Result<(), InstallError> {
+    let files = download_injector(version)
+        .await
+        .map_err(InstallError::Failed)?;
+    install_files(files, tools)
+}
+
+fn install_files(files: Vec<(&'static str, Vec<u8>)>, tools: &Path) -> Result<(), InstallError> {
     std::fs::create_dir_all(tools).map_err(|e| io_error("creating the tools folder", &e))?;
     let mut partials = Vec::with_capacity(files.len());
     let staged = files.into_iter().try_for_each(|(name, bytes)| {
@@ -161,24 +173,14 @@ fn roll_back(done: &[(PathBuf, Option<PathBuf>)]) -> Option<String> {
 }
 
 #[must_use]
-pub fn elevated_parameters(staging: &Path, tools: &Path) -> String {
-    format!(
-        "{INSTALL_FLAG} \"{}\" \"{}\"",
-        staging.display(),
-        tools.display()
-    )
+pub fn elevated_parameters(version: &str, tools: &Path) -> String {
+    format!("{INSTALL_FLAG} \"{version}\" \"{}\"", tools.display())
 }
 
 #[must_use]
-pub fn is_bullet_tools_folder(
-    tools: &Path,
-    install_dir: Option<&Path>,
-    exe: Option<&Path>,
-) -> bool {
-    [install_dir, exe.and_then(Path::parent)]
-        .into_iter()
-        .flatten()
-        .any(|dir| dir.join("tools") == tools)
+pub fn is_bullet_tools_folder(tools: &Path, exe: Option<&Path>) -> bool {
+    exe.and_then(Path::parent)
+        .is_some_and(|dir| dir.join("tools") == tools)
 }
 
 #[cfg(test)]
@@ -194,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn unsigned_staged_files_are_refused_and_leave_nothing_in_the_tools_folder() {
+    fn unverifiable_staged_files_are_refused_and_leave_nothing_in_the_tools_folder() {
         let root = fixture("unsigned");
         let staging = root.join("staging");
         std::fs::write(staging.join(INJECTOR_FILES[0]), b"host").expect("host");
@@ -240,15 +242,17 @@ mod tests {
     }
 
     #[test]
-    fn only_bullets_own_tools_folders_are_accepted_as_a_target() {
-        let install_dir = Path::new(r"C:\Program Files\Bullet");
-        let exe = Path::new(r"D:\Portable\Bullet\bullet.exe");
-        let accepts =
-            |tools: &str| is_bullet_tools_folder(Path::new(tools), Some(install_dir), Some(exe));
+    fn only_the_running_copys_own_tools_folder_is_accepted_as_a_target() {
+        let exe = Path::new(r"C:\Program Files\Bullet\bullet.exe");
+        let accepts = |tools: &str| is_bullet_tools_folder(Path::new(tools), Some(exe));
         assert!(accepts(r"C:\Program Files\Bullet\tools"));
-        assert!(accepts(r"D:\Portable\Bullet\tools"));
+        assert!(!accepts(r"D:\Portable\Bullet\tools"));
         assert!(!accepts(r"C:\Windows\System32"));
         assert!(!accepts(r"C:\Program Files\Bullet"));
+        assert!(!is_bullet_tools_folder(
+            Path::new(r"C:\Program Files\Bullet\tools"),
+            None
+        ));
     }
 
     #[test]
@@ -263,13 +267,10 @@ mod tests {
     }
 
     #[test]
-    fn the_elevated_command_line_quotes_both_paths() {
+    fn the_elevated_command_line_carries_the_release_version_not_a_folder_to_copy_from() {
         assert_eq!(
-            elevated_parameters(
-                Path::new(r"C:\Users\A B\staging"),
-                Path::new(r"C:\Program Files\Bullet\tools")
-            ),
-            r#"--install-injector "C:\Users\A B\staging" "C:\Program Files\Bullet\tools""#
+            elevated_parameters("1.29.3", Path::new(r"C:\Program Files\Bullet\tools")),
+            r#"--install-injector "1.29.3" "C:\Program Files\Bullet\tools""#
         );
     }
 }

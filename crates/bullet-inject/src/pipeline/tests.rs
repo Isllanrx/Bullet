@@ -94,7 +94,7 @@ async fn test_the_native_builder_builds_and_an_empty_merge_is_an_error() {
 }
 
 #[tokio::test]
-async fn test_pipeline_aborts_before_building_on_an_unsigned_injector() {
+async fn test_pipeline_aborts_before_building_on_an_injector_windows_cannot_verify() {
     let temp_dir = std::env::temp_dir().join("bullet_test_pipeline_hash");
     std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -109,7 +109,7 @@ async fn test_pipeline_aborts_before_building_on_an_unsigned_injector() {
 
     assert!(
         matches!(result, Err(InjectError::UntrustedInjector { .. })),
-        "an injector without the publisher's signature must stop the pipeline"
+        "an injector Windows cannot read as a binary must stop the pipeline"
     );
     assert!(matches!(
         rx.borrow().injection,
