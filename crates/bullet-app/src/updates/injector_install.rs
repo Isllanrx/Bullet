@@ -227,6 +227,35 @@ mod tests {
     }
 
     #[test]
+    fn unsigned_binaries_replace_the_tools_and_leave_no_partial_behind() {
+        let root = fixture("unsigned_pe");
+        let staging = root.join("staging");
+        let pe = std::env::current_exe().expect("test binary");
+        for name in INJECTOR_FILES {
+            std::fs::copy(&pe, staging.join(name)).expect("copy");
+        }
+        let tools = root.join("tools");
+        std::fs::create_dir_all(&tools).expect("tools");
+        std::fs::write(tools.join(INJECTOR_FILES[1]), b"old dll").expect("old");
+
+        install(&staging, &tools).expect("install");
+        let mut left: Vec<String> = std::fs::read_dir(&tools)
+            .expect("list")
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        let mut expected = INJECTOR_FILES.map(str::to_owned).to_vec();
+        expected.sort();
+        assert_eq!(left, expected);
+        assert_ne!(
+            std::fs::read(tools.join(INJECTOR_FILES[1])).expect("dll"),
+            b"old dll"
+        );
+        let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
+    }
+
+    #[test]
     #[ignore = "needs the LTK injector in Bullet's tools folder"]
     fn signed_files_replace_the_tools_and_leave_no_partial_behind() {
         let installed = Path::new(r"C:\Program Files\Bullet\tools");
