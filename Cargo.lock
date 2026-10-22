@@ -641,7 +641,6 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "windows",
  "xxhash-rust",
  "zstd",
 ]
@@ -690,6 +689,7 @@ version = "1.2.1"
 dependencies = [
  "bullet-core",
  "i-slint-backend-testing",
+ "libc",
  "raw-window-handle",
  "serde",
  "serde_json",

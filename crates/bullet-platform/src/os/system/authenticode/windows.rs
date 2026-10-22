@@ -10,14 +10,7 @@ use windows::Win32::Security::WinTrust::{
 };
 use windows::core::HSTRING;
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum SignatureError {
-    #[error("{path} has no valid Authenticode signature (WinVerifyTrust 0x{code:08x})")]
-    Untrusted { path: String, code: u32 },
-
-    #[error("{path} is signed but its signer certificate could not be read")]
-    NoSigner { path: String },
-}
+use super::SignatureError;
 
 pub fn signer(path: &Path) -> Result<String, SignatureError> {
     let wide = HSTRING::from(path.as_os_str());
@@ -89,6 +82,3 @@ fn signer_name(data: &WINTRUST_DATA) -> Option<String> {
         (len > 0).then(|| String::from_utf16_lossy(&buffer[..len]))
     }
 }
-
-#[cfg(test)]
-mod tests;

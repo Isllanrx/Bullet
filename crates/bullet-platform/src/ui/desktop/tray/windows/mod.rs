@@ -10,6 +10,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_USER};
 
+use super::TrayEvent;
 use crate::error::PlatformError;
 
 const WM_TRAY_CALLBACK: u32 = WM_USER + 100;
@@ -20,45 +21,6 @@ const WM_TRAY_BALLOON: u32 = WM_USER + 103;
 const ID_STATUS_ITEM: usize = 1001;
 const ID_QUIT: usize = 1003;
 const ID_OPEN_PANEL: usize = 1013;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TrayEvent {
-    OpenLogs,
-
-    OpenTools,
-
-    OpenMods,
-
-    RestoreMods,
-
-    About,
-
-    ToggleAutostart,
-
-    ToggleAutoAccept,
-
-    ToggleInjection,
-
-    ToggleRandomSkin,
-    ToggleLightLoading,
-
-    Quit,
-
-    Activated,
-
-    PartyCreate,
-
-    PartyJoin,
-
-    PartyLeave,
-
-    OpenRelease,
-    InstallInjector,
-
-    MarkProblem,
-
-    ExportDiagnostics,
-}
 
 #[derive(Clone)]
 pub struct TrayController {
