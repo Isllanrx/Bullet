@@ -246,6 +246,36 @@ mod tests {
     }
 
     #[test]
+    fn a_dispute_refuses_only_the_claimants_and_spares_the_rest() {
+        let peers = vec![
+            peer(1, "friend", 103, 103_015),
+            peer(7, "friend", 103, 103_002),
+            peer(5, "other", 1, 1_002),
+            peer(2, "me", 238, 238_001),
+            peer(8, "me", 238, 238_003),
+        ];
+        let (accepted, rejected) = verified_party_skins(&peers, &team(), Some("me"));
+
+        assert_eq!(accepted, vec![(1, 1_002)]);
+        assert!(rejected.contains(&(1, PeerRejection::Disputed)));
+        assert!(rejected.contains(&(7, PeerRejection::Disputed)));
+        assert!(rejected.contains(&(2, PeerRejection::Ourselves)));
+        assert!(rejected.contains(&(8, PeerRejection::Ourselves)));
+    }
+
+    #[test]
+    fn a_member_repeating_its_own_claim_is_not_a_dispute() {
+        let peers = vec![
+            peer(1, "friend", 103, 103_015),
+            peer(1, "friend", 103, 103_015),
+        ];
+        let (accepted, rejected) = verified_party_skins(&peers, &team(), Some("me"));
+
+        assert_eq!(accepted, vec![(103, 103_015)]);
+        assert!(rejected.is_empty());
+    }
+
+    #[test]
     fn test_chroma_is_the_injected_entry_and_the_fingerprint_is_stable() {
         let mut with_chroma = peer(1, "friend", 103, 103_015);
         with_chroma.chroma_id = Some(103_020);

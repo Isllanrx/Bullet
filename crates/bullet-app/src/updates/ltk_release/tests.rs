@@ -162,7 +162,25 @@ fn only_dotted_numbers_pass_as_a_release_version_for_the_elevated_install() {
         "v1.2",
         "1.2 3",
         "1.2.3.4.5.6.7.8.9.10.11.12.13.14.15",
+        "1.",
+        ".1",
     ] {
         assert!(!is_release_version(bad), "{bad}");
     }
+    assert!(is_release_version(&"1".repeat(32)));
+    assert!(!is_release_version(&"1".repeat(33)));
+}
+
+#[test]
+fn verdicts_cached_before_the_host_check_are_checked_again() {
+    let dir = std::env::temp_dir().join(format!("bullet_ltk_host_era_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+    std::fs::create_dir_all(&dir).expect("fixture dir");
+    let signed_only = format!(
+        "signed-by {}\n1.30.1 trusted {DLL_A}\n",
+        bullet_inject::trust::LTK_PUBLISHER
+    );
+    std::fs::write(dir.join(VERDICTS_FILE), signed_only).expect("write");
+    assert_eq!(load_verdicts(&dir), Verdicts::default());
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
 }

@@ -121,3 +121,12 @@ fn a_dll_that_only_serves_ltk_manager_is_recognised() {
     assert!(dll_refuses_other_hosts(&dll));
     assert!(!dll_refuses_other_hosts(&[0x90; 64]));
 }
+
+#[test]
+fn an_unsigned_binary_on_disk_is_accepted_as_unsigned() {
+    let exe = std::env::current_exe().expect("test binary");
+    assert!(matches!(
+        verify_injector_file(&exe),
+        Ok(Provenance::Unsigned)
+    ));
+}
