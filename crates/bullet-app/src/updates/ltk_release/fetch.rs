@@ -160,6 +160,13 @@ async fn inspect_files(
             }
         }
         if name == INJECTOR_FILES[1] {
+            if bullet_inject::trust::dll_refuses_other_hosts(&bytes) {
+                warn!(
+                    version,
+                    "An LTK Manager release ships a patcher DLL that refuses any host but LTK Manager; Bullet does not use it"
+                );
+                return Ok(Injector::Untrusted);
+            }
             dll_sha256 = bullet_inject::dll_validator::compute_sha256(&bytes);
         }
     }

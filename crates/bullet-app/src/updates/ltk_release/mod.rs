@@ -208,7 +208,7 @@ impl Verdicts {
 
 fn fingerprint() -> String {
     format!(
-        "signed-by {} or unsigned",
+        "signed-by {} or unsigned, any host",
         bullet_inject::trust::LTK_PUBLISHER
     )
 }
