@@ -155,3 +155,24 @@ async fn a_reconnect_waits_for_a_new_hook_instead_of_the_first_games_one() {
         Err(InjectError::HookUnconfirmed { .. })
     ));
 }
+
+#[tokio::test]
+async fn a_dll_refusing_this_host_is_not_read_as_hooked() {
+    let output = "status 0.01 injecting scanning\n\
+                  dll 5.20 1234 5678 ERROR ltk_patcher_dll::verify: host verification failed, refusing overlay: [VRF00000008]\n";
+    assert_eq!(signals_of(output).await, vec![PatcherSignal::Armed]);
+}
+
+#[tokio::test]
+async fn a_patcher_that_exited_is_not_reused_for_the_next_game() {
+    let child = Command::new("cmd")
+        .args(["/C", "exit /b 3"])
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn");
+    let (_tx, rx) = mpsc::unbounded_channel();
+    let mut overlay = idle(rx);
+    overlay.child = Some(child);
+    assert_eq!(overlay.exited_within(Duration::from_secs(5)).await, Some(3));
+    assert_eq!(overlay.ready_for_next_game(), Err(3));
+}

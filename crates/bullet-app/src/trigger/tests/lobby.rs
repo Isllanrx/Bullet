@@ -156,4 +156,11 @@ fn a_lobby_overlay_with_a_map_mod_serves_whichever_lobby_champion_the_match_give
         &without_mods,
         103
     ));
+
+    assert!(!lobby_overlay_serves(&key, None, &state.mods, 103));
+    assert!(lobby_overlay_serves(&key, None, &state.mods, 238));
+    assert!(
+        !lobby_overlay_serves(&key, lobby, &without_mods, 103),
+        "mods cleared after arming no longer serve another lobby champion"
+    );
 }

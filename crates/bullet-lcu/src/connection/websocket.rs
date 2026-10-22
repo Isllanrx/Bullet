@@ -292,6 +292,18 @@ mod tests {
     }
 
     #[test]
+    fn a_lobby_event_with_a_trailing_slash_is_still_the_whole_lobby() {
+        let (tx, rx) = new_state_channel();
+        set_phase(&tx, GamePhase::Lobby);
+        let lobby = r#"[8, "OnJsonApiEvent_lol-lobby_v2_lobby", {"uri": "/lol-lobby/v2/lobby/", "eventType": "Update",
+            "data": {"gameConfig": {"queueId": 440, "gameMode": "CLASSIC", "mapId": 11},
+                     "partyId": "party-1", "members": [{}, {}, {}]}}]"#;
+        let event = LcuEvent::parse(lobby).expect("frame").expect("event");
+        dispatch_event_to_state(&tx, &event);
+        assert_eq!(rx.borrow().lobby_party.as_ref().map(|p| p.members), Some(3));
+    }
+
+    #[test]
     fn test_make_subscribe_frame() {
         let frame = make_subscribe_frame(TOPIC_GAMEFLOW);
         assert_eq!(
