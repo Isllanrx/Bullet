@@ -12,11 +12,21 @@ mod trigger;
 
 const INSTANCE_NAME: &str = "bullet";
 
-#[tokio::main]
-async fn main() -> Result<()> {
+const BLOCKING_TASKS_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+fn main() -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let outcome = runtime.block_on(run());
+    runtime.shutdown_timeout(BLOCKING_TASKS_GRACE);
+    outcome
+}
+
+async fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some(bullet_app::injector_install::INSTALL_FLAG) {
-        std::process::exit(boot::injector::install_injector_elevated(&args[2..]));
+        std::process::exit(boot::injector::install_injector_elevated(&args[2..]).await);
     }
 
     let state_dir_resolved = state_dir();
@@ -108,7 +118,7 @@ async fn main() -> Result<()> {
 
     let custom_mods_notice = bullet_app::mod_repair::CustomModsNotice::default();
     let (custom_mods_tx, custom_mods_rx) =
-        std::sync::mpsc::channel::<bullet_app::mod_repair::ScanSummary>();
+        tokio::sync::oneshot::channel::<bullet_app::mod_repair::ScanSummary>();
     boot::library::spawn_prewarm(
         &paths,
         &state_dir_path,
@@ -249,7 +259,7 @@ async fn main() -> Result<()> {
             links: links.clone(),
             mark_state,
             mark_live,
-            install_tx,
+            install_tx: install_tx.clone(),
         };
 
         supervisor.spawn_essential("tray-events", move |child_token| async move {
@@ -287,7 +297,7 @@ async fn main() -> Result<()> {
             );
             boot::tasks::spawn_ltk_check(
                 &mut supervisor,
-                &tray_controller,
+                install_tx,
                 &state_dir_path,
                 &paths.ltk_dll_path,
                 &installed_dll,

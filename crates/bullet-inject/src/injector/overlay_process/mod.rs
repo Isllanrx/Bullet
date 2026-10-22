@@ -15,6 +15,8 @@ pub enum PatcherSignal {
     Armed,
 
     Hooked,
+
+    Failed,
 }
 
 pub struct OverlayProcess {
@@ -139,6 +141,7 @@ impl OverlayProcess {
                         self.hooked = true;
                         return Ok(());
                     }
+                    Some(PatcherSignal::Failed) => return Err(InjectError::HookFailed),
                     Some(signal) if signal == wanted => return Ok(()),
                     Some(_) => {}
                     None => {
@@ -152,6 +155,15 @@ impl OverlayProcess {
         tokio::time::timeout(timeout, wait)
             .await
             .unwrap_or_else(|_| Err(unconfirmed()))
+    }
+
+    pub fn ready_for_next_game(&mut self) -> Result<(), i32> {
+        if let Some(code) = self.exited() {
+            return Err(code);
+        }
+        self.hooked = false;
+        while self.signals.try_recv().is_ok() {}
+        Ok(())
     }
 
     pub fn exited(&mut self) -> Option<i32> {
@@ -301,7 +313,7 @@ async fn read_host_stdout<R: AsyncRead + Unpin>(out: R, tx: mpsc::UnboundedSende
                     } else {
                         error!(target: "overlay::ltk", reason = %message, "Injection failed; the skin will not load");
                     }
-                    None
+                    Some(PatcherSignal::Failed)
                 }
             },
             HostEvent::DllLog { level, message } => {

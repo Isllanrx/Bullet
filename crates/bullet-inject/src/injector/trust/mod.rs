@@ -1,22 +1,49 @@
 use std::path::Path;
 
+use bullet_platform::authenticode::SignatureError;
+
 use crate::error::InjectError;
 
 pub const LTK_PUBLISHER: &str = "Natoken LLC";
 
+const TRUST_E_NOSIGNATURE: u32 = 0x800b_0100;
+
 const PLAUSIBLE_LIMITS: std::ops::RangeInclusive<u32> = 1_735_689_600..=2_208_988_800;
 
-pub fn verify_injector_file(path: &Path) -> Result<(), InjectError> {
-    match bullet_platform::authenticode::signer(path) {
-        Ok(publisher) if publisher == LTK_PUBLISHER => Ok(()),
-        Ok(publisher) => Err(InjectError::UntrustedInjector {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    Signed,
+    Unsigned,
+}
+
+impl Provenance {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Signed => "signed by the publisher",
+            Self::Unsigned => "unsigned",
+        }
+    }
+}
+
+pub fn verify_injector_file(path: &Path) -> Result<Provenance, InjectError> {
+    judge(bullet_platform::authenticode::signer(path)).map_err(|reason| {
+        InjectError::UntrustedInjector {
             path: path.display().to_string(),
-            reason: format!("signed by {publisher}, not by {LTK_PUBLISHER}"),
-        }),
-        Err(e) => Err(InjectError::UntrustedInjector {
-            path: path.display().to_string(),
-            reason: e.to_string(),
-        }),
+            reason,
+        }
+    })
+}
+
+fn judge(signature: Result<String, SignatureError>) -> Result<Provenance, String> {
+    match signature {
+        Ok(publisher) if publisher == LTK_PUBLISHER => Ok(Provenance::Signed),
+        Ok(publisher) => Err(format!("signed by {publisher}, not by {LTK_PUBLISHER}")),
+        Err(SignatureError::Untrusted {
+            code: TRUST_E_NOSIGNATURE,
+            ..
+        }) => Ok(Provenance::Unsigned),
+        Err(e) => Err(e.to_string()),
     }
 }
 

@@ -126,9 +126,13 @@ impl InjectionPipeline {
         }
     }
 
-    fn validate_patcher_binaries(&self) -> Result<(), InjectError> {
-        crate::trust::verify_injector_file(&self.config.ltk_host_exe)?;
-        crate::trust::verify_injector_file(&self.config.ltk_dll_path)
+    fn validate_patcher_binaries(
+        &self,
+    ) -> Result<(crate::trust::Provenance, crate::trust::Provenance), InjectError> {
+        Ok((
+            crate::trust::verify_injector_file(&self.config.ltk_host_exe)?,
+            crate::trust::verify_injector_file(&self.config.ltk_dll_path)?,
+        ))
     }
 
     pub async fn execute(
@@ -145,7 +149,7 @@ impl InjectionPipeline {
         );
 
         if let Err(e) = self.validate_patcher_binaries() {
-            error!(error = %e, "Injection aborted: an injector file is missing or not signed by its publisher");
+            error!(error = %e, "Injection aborted: an injector file is missing or carries a foreign or broken signature");
             self.publish(InjectionStatus::Failed {
                 error: format!("injector validation error: {e}"),
             });
@@ -211,18 +215,23 @@ impl InjectionPipeline {
 
         info!(mods = ?mods, "Arming the patcher before the game starts");
 
-        if let Err(e) = self.validate_patcher_binaries() {
-            error!(error = %e, "Arming aborted: an injector file is missing or not signed by its publisher");
-            self.publish(InjectionStatus::Failed {
-                error: format!("injector validation error: {e}"),
-            });
-            return Err(e);
-        }
+        let (host, dll) = match self.validate_patcher_binaries() {
+            Ok(provenance) => provenance,
+            Err(e) => {
+                error!(error = %e, "Arming aborted: an injector file is missing or carries a foreign or broken signature");
+                self.publish(InjectionStatus::Failed {
+                    error: format!("injector validation error: {e}"),
+                });
+                return Err(e);
+            }
+        };
         info!(
             publisher = crate::trust::LTK_PUBLISHER,
             host = %self.config.ltk_host_exe.display(),
+            host_provenance = host.as_str(),
             dll = %self.config.ltk_dll_path.display(),
-            "Injector files verified by their publisher signature"
+            dll_provenance = dll.as_str(),
+            "Injector files accepted"
         );
 
         let build = match self.build_overlay(mods, self.config.build_timeout).await {
@@ -314,6 +323,9 @@ impl InjectionPipeline {
                 );
                 InjectionStatus::Confirmed
             }
+            Err(InjectError::HookFailed) => InjectionStatus::Failed {
+                error: InjectError::HookFailed.to_string(),
+            },
             Err(e) => {
                 if let Some(code) = overlay.exited_within(Duration::from_millis(500)).await {
                     warn!(

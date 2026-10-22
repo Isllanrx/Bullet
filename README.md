@@ -69,7 +69,7 @@ it, and when the game starts it reads that copy instead of its own. The game ins
 
 2. **Add the injector.** Bullet uses two files from League Toolkit, `ltk_patcher_host.exe` and
    `ltk_patcher_dll.dll`, which are not bundled. On first start Bullet offers to download them from the newest
-   [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) release, checks their signature and copies them
+   [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) release, refuses any file with a foreign or broken signature and copies them
    into `C:\Program Files\Bullet\tools` (Windows asks for permission only for that copy). To copy them by hand
    from an installed LTK Manager, in PowerShell **as administrator**:
 
@@ -77,8 +77,8 @@ it, and when the game starts it reads that copy instead of its own. The game ins
    Copy-Item "$env:ProgramFiles\LTK Manager\ltk_patcher_host.exe", "$env:ProgramFiles\LTK Manager\ltk_patcher_dll.dll" "$env:ProgramFiles\Bullet\tools" -Force
    ```
 
-   Bullet refuses any file not signed by League Toolkit's publisher (Natoken LLC), and tells you when a newer
-   injector is needed after a patch.
+   Bullet accepts the files signed by League Toolkit's publisher (Natoken LLC) or published unsigned in an official
+   LTK Manager release, refuses a foreign or broken signature, and installs a newer injector by itself after a patch.
 
 3. **Start Bullet** from the Start menu, normally (not as administrator). It lives in the system tray.
 
