@@ -73,7 +73,7 @@ pub fn spawn_prewarm(
     state_rx: &bullet_core::state::StateReceiver,
     shutdown_token: &CancellationToken,
     custom_mods_notice: &bullet_app::mod_repair::CustomModsNotice,
-    custom_mods_tx: std::sync::mpsc::Sender<bullet_app::mod_repair::ScanSummary>,
+    custom_mods_tx: tokio::sync::oneshot::Sender<bullet_app::mod_repair::ScanSummary>,
 ) {
     if paths.game_dir.is_dir() {
         bullet_inject::overlay_builder::persist_game_index_in(state_dir_path);
