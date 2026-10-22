@@ -147,6 +147,18 @@ pub(crate) fn lobby_arm_key(state: &bullet_core::state::AppState) -> Option<ArmK
     })
 }
 
+pub(crate) fn lobby_overlay_serves(
+    key: &ArmKey,
+    lobby: Option<&bullet_core::lobby::LobbyPicks>,
+    mods: &bullet_core::mods::ModSelection,
+    champ_id: u32,
+) -> bool {
+    key.covers(champ_id)
+        || (key.mods != 0
+            && mods.fingerprint(Some(champ_id)) != 0
+            && lobby.is_some_and(|lobby| lobby.champions().contains(&champ_id)))
+}
+
 pub(crate) fn party_skins(
     state: &bullet_core::state::AppState,
 ) -> bullet_core::party::VerifiedParty {
