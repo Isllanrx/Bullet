@@ -129,10 +129,22 @@ impl InjectionPipeline {
     fn validate_patcher_binaries(
         &self,
     ) -> Result<(crate::trust::Provenance, crate::trust::Provenance), InjectError> {
-        Ok((
-            crate::trust::verify_injector_file(&self.config.ltk_host_exe)?,
-            crate::trust::verify_injector_file(&self.config.ltk_dll_path)?,
-        ))
+        let host = crate::trust::verify_injector_file(&self.config.ltk_host_exe)?;
+        let dll = crate::trust::verify_injector_file(&self.config.ltk_dll_path)?;
+        let path = self.config.ltk_dll_path.display().to_string();
+        let bytes = std::fs::read(&self.config.ltk_dll_path).map_err(|e| {
+            InjectError::UntrustedInjector {
+                path: path.clone(),
+                reason: format!("unreadable: {e}"),
+            }
+        })?;
+        if crate::trust::dll_refuses_other_hosts(&bytes) {
+            return Err(InjectError::UntrustedInjector {
+                path,
+                reason: "this patcher DLL only serves LTK Manager; install the injector the control panel offers".into(),
+            });
+        }
+        Ok((host, dll))
     }
 
     pub async fn execute(
@@ -149,7 +161,7 @@ impl InjectionPipeline {
         );
 
         if let Err(e) = self.validate_patcher_binaries() {
-            error!(error = %e, "Injection aborted: an injector file is missing or carries a foreign or broken signature");
+            error!(error = %e, "Injection aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Bullet");
             self.publish(InjectionStatus::Failed {
                 error: format!("injector validation error: {e}"),
             });
@@ -218,7 +230,7 @@ impl InjectionPipeline {
         let (host, dll) = match self.validate_patcher_binaries() {
             Ok(provenance) => provenance,
             Err(e) => {
-                error!(error = %e, "Arming aborted: an injector file is missing or carries a foreign or broken signature");
+                error!(error = %e, "Arming aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Bullet");
                 self.publish(InjectionStatus::Failed {
                     error: format!("injector validation error: {e}"),
                 });
