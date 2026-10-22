@@ -48,6 +48,14 @@ fn judge(signature: Result<String, SignatureError>) -> Result<Provenance, String
 }
 
 #[must_use]
+pub fn dll_refuses_other_hosts(dll: &[u8]) -> bool {
+    dll.windows(HOST_LOCK_MARK.len())
+        .any(|w| w == HOST_LOCK_MARK)
+}
+
+const HOST_LOCK_MARK: &[u8] = b"host verification failed";
+
+#[must_use]
 pub fn dll_build_limit(dll: &[u8]) -> Option<u32> {
     let mut found = dll.windows(7).filter_map(|code| match code {
         [0x3d, a, b, c, d, 0x0f, 0x86] => {
