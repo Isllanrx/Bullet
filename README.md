@@ -92,8 +92,6 @@ Custom mods go into the category folders under `%LOCALAPPDATA%\Bullet\custom_mod
 **Mods** tab. Party rooms are created from the tray, or offered automatically when friends running Bullet share
 your lobby. Optional settings are listed in [`.env.example`](.env.example).
 
-How it works, step by step: [docs/flows.md](docs/flows.md).
-
 ## Troubleshooting
 
 Logs are in `%LOCALAPPDATA%\Bullet\logs` (the tray opens the folder); `BULLET_LOG=debug` adds detail. **Export
@@ -112,8 +110,7 @@ cargo xtask package
 cargo xtask installer
 ```
 
-The crates, CI/CD and release flow are described in [docs/](docs/README.md) and
-[docs/build-and-ci.md](docs/build-and-ci.md). Contributions: [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+Contributions: [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
 ## Acknowledgements
 
@@ -132,7 +129,13 @@ affiliated with or endorsed by Riot Games; League of Legends is a trademark of R
   <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
 </p>
 
-## License
+## License & Intellectual Property
 
-[MIT](LICENSE). The LTK patcher binaries are not part of this repository and are governed by the LTK Patcher
-License; every third-party license is in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- **Public Repository:** The source code in this repository is licensed under the [MIT License](LICENSE).
+- **Proprietary Native Engine & DLL:** The native injector host `bullet-native-host.exe`, native DLL `bullet_native_dll.dll`,
+  and native IPC protocols are **closed-source proprietary software** owned exclusively by Isllan Toso and maintained in
+  a private repository (`Isllanrx/bullet_dll`). They are NOT covered by the MIT license.
+  - **No Commercial Use:** Commercialization, monetization, sale, or paid distribution of the native binaries is strictly prohibited.
+  - **No Reverse Engineering:** Decompilation, disassembly, protocol extraction, or reverse engineering by any person, automated
+    tool, or AI agent/model is strictly prohibited.
+- **Third-Party Components:** Licensed under their respective terms as listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
