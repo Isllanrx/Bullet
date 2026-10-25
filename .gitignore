@@ -54,18 +54,8 @@ relay-worker/.dev.vars
 *.p12
 *.pfx
 
-# Documentação técnica, arquitetura, engenharia reversa e contexto de IA (privados / migrados para Isllanrx/bullet_dll)
+# Documentação técnica e diagnósticos locais (ADR-048)
 docs/
-.claude/
-.agents/
-.serena/
-.worktrees/
-CLAUDE.md
-AGENTS.md
-**/CLAUDE.md
-crates/**/README.md
-CLAUDE.local.md
-codex-session-*.md
 native-integration-diagnostics.json
 graphify-out/
 
