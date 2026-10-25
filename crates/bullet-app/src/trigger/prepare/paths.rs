@@ -6,6 +6,8 @@ pub struct ResolvedPaths {
     pub tools_source: ToolsSource,
     pub ltk_host_exe: PathBuf,
     pub ltk_dll_path: PathBuf,
+    pub native_host_exe: PathBuf,
+    pub native_dll_path: PathBuf,
     pub library_dir: PathBuf,
     pub mods_dir: PathBuf,
     pub overlay_dir: PathBuf,
@@ -41,16 +43,43 @@ impl ResolvedPaths {
                 info!(tools = %tools_dir.display(), "Injection tools found in Bullet's own folder");
             }
             ToolsSource::Missing => {
-                error!(
-                    expected = %tools_dir.display(),
-                    "Injection tools not found. Place ltk_patcher_host.exe and ltk_patcher_dll.dll \
-                     in that folder — no skin can be injected until then"
-                );
+                if bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled() {
+                    error!(
+                        expected = %tools_dir.display(),
+                        "Native injection backend not found. Place bullet-native-host.exe and bullet_native_dll.dll \
+                         in that folder — no skin can be prepared until then"
+                    );
+                } else {
+                    error!(
+                        expected = %tools_dir.display(),
+                        "Injection tools not found. Place ltk_patcher_host.exe and ltk_patcher_dll.dll \
+                         in that folder — no skin can be injected until then"
+                    );
+                }
             }
         }
 
         let ltk_host_exe = tools_dir.join(bullet_inject::ltk_host::HOST_EXE);
         let ltk_dll_path = tools_dir.join(bullet_inject::ltk_host::DLL_FILE);
+
+        let find_native = |name: &str| -> PathBuf {
+            let direct = tools_dir.join(name);
+            if direct.is_file() {
+                return direct;
+            }
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(parent) = exe.parent() {
+                    let candidate = parent.join(name);
+                    if candidate.is_file() {
+                        return candidate;
+                    }
+                }
+            }
+            direct
+        };
+
+        let native_host_exe = find_native("bullet-native-host.exe");
+        let native_dll_path = find_native("bullet_native_dll.dll");
 
         let mut candidate_library_dirs =
             vec![app_data_dir.join("library"), app_data_dir.join("skins")];
@@ -88,6 +117,8 @@ impl ResolvedPaths {
             tools_source: source,
             ltk_host_exe,
             ltk_dll_path,
+            native_host_exe,
+            native_dll_path,
             library_dir,
             mods_dir,
             overlay_dir,
@@ -107,6 +138,27 @@ pub enum ToolsSource {
 }
 
 pub(crate) fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource) {
+    if bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled() {
+        let native_complete = |dir: &PathBuf| {
+            dir.join("bullet-native-host.exe").is_file()
+                && dir.join("bullet_native_dll.dll").is_file()
+        };
+
+        if let Some(dir) = candidates.iter().find(|dir| native_complete(dir)) {
+            info!(tools = %dir.display(), "Native injection backend (Bullet Host + DLL) found");
+            return (dir.clone(), ToolsSource::Own);
+        }
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                if native_complete(&parent.to_path_buf()) {
+                    info!(tools = %parent.display(), "Native injection backend found beside executable");
+                    return (parent.to_path_buf(), ToolsSource::Own);
+                }
+            }
+        }
+    }
+
     let complete = |dir: &PathBuf| {
         dir.join(bullet_inject::ltk_host::HOST_EXE).is_file()
             && dir.join(bullet_inject::ltk_host::DLL_FILE).is_file()
@@ -124,6 +176,9 @@ pub(crate) fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource
 }
 
 pub fn required_tool_files(paths: &ResolvedPaths) -> Vec<PathBuf> {
+    if bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled() {
+        return vec![paths.native_host_exe.clone(), paths.native_dll_path.clone()];
+    }
     vec![paths.ltk_host_exe.clone(), paths.ltk_dll_path.clone()]
 }
 

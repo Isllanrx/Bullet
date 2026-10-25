@@ -2,6 +2,79 @@ use super::overlay::measure_overlay;
 use super::*;
 use bullet_core::state::new_state_channel;
 
+#[tokio::test]
+async fn native_game_paths_reject_before_filesystem_or_process_work() {
+    let dir = std::env::temp_dir().join(format!("bullet_unavailable_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_legacy.exe"));
+    config.provider_kind = crate::provider::ProviderKind::Native;
+    let (tx, rx) = new_state_channel();
+    let pipeline = InjectionPipeline::new(config, Some(tx));
+    for arm in [false, true] {
+        let error = if arm {
+            pipeline
+                .arm(&[])
+                .await
+                .err()
+                .expect("native arm unsupported")
+        } else {
+            pipeline
+                .execute(&[], 0)
+                .await
+                .err()
+                .expect("native execute unsupported")
+        };
+        let message = error.to_string();
+        assert!(
+            message.contains("NATIVE_GAME_INTEGRATION_NOT_IMPLEMENTED"),
+            "{message}"
+        );
+        let InjectionStatus::Failed { error } = &rx.borrow().injection else {
+            panic!("unsupported integration must publish failure");
+        };
+        assert!(
+            !error.contains("Vanguard"),
+            "unattempted operation is not an OS rejection"
+        );
+        assert!(!dir.exists());
+    }
+}
+
+#[tokio::test]
+async fn configured_native_target_reaches_binary_validation() {
+    let dir = std::env::temp_dir().join(format!("bullet_native_target_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_legacy.exe"));
+    config.provider_kind = crate::provider::ProviderKind::Native;
+    config.native_host_exe = Some(dir.join("missing_native_host.exe"));
+    config.native_dll_path = Some(dir.join("missing_native_dll.dll"));
+    config.native_target = Some(NativeWindowTarget {
+        window_title: "Owned Test Window".into(),
+        image_name: "owned-test.exe".into(),
+    });
+    let pipeline = InjectionPipeline::new(config, None);
+    let error = pipeline
+        .arm(&[])
+        .await
+        .err()
+        .expect("missing DLL must fail");
+    assert!(error.to_string().contains("Native DLL not found"));
+    assert!(!dir.exists());
+}
+
+#[tokio::test]
+async fn mock_pipeline_never_falls_through_to_legacy() {
+    let dir = std::env::temp_dir().join(format!("bullet_mock_guard_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_legacy.exe"));
+    config.provider_kind = crate::provider::ProviderKind::Mock;
+    let pipeline = InjectionPipeline::new(config, None);
+    let error = pipeline
+        .arm(&[])
+        .await
+        .err()
+        .expect("mock is not executable");
+    assert!(error.to_string().contains("MOCK_PROVIDER_NOT_EXECUTABLE"));
+    assert!(!dir.exists());
+}
+
 #[test]
 fn test_measure_overlay_counts_only_wads_and_reports_an_empty_tree() {
     let root = std::env::temp_dir().join(format!("bullet_measure_overlay_{}", std::process::id()));
@@ -28,6 +101,10 @@ fn test_measure_overlay_counts_only_wads_and_reports_an_empty_tree() {
 
 fn temp_config(dir: &std::path::Path, host_exe: PathBuf) -> PipelineConfig {
     PipelineConfig {
+        provider_kind: crate::provider::ProviderKind::LtkLegacy,
+        native_host_exe: None,
+        native_dll_path: None,
+        native_target: None,
         ltk_host_exe: host_exe,
         ltk_dll_path: dir.join("ltk_patcher_dll.dll"),
         ltk_flags: 0,

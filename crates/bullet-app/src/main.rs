@@ -15,6 +15,7 @@ const INSTANCE_NAME: &str = "bullet";
 const BLOCKING_TASKS_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 fn main() -> Result<()> {
+    boot::cli::attach_parent_console();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -25,14 +26,16 @@ fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    if args.get(1).map(String::as_str) == Some(bullet_app::injector_install::INSTALL_FLAG) {
-        std::process::exit(boot::injector::install_injector_elevated(&args[2..]).await);
+    if let Some(code) = boot::cli::handle_cli_args(&args).await? {
+        std::process::exit(code);
     }
 
     let state_dir_resolved = state_dir();
     let state_dir_path = state_dir_resolved
         .as_ref()
         .map_or_else(|_| std::env::temp_dir().join("Bullet_state"), Clone::clone);
+
+    bullet_platform::preferences::USE_NATIVE_ENGINE.load();
 
     let mut lock_failure = None;
     let instance_guard = match bullet_platform::single_instance::SingleInstanceGuard::acquire(
@@ -94,25 +97,23 @@ async fn run() -> Result<()> {
 
     boot::reports::remove_retired_files(&state_dir_path);
 
-    let lcu_observer = bullet_lcu::observer::LcuObserver::new(state_tx.clone(), None);
-    supervisor.spawn_essential("lcu-observer", move |child_token| async move {
-        lcu_observer.run(child_token).await;
+    let lcu = bullet_lcu::observer::LcuObserver::new(state_tx.clone(), None);
+    supervisor.spawn_essential("lcu-observer", move |t| async move {
+        lcu.run(t).await;
     });
 
     boot::tasks::spawn_log_drop_monitor(&mut supervisor, logging.dropped.clone());
 
     let (party_tx, party_rx) =
         tokio::sync::mpsc::unbounded_channel::<bullet_app::party_manager::PartyCommand>();
-    {
-        let manager = bullet_app::party_manager::PartyManager::new(
-            state_tx.clone(),
-            state_rx.clone(),
-            state_dir_path.clone(),
-        );
-        supervisor.spawn_essential("party-manager", move |child_token| async move {
-            manager.run(child_token, party_rx).await;
-        });
-    }
+    let party_mgr = bullet_app::party_manager::PartyManager::new(
+        state_tx.clone(),
+        state_rx.clone(),
+        state_dir_path.clone(),
+    );
+    supervisor.spawn_essential("party-manager", move |t| async move {
+        party_mgr.run(t, party_rx).await;
+    });
 
     let (library_root, library_has_content) = boot::library::resolve_library(&mut paths);
 
@@ -142,8 +143,12 @@ async fn run() -> Result<()> {
     let installed_dll = bullet_app::ltk_release::InstalledDllCache::default();
     let game_build =
         boot::reports::report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
-    boot::reports::report_ltk_dll_support(game_build, installed_dll.read(&paths.ltk_dll_path));
-    boot::reports::report_injector_files(&[&paths.ltk_host_exe, &paths.ltk_dll_path]);
+    boot::reports::report_active_injector_files(
+        bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled(),
+        &paths,
+        game_build,
+        &installed_dll,
+    );
 
     let required_tools = trigger::required_tool_files(&paths);
 
@@ -154,13 +159,14 @@ async fn run() -> Result<()> {
         text.status_waiting_league
     };
 
-    let tray = match bullet_platform::tray::SystemTray::spawn(initial_status) {
-        Ok(tray) => Some(tray),
-        Err(e) => {
+    let tray = bullet_platform::tray::SystemTray::spawn(initial_status)
+        .map_err(|e| {
             error!(error = %e, "Could not create the system tray icon; Bullet has no visible UI and can only be closed from the Task Manager");
-            None
-        }
-    };
+            e
+        })
+        .ok();
+    let native_engine = bullet_platform::preferences::USE_NATIVE_ENGINE.load();
+    info!(enabled = native_engine, "Native engine setting loaded");
     let injection = bullet_platform::preferences::INJECTION.load();
     info!(enabled = injection, "Skin injection setting loaded");
     let random_skin = bullet_platform::preferences::RANDOM_SKIN.load();
@@ -248,11 +254,7 @@ async fn run() -> Result<()> {
             logs_dir: tray_logs_dir,
             tools_dir: tray_tools_dir,
             mods_dir: tray_mods_dir,
-            mod_roots: paths
-                .mod_roots
-                .iter()
-                .map(|root| root.path.clone())
-                .collect(),
+            mod_roots: paths.mod_roots.iter().map(|r| r.path.clone()).collect(),
             state_dir: state_dir_path.clone(),
             notifier: tray_controller.clone(),
             party_tx: party_tx.clone(),
@@ -355,7 +357,6 @@ async fn run() -> Result<()> {
             );
             supervisor.spawn_essential("overlay-session", move |child_token| async move {
                 session.run(child_token).await;
-
                 drop(overlay);
             });
         }
@@ -364,19 +365,14 @@ async fn run() -> Result<()> {
         }
     }
 
-    let injection_trigger =
-        trigger::InjectionTrigger::new(state_tx.clone(), state_rx.clone(), paths);
-    supervisor.spawn_essential("injection-trigger", move |child_token| async move {
-        injection_trigger.run(child_token).await;
+    let trigger = trigger::InjectionTrigger::new(state_tx.clone(), state_rx.clone(), paths);
+    supervisor.spawn_essential("injection-trigger", move |t| async move {
+        trigger.run(t).await;
     });
 
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
-            info!("Received shutdown signal (Ctrl+C)");
-        }
-        _ = shutdown_token.cancelled() => {
-            info!("Shutdown token triggered");
-        }
+        _ = tokio::signal::ctrl_c() => { info!("Received shutdown signal (Ctrl+C)"); }
+        _ = shutdown_token.cancelled() => { info!("Shutdown token triggered"); }
     }
 
     info!("Shutting down supervised tasks");
@@ -389,9 +385,10 @@ async fn run() -> Result<()> {
         );
     }
     info!("Bullet shut down cleanly");
-    let update = boot::update::prepare_install(&pending_update);
-    boot::update::run_installer(update, instance_guard);
+    boot::update::run_installer(
+        boot::update::prepare_install(&pending_update),
+        instance_guard,
+    );
     drop(logging);
-
     Ok(())
 }

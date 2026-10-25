@@ -69,6 +69,11 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 - **Every third-party binary is verified first.** An injector signed by anyone other than League Toolkit's publisher, or with a broken signature, is refused; an unsigned file from an official LTK Manager release is accepted. If a
   file is missing, the user is told where it was expected. The injector never falls back to anything silently.
 
+## Technical Interoperability & Boundaries
+
+Bullet drives ltk_patcher_host.exe and ltk_patcher_dll.dll strictly for overlay archive redirection.
+Arbitrary memory tampering, anti-cheat tampering, and process identity spoofing are strictly prohibited.
+
 ## No suspension
 
 Bullet never suspends the game or opens its threads. The anti-cheat refuses it even from an elevated process

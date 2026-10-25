@@ -61,24 +61,28 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         detail,
     };
     let limit = facts.installed_dll.as_ref().and_then(|dll| dll.build_limit);
-    let dll = match facts
-        .game_build
-        .zip(limit)
-        .map(|(stamp, limit)| dll_support(stamp, limit, facts.now_secs))
-    {
-        Some(DllSupport::Supported) => check(text.check_dll, true, text.detail_ok.to_owned()),
-        Some(DllSupport::SupportedUntilNextPatch { days_left }) if days_left < 0 => {
-            check(text.check_dll, false, text.detail_dll_past_limit.to_owned())
+    let dll = if bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled() {
+        check(text.check_dll, true, text.detail_ok.to_owned())
+    } else {
+        match facts
+            .game_build
+            .zip(limit)
+            .map(|(stamp, limit)| dll_support(stamp, limit, facts.now_secs))
+        {
+            Some(DllSupport::Supported) => check(text.check_dll, true, text.detail_ok.to_owned()),
+            Some(DllSupport::SupportedUntilNextPatch { days_left }) if days_left < 0 => {
+                check(text.check_dll, false, text.detail_dll_past_limit.to_owned())
+            }
+            Some(DllSupport::SupportedUntilNextPatch { days_left }) => check(
+                text.check_dll,
+                false,
+                fill(text.detail_dll_days_left, "n", &days_left.to_string()),
+            ),
+            Some(DllSupport::Refused) => {
+                check(text.check_dll, false, text.detail_dll_refused.to_owned())
+            }
+            None => check(text.check_dll, false, text.detail_dll_unknown.to_owned()),
         }
-        Some(DllSupport::SupportedUntilNextPatch { days_left }) => check(
-            text.check_dll,
-            false,
-            fill(text.detail_dll_days_left, "n", &days_left.to_string()),
-        ),
-        Some(DllSupport::Refused) => {
-            check(text.check_dll, false, text.detail_dll_refused.to_owned())
-        }
-        None => check(text.check_dll, false, text.detail_dll_unknown.to_owned()),
     };
     let installed_sha = facts.installed_dll.as_ref().map(|dll| dll.sha256.as_str());
     let offered = facts

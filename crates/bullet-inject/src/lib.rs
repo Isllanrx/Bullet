@@ -8,3 +8,4 @@ pub use injector::{dll_validator, ltk_host, overlay_process, trust};
 
 pub mod error;
 pub mod pipeline;
+pub mod provider;

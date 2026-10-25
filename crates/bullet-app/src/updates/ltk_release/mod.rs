@@ -10,6 +10,9 @@ use tracing::{debug, info, warn};
 
 use crate::update_check::{Version, is_busy};
 
+pub mod receipt;
+pub use receipt::{ArtifactReceipt, ProvenanceStatus, ReleaseInspectionReceipt};
+
 pub const LTK_REPOSITORY: &str = "https://github.com/LeagueToolkit/ltk-manager";
 
 const LTK_API: &str = "https://api.github.com/repos/LeagueToolkit/ltk-manager";
@@ -145,8 +148,20 @@ impl Verdicts {
     pub fn status(&self, newest_first: &[String]) -> Option<LtkStatus> {
         let latest = newest_first.first()?;
         let latest_trusted = matches!(self.get(latest)?, Injector::Trusted { .. });
+        let latest_version = Version::parse(latest);
         let compatible = newest_first.iter().find_map(|v| match self.get(v) {
-            Some(Injector::Trusted { dll_sha256 }) => Some((v.clone(), dll_sha256.clone())),
+            Some(Injector::Trusted { dll_sha256 }) => {
+                let v_parsed = Version::parse(v);
+                let same_line = match (&latest_version, &v_parsed) {
+                    (Some(l), Some(curr)) => l.major == curr.major && l.minor == curr.minor,
+                    _ => false,
+                };
+                if same_line {
+                    Some((v.clone(), dll_sha256.clone()))
+                } else {
+                    None
+                }
+            }
             _ => None,
         });
         Some(LtkStatus {
@@ -317,8 +332,12 @@ pub fn remember_notified(state_dir: &Path, version: &str) {
 mod fetch;
 mod watch;
 
-pub use fetch::{compatible_version, download_injector, is_release_version};
-use fetch::{http_client, refresh};
+pub use fetch::http_client;
+use fetch::refresh;
+pub use fetch::{
+    compatible_version, download_injector, download_injector_with_receipt, inspect_release_receipt,
+    is_release_version,
+};
 pub use watch::{LtkCheck, LtkNotice, run};
 
 #[cfg(test)]

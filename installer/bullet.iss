@@ -78,6 +78,7 @@ Name: "{localappdata}\Bullet\library"
 
 [Files]
 Source: "..\dist\bullet.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "..\assets\bullet.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion

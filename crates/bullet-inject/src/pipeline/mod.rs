@@ -79,6 +79,13 @@ impl Drop for CancelOnDrop {
 
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
+    pub provider_kind: crate::provider::ProviderKind,
+
+    pub native_host_exe: Option<PathBuf>,
+
+    pub native_dll_path: Option<PathBuf>,
+    pub native_target: Option<NativeWindowTarget>,
+
     pub ltk_host_exe: PathBuf,
 
     pub ltk_dll_path: PathBuf,
@@ -92,6 +99,12 @@ pub struct PipelineConfig {
     pub build_timeout: Duration,
 
     pub late_budget: Duration,
+}
+
+#[derive(Debug, Clone)]
+pub struct NativeWindowTarget {
+    pub window_title: String,
+    pub image_name: String,
 }
 
 pub struct InjectionOutcome {
@@ -129,22 +142,7 @@ impl InjectionPipeline {
     fn validate_patcher_binaries(
         &self,
     ) -> Result<(crate::trust::Provenance, crate::trust::Provenance), InjectError> {
-        let host = crate::trust::verify_injector_file(&self.config.ltk_host_exe)?;
-        let dll = crate::trust::verify_injector_file(&self.config.ltk_dll_path)?;
-        let path = self.config.ltk_dll_path.display().to_string();
-        let bytes = std::fs::read(&self.config.ltk_dll_path).map_err(|e| {
-            InjectError::UntrustedInjector {
-                path: path.clone(),
-                reason: format!("unreadable: {e}"),
-            }
-        })?;
-        if crate::trust::dll_refuses_other_hosts(&bytes) {
-            return Err(InjectError::UntrustedInjector {
-                path,
-                reason: "this patcher DLL only serves LTK Manager; install the injector the control panel offers".into(),
-            });
-        }
-        Ok((host, dll))
+        validation::validate_patcher_binaries(&self.config)
     }
 
     pub async fn execute(
@@ -159,6 +157,8 @@ impl InjectionPipeline {
             mods = ?mods,
             "Starting injection pipeline"
         );
+
+        self.require_game_integration()?;
 
         if let Err(e) = self.validate_patcher_binaries() {
             error!(error = %e, "Injection aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Bullet");
@@ -227,7 +227,9 @@ impl InjectionPipeline {
 
         info!(mods = ?mods, "Arming the patcher before the game starts");
 
-        let (host, dll) = match self.validate_patcher_binaries() {
+        self.require_game_integration()?;
+
+        let (_host, _dll) = match self.validate_patcher_binaries() {
             Ok(provenance) => provenance,
             Err(e) => {
                 error!(error = %e, "Arming aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Bullet");
@@ -237,12 +239,26 @@ impl InjectionPipeline {
                 return Err(e);
             }
         };
+        let (host_path, dll_path) = match self.config.provider_kind {
+            crate::provider::ProviderKind::Native => (
+                self.config
+                    .native_host_exe
+                    .as_deref()
+                    .unwrap_or(&self.config.ltk_host_exe),
+                self.config
+                    .native_dll_path
+                    .as_deref()
+                    .unwrap_or(&self.config.ltk_dll_path),
+            ),
+            _ => (
+                self.config.ltk_host_exe.as_path(),
+                self.config.ltk_dll_path.as_path(),
+            ),
+        };
         info!(
-            publisher = crate::trust::LTK_PUBLISHER,
-            host = %self.config.ltk_host_exe.display(),
-            host_provenance = host.as_str(),
-            dll = %self.config.ltk_dll_path.display(),
-            dll_provenance = dll.as_str(),
+            provider = ?self.config.provider_kind,
+            host = %host_path.display(),
+            dll = %dll_path.display(),
             "Injector files accepted"
         );
 
@@ -303,16 +319,6 @@ impl InjectionPipeline {
         }
     }
 
-    async fn spawn_patcher(&self) -> Result<OverlayProcess, InjectError> {
-        OverlayProcess::spawn_ltk_host(
-            &self.config.ltk_host_exe,
-            &self.config.overlay_config.overlay_dir,
-            self.config.ltk_flags,
-            crate::ltk_host::HostLogLevel::from_env(),
-        )
-        .await
-    }
-
     pub async fn confirm_hook(
         &self,
         overlay: &mut OverlayProcess,
@@ -361,6 +367,8 @@ impl InjectionPipeline {
 }
 
 mod overlay;
+mod spawn;
+mod validation;
 
 #[cfg(test)]
 mod tests;
