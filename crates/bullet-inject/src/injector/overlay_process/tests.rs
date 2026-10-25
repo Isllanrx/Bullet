@@ -160,7 +160,10 @@ async fn a_reconnect_waits_for_a_new_hook_instead_of_the_first_games_one() {
 async fn a_dll_refusing_this_host_is_not_read_as_hooked() {
     let output = "status 0.01 injecting scanning\n\
                   dll 5.20 1234 5678 ERROR ltk_patcher_dll::verify: host verification failed, refusing overlay: [VRF00000008]\n";
-    assert_eq!(signals_of(output).await, vec![PatcherSignal::Armed]);
+    assert_eq!(
+        signals_of(output).await,
+        vec![PatcherSignal::Armed, PatcherSignal::Failed]
+    );
 }
 
 #[tokio::test]

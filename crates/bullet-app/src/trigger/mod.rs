@@ -347,46 +347,6 @@ impl InjectionTrigger {
 
         info!("Injection supervisor task terminated cleanly");
     }
-
-    fn effective_game_dir(&self, pid: Option<u32>) -> PathBuf {
-        let from_process = pid.and_then(|pid| match ProcessFinder::get_process_path(pid) {
-            Ok(Some(exe_path)) => exe_path
-                .parent()
-                .and_then(bullet_platform::paths::normalize_game_dir),
-            Ok(None) => None,
-            Err(e) => {
-                debug!(pid, error = %e, "The game process path could not be read; using the known game folder");
-                None
-            }
-        });
-
-        let dir = from_process
-            .or_else(|| bullet_platform::paths::normalize_game_dir(&self.paths.game_dir))
-            .or_else(bullet_platform::paths::discover_game_dir)
-            .unwrap_or_else(|| self.paths.game_dir.clone());
-        if dir.is_dir() {
-            bullet_inject::overlay_builder::prewarm_game_index(&dir);
-        } else {
-            warn!(game = %dir.display(), "The game folder is not known or does not exist; the overlay build may fail");
-        }
-        dir
-    }
-
-    fn pipeline_config(&self, game_dir: PathBuf) -> PipelineConfig {
-        PipelineConfig {
-            ltk_host_exe: self.paths.ltk_host_exe.clone(),
-            ltk_dll_path: self.paths.ltk_dll_path.clone(),
-            ltk_flags: bullet_inject::ltk_host::default_flags(),
-            overlay_config: OverlayConfig {
-                mods_dir: self.paths.mods_dir.clone(),
-                overlay_dir: self.paths.overlay_dir.clone(),
-                game_dir,
-            },
-            hook_timeout: bullet_inject::pipeline::DEFAULT_HOOK_TIMEOUT,
-            build_timeout: bullet_inject::pipeline::DEFAULT_BUILD_TIMEOUT,
-            late_budget: bullet_inject::pipeline::DEFAULT_LATE_BUDGET,
-        }
-    }
 }
 
 const ARM_DEBOUNCE: Duration = Duration::from_millis(900);

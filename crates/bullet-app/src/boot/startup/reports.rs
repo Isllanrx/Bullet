@@ -156,3 +156,17 @@ pub fn remove_retired_files(state_dir: &std::path::Path) {
         }
     }
 }
+
+pub fn report_active_injector_files(
+    native_engine: bool,
+    paths: &crate::trigger::ResolvedPaths,
+    game_build: Option<u32>,
+    installed_dll: &bullet_app::ltk_release::InstalledDllCache,
+) {
+    if native_engine {
+        report_injector_files(&[&paths.native_host_exe, &paths.native_dll_path]);
+    } else {
+        report_ltk_dll_support(game_build, installed_dll.read(&paths.ltk_dll_path));
+        report_injector_files(&[&paths.ltk_host_exe, &paths.ltk_dll_path]);
+    }
+}

@@ -32,3 +32,60 @@ pub(super) fn note_wanted(last: &mut Option<WantedSkin>, wanted: WantedSkin, pha
         *last = Some(wanted);
     }
 }
+
+impl InjectionTrigger {
+    pub(super) fn effective_game_dir(&self, pid: Option<u32>) -> PathBuf {
+        let from_process = pid.and_then(|pid| match ProcessFinder::get_process_path(pid) {
+            Ok(Some(exe_path)) => exe_path
+                .parent()
+                .and_then(bullet_platform::paths::normalize_game_dir),
+            Ok(None) => None,
+            Err(e) => {
+                debug!(pid, error = %e, "The game process path could not be read; using the known game folder");
+                None
+            }
+        });
+
+        let dir = from_process
+            .or_else(|| bullet_platform::paths::normalize_game_dir(&self.paths.game_dir))
+            .or_else(bullet_platform::paths::discover_game_dir)
+            .unwrap_or_else(|| self.paths.game_dir.clone());
+        if dir.is_dir() {
+            bullet_inject::overlay_builder::prewarm_game_index(&dir);
+        } else {
+            warn!(game = %dir.display(), "The game folder is not known or does not exist; the overlay build may fail");
+        }
+        dir
+    }
+
+    pub(super) fn pipeline_config(&self, game_dir: PathBuf) -> PipelineConfig {
+        let provider_kind = if bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled() {
+            bullet_inject::provider::ProviderKind::Native
+        } else {
+            bullet_inject::provider::ProviderKind::LtkLegacy
+        };
+
+        PipelineConfig {
+            provider_kind,
+            native_host_exe: Some(self.paths.native_host_exe.clone()),
+            native_dll_path: Some(self.paths.native_dll_path.clone()),
+            native_target: (provider_kind == bullet_inject::provider::ProviderKind::Native).then(
+                || bullet_inject::pipeline::NativeWindowTarget {
+                    window_title: "League of Legends (TM) Client".into(),
+                    image_name: "League of Legends.exe".into(),
+                },
+            ),
+            ltk_host_exe: self.paths.ltk_host_exe.clone(),
+            ltk_dll_path: self.paths.ltk_dll_path.clone(),
+            ltk_flags: bullet_inject::ltk_host::default_flags(),
+            overlay_config: OverlayConfig {
+                mods_dir: self.paths.mods_dir.clone(),
+                overlay_dir: self.paths.overlay_dir.clone(),
+                game_dir,
+            },
+            hook_timeout: bullet_inject::pipeline::DEFAULT_HOOK_TIMEOUT,
+            build_timeout: bullet_inject::pipeline::DEFAULT_BUILD_TIMEOUT,
+            late_budget: bullet_inject::pipeline::DEFAULT_LATE_BUDGET,
+        }
+    }
+}

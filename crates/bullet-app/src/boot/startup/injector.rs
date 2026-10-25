@@ -46,7 +46,31 @@ pub async fn install_injector_elevated(args: &[String]) -> i32 {
     if redirected || !bullet_app::injector_install::is_bullet_tools_folder(&tools, exe.as_deref()) {
         return 3;
     }
-    match bullet_app::injector_install::install_release(version, &tools).await {
+    let client = match bullet_app::ltk_release::http_client() {
+        Ok(c) => c,
+        Err(_) => return bullet_app::injector_install::EXIT_FAILED,
+    };
+    let inspect_dir = std::env::temp_dir().join(format!(
+        "bullet_inspect_elevated_{}_{}",
+        std::process::id(),
+        uuid::Uuid::new_v4()
+    ));
+    let _ = std::fs::create_dir_all(&inspect_dir); // ignore-ok: directory creation error caught by inspect
+    let receipt = match bullet_app::ltk_release::inspect_release_receipt(
+        &client,
+        version,
+        &inspect_dir,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => {
+            let _ = std::fs::remove_dir_all(&inspect_dir); // ignore-ok: cleanup temp inspect directory
+            return bullet_app::injector_install::EXIT_FAILED;
+        }
+    };
+    let _ = std::fs::remove_dir_all(&inspect_dir); // ignore-ok: cleanup temp inspect directory
+    match bullet_app::injector_install::install_release_with_receipt(&receipt, &tools).await {
         Ok(()) => 0,
         Err(e) => e.exit_code(),
     }
@@ -105,6 +129,30 @@ pub async fn injector_unusable(
     state_dir: &std::path::Path,
 ) -> bool {
     use bullet_app::startup::{InjectorRefusal, injector_refusal};
+
+    let _ = bullet_app::injector_install::recover_pending_transaction(&paths.tools_dir); // ignore-ok: startup recovery of interrupted injector transactions
+
+    if bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled() {
+        if paths.native_host_exe.is_file() && paths.native_dll_path.is_file() {
+            info!(
+                host = %paths.native_host_exe.display(),
+                dll = %paths.native_dll_path.display(),
+                "Bullet Native engine binaries verified and active"
+            );
+            return false;
+        }
+        warn!(
+            host = %paths.native_host_exe.display(),
+            dll = %paths.native_dll_path.display(),
+            "Bullet Native engine selected, but native binaries are missing from the tools folder"
+        );
+        let text = bullet_platform::i18n::text();
+        bullet_platform::shell::message_box_warning(
+            text.missing_tools_title,
+            "Bullet Native engine is enabled, but bullet-native-host.exe or bullet_native_dll.dll is missing from the tools directory.",
+        );
+        return true;
+    }
 
     let text = bullet_platform::i18n::text();
     let (title, body) = match injector_refusal(&paths.ltk_host_exe, &paths.ltk_dll_path) {

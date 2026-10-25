@@ -33,18 +33,38 @@ fn published_versions_come_newest_first_without_drafts_or_prereleases() {
 #[test]
 fn the_compatible_version_is_the_newest_release_bullet_accepts() {
     let mut verdicts = Verdicts::default();
-    verdicts.insert("1.28.0", Injector::Untrusted);
-    verdicts.insert("1.27.0", trusted(DLL_A));
+    verdicts.insert("1.28.1", Injector::Untrusted);
+    verdicts.insert("1.28.0", trusted(DLL_A));
     verdicts.insert("1.26.1", trusted(DLL_B));
     let status = verdicts
-        .status(&list(&["1.28.0", "1.27.0", "1.26.1"]))
+        .status(&list(&["1.28.1", "1.28.0", "1.26.1"]))
         .expect("status");
-    assert_eq!(status.latest, "1.28.0");
+    assert_eq!(status.latest, "1.28.1");
     assert!(!status.latest_trusted);
-    assert_eq!(status.compatible.as_deref(), Some("1.27.0"));
+    assert_eq!(status.compatible.as_deref(), Some("1.28.0"));
     assert_eq!(status.compatible_dll.as_deref(), Some(DLL_A));
     assert_eq!(verdicts.status(&list(&["9.9.9"])), None);
     assert_eq!(verdicts.status(&[]), None);
+}
+
+#[test]
+fn does_not_silently_downgrade_across_minor_versions_when_latest_line_is_untrusted() {
+    let mut verdicts = Verdicts::default();
+    verdicts.insert("1.30.3", Injector::Untrusted);
+    verdicts.insert("1.30.2", Injector::Untrusted);
+    verdicts.insert("1.30.1", Injector::Untrusted);
+    verdicts.insert("1.30.0", Injector::Untrusted);
+    verdicts.insert("1.29.1", trusted(DLL_A));
+    let status = verdicts
+        .status(&list(&["1.30.3", "1.30.2", "1.30.1", "1.30.0", "1.29.1"]))
+        .expect("status");
+    assert_eq!(status.latest, "1.30.3");
+    assert!(!status.latest_trusted);
+    assert_eq!(
+        status.compatible, None,
+        "must not downgrade across minor versions to 1.29.1"
+    );
+    assert_eq!(status.compatible_dll, None);
 }
 
 #[test]
@@ -77,17 +97,17 @@ fn an_update_is_offered_only_when_the_installed_dll_differs() {
 #[test]
 fn the_cache_orders_versions_numerically() {
     let mut verdicts = Verdicts::default();
-    verdicts.insert("1.9.0", trusted(DLL_B));
-    verdicts.insert("1.10.0", Injector::Untrusted);
+    verdicts.insert("1.10.0", trusted(DLL_B));
+    verdicts.insert("1.10.1", Injector::Untrusted);
     let status = verdicts.status_from_cache().expect("status");
-    assert_eq!(status.latest, "1.10.0");
-    assert_eq!(status.compatible.as_deref(), Some("1.9.0"));
+    assert_eq!(status.latest, "1.10.1");
+    assert_eq!(status.compatible.as_deref(), Some("1.10.0"));
 }
 
 #[test]
 fn verdicts_round_trip_and_drop_what_they_cannot_read() {
     let dir = std::env::temp_dir().join(format!("bullet_ltk_check_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture may not exist yet
     std::fs::create_dir_all(&dir).expect("fixture dir");
     assert_eq!(load_verdicts(&dir), Verdicts::default());
 
@@ -110,26 +130,26 @@ fn verdicts_round_trip_and_drop_what_they_cannot_read() {
     );
     std::fs::write(dir.join(VERDICTS_FILE), garbage).expect("write");
     assert_eq!(load_verdicts(&dir), Verdicts::default());
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture cleanup
 }
 
 #[test]
 fn a_new_injector_is_announced_once() {
     let dir = std::env::temp_dir().join(format!("bullet_ltk_notice_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture may not exist yet
     std::fs::create_dir_all(&dir).expect("fixture dir");
     assert!(!already_notified(&dir, "1.27.0"));
     remember_notified(&dir, "1.27.0");
     assert!(already_notified(&dir, "1.27.0"));
     assert!(!already_notified(&dir, "1.28.0"));
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture cleanup
 }
 
 #[tokio::test]
 #[ignore = "downloads LTK Manager releases from GitHub"]
 async fn the_newest_usable_release_is_found_online() {
     let dir = std::env::temp_dir().join(format!("bullet_ltk_online_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture may not exist yet
     std::fs::create_dir_all(&dir).expect("fixture dir");
     let version = compatible_version(&dir).await.expect("a usable release");
     let verdicts = load_verdicts(&dir);
@@ -137,7 +157,7 @@ async fn the_newest_usable_release_is_found_online() {
         verdicts.get(&version),
         Some(Injector::Trusted { .. })
     ));
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture cleanup
 }
 
 #[test]
@@ -174,7 +194,7 @@ fn only_dotted_numbers_pass_as_a_release_version_for_the_elevated_install() {
 #[test]
 fn verdicts_cached_before_the_host_check_are_checked_again() {
     let dir = std::env::temp_dir().join(format!("bullet_ltk_host_era_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture may not exist yet
     std::fs::create_dir_all(&dir).expect("fixture dir");
     let signed_only = format!(
         "signed-by {}\n1.30.1 trusted {DLL_A}\n",
@@ -182,5 +202,56 @@ fn verdicts_cached_before_the_host_check_are_checked_again() {
     );
     std::fs::write(dir.join(VERDICTS_FILE), signed_only).expect("write");
     assert_eq!(load_verdicts(&dir), Verdicts::default());
-    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture cleanup
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture // ignore-ok: fixture cleanup
+}
+
+#[test]
+fn receipt_serialization_and_tamper_detection() {
+    let host_bytes = b"fake host binary bytes for testing";
+    let dll_bytes = b"fake patcher dll binary bytes for testing";
+    let host_sha256 = bullet_inject::dll_validator::compute_sha256(host_bytes);
+    let dll_sha256 = bullet_inject::dll_validator::compute_sha256(dll_bytes);
+
+    let receipt = ReleaseInspectionReceipt::new(
+        "1.28.1".to_string(),
+        "31e9dc848e46f42fe92f4dd7e22f250a12ede157".to_string(),
+        vec![
+            ArtifactReceipt {
+                name: INJECTOR_FILES[0].to_string(),
+                size_bytes: host_bytes.len(),
+                sha256: host_sha256,
+                provenance: ProvenanceStatus::SignedAuthenticode,
+            },
+            ArtifactReceipt {
+                name: INJECTOR_FILES[1].to_string(),
+                size_bytes: dll_bytes.len(),
+                sha256: dll_sha256,
+                provenance: ProvenanceStatus::SignedAuthenticode,
+            },
+        ],
+    );
+
+    assert!(receipt.is_trusted());
+    assert_eq!(receipt.version, "1.28.1");
+    assert_eq!(
+        receipt.commit_sha,
+        "31e9dc848e46f42fe92f4dd7e22f250a12ede157"
+    );
+
+    assert!(receipt.verify_bytes(INJECTOR_FILES[0], host_bytes).is_ok());
+    assert!(receipt.verify_bytes(INJECTOR_FILES[1], dll_bytes).is_ok());
+
+    let tampered_bytes = b"tampered host binary bytes";
+    let err = receipt
+        .verify_bytes(INJECTOR_FILES[0], tampered_bytes)
+        .unwrap_err();
+    assert!(err.contains("size mismatch") || err.contains("sha256 mismatch"));
+
+    let dir = std::env::temp_dir().join(format!("bullet_receipt_test_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create dir");
+    let receipt_path = dir.join("receipt.json");
+    receipt.save_to_file(&receipt_path).expect("save receipt");
+    let loaded = ReleaseInspectionReceipt::load_from_file(&receipt_path).expect("load receipt");
+    assert_eq!(receipt, loaded);
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup test fixture
 }
