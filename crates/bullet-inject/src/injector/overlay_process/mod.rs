@@ -20,18 +20,49 @@ pub enum PatcherSignal {
 }
 
 pub struct OverlayProcess {
-    child: Option<Child>,
+    pub(crate) child: Option<Child>,
 
-    _stdin: Option<ChildStdin>,
-    signals: mpsc::UnboundedReceiver<PatcherSignal>,
-    _stdout_reader: Option<tokio::task::JoinHandle<()>>,
-    _stderr_reader: Option<tokio::task::JoinHandle<()>>,
-    hooked: bool,
+    pub(crate) _stdin: Option<ChildStdin>,
+    pub(crate) signals: mpsc::UnboundedReceiver<PatcherSignal>,
+    pub(crate) _stdout_reader: Option<tokio::task::JoinHandle<()>>,
+    pub(crate) _stderr_reader: Option<tokio::task::JoinHandle<()>>,
+    pub(crate) hooked: bool,
 }
 
 const READER_DRAIN: Duration = Duration::from_millis(500);
 
 impl OverlayProcess {
+    pub async fn spawn_native_host(
+        host_exe: &Path,
+        overlay_dir: &Path,
+        pipe_name: &str,
+        target_pid: Option<u32>,
+    ) -> Result<Self, InjectError> {
+        native::spawn_native_host(host_exe, overlay_dir, pipe_name, target_pid, None).await
+    }
+
+    pub async fn spawn_native_game_host(
+        host_exe: &Path,
+        dll_path: &Path,
+        overlay_dir: &Path,
+        pipe_name: &str,
+        window_title: &str,
+        image_name: &str,
+    ) -> Result<Self, InjectError> {
+        native::spawn_native_host(
+            host_exe,
+            overlay_dir,
+            pipe_name,
+            None,
+            Some(native::HookLaunch {
+                dll_path,
+                window_title,
+                image_name,
+            }),
+        )
+        .await
+    }
+
     pub async fn spawn_ltk_host(
         host_exe: &Path,
         prefix: &Path,
@@ -319,20 +350,26 @@ async fn read_host_stdout<R: AsyncRead + Unpin>(out: R, tx: mpsc::UnboundedSende
             HostEvent::DllLog { level, message } => {
                 if ltk_host::is_end_of_life(message) {
                     error!(target: "overlay::dll", reason = %message, "Patcher DLL reached end of life; a refreshed DLL is required for this game patch");
+                    None
                 } else if ltk_host::is_expected_status(message) {
                     info!(target: "overlay::dll", reason = %message, "The patcher reported status c0000229, expected with the default hook flags");
+                    None
                 } else if ltk_host::joined_too_late(message) {
                     warn!(target: "overlay::dll", reason = %message, "The patcher DLL reached the game after it had started loading and stood down; the stock skin loads this match");
+                    None
                 } else if ltk_host::refused_this_host(message) {
-                    error!(target: "overlay::dll", reason = %message, "The patcher DLL only serves LTK Manager and refused the overlay; the stock skin loads this match. Install the injector the control panel offers");
+                    error!(target: "overlay::dll", reason = %message, "The patcher DLL only serves LTK Manager and refused the overlay; the stock skin loads this match");
+                    Some(PatcherSignal::Failed)
                 } else if let Some(wad) = ltk_host::redirected_wad(message) {
                     info!(target: "overlay::dll", wad = %wad, "The game opened this archive from the overlay");
+                    None
                 } else if ltk_host::is_dll_failure(level, message) {
                     warn!(target: "overlay::dll", level = %level, "{}", message);
+                    None
                 } else {
                     debug!(target: "overlay::dll", level = %level, "{}", message);
+                    None
                 }
-                None
             }
             HostEvent::Error { message } => {
                 warn!(target: "overlay::ltk", "{}", message);
@@ -350,6 +387,8 @@ async fn read_host_stdout<R: AsyncRead + Unpin>(out: R, tx: mpsc::UnboundedSende
         }
     }
 }
+
+pub(crate) mod native;
 
 #[cfg(test)]
 mod tests;

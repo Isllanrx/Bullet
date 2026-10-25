@@ -6,7 +6,7 @@ mod party;
 mod selection;
 mod updates;
 
-pub use diagnostics::{control_panel, startup};
+pub use diagnostics::{control_panel, native_integration, startup};
 pub use game::{auto_accept, live_game};
 pub use party::party_manager;
 pub(crate) use selection::book_store;

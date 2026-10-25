@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn http_client() -> Result<reqwest::Client, String> {
+pub fn http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .build()
@@ -104,6 +104,55 @@ pub async fn download_injector(version: &str) -> Result<Vec<(&'static str, Vec<u
     }
     info!(version, commit = %commit, "Injector downloaded from the commit the LTK Manager release tag points at");
     Ok(files)
+}
+
+pub async fn download_injector_with_receipt(
+    receipt: &ReleaseInspectionReceipt,
+) -> Result<Vec<(&'static str, Vec<u8>)>, String> {
+    let client = http_client()?;
+    let mut files = Vec::with_capacity(INJECTOR_FILES.len());
+    for name in INJECTOR_FILES {
+        let bytes = resource(&client, &receipt.commit_sha, name).await?;
+        receipt.verify_bytes(name, &bytes)?;
+        files.push((name, bytes));
+    }
+    info!(
+        version = %receipt.version,
+        commit = %receipt.commit_sha,
+        "Injector downloaded by immutable commit and verified against inspection receipt"
+    );
+    Ok(files)
+}
+
+pub async fn inspect_release_receipt(
+    client: &reqwest::Client,
+    version: &str,
+    dir: &Path,
+) -> Result<ReleaseInspectionReceipt, String> {
+    let commit = release_commit(client, version).await?;
+    let mut artifacts = Vec::with_capacity(INJECTOR_FILES.len());
+    for name in INJECTOR_FILES {
+        let bytes = resource(client, &commit, name).await?;
+        let path = dir.join(name);
+        std::fs::write(&path, &bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        let provenance = match bullet_inject::trust::verify_injector_file(&path) {
+            Ok(bullet_inject::trust::Provenance::Signed) => ProvenanceStatus::SignedAuthenticode,
+            Ok(bullet_inject::trust::Provenance::Unsigned) => ProvenanceStatus::UnsignedOfficial,
+            Err(e) => ProvenanceStatus::Untrusted(e.to_string()),
+        };
+        let sha256 = bullet_inject::dll_validator::compute_sha256(&bytes);
+        artifacts.push(ArtifactReceipt {
+            name: (*name).to_string(),
+            size_bytes: bytes.len(),
+            sha256,
+            provenance,
+        });
+    }
+    Ok(ReleaseInspectionReceipt::new(
+        version.to_string(),
+        commit,
+        artifacts,
+    ))
 }
 
 pub(super) async fn inspect(client: &reqwest::Client, version: &str) -> Result<Injector, String> {
