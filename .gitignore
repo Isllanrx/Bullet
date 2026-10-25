@@ -54,12 +54,19 @@ relay-worker/.dev.vars
 *.p12
 *.pfx
 
-# Local AI and agent context (kept private; CLAUDE.md and AGENTS.md are the public entry points).
-# No exceptions: internal skills and notes never ship with the public repository.
+# Documentação técnica, arquitetura, engenharia reversa e contexto de IA (privados / migrados para Isllanrx/bullet_dll)
+docs/
 .claude/
 .agents/
 .serena/
+.worktrees/
+CLAUDE.md
+AGENTS.md
+**/CLAUDE.md
+crates/**/README.md
 CLAUDE.local.md
+codex-session-*.md
+native-integration-diagnostics.json
 graphify-out/
 
 # Local diagnostics, sessions and scratch files
@@ -79,3 +86,18 @@ __pycache__/
 *.pyc
 .mypy_cache/
 resultados_ltk/
+
+# Motor de Injeção e DLL Proprietários (mantidos no repositório privado Isllanrx/bullet_dll)
+crates/bullet-native-dll/
+crates/bullet-native-host/
+crates/bullet-native-protocol/
+crates/bullet-native-test-harness/
+crates/bullet-app/src/diagnostics/native_integration/
+crates/bullet-inject/examples/native_owned_pipeline.rs
+crates/bullet-inject/src/injector/overlay_process/native.rs
+crates/bullet-inject/src/pipeline/spawn.rs
+crates/bullet-inject/src/pipeline/validation.rs
+crates/bullet-inject/src/provider/
+crates/bullet-inject/tests/native_provider_orchestration.rs
+crates/bullet-wad/tests/native_engine_validation.rs
+scratch/
