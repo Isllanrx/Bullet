@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::{Read, Seek, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tracing::{debug, error, warn};
 use zip::ZipArchive;
 
@@ -48,6 +48,7 @@ fn open_pinned_root(dest_dir: &Path, _canonical_dest: &Path) -> Result<File, Pla
 fn verify_handle_within_root(file: &File, canonical_dest: &Path) -> Result<(), PlatformError> {
     use std::os::windows::ffi::OsStringExt;
     use std::os::windows::io::AsRawHandle;
+    use std::path::PathBuf;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Storage::FileSystem::{
         FILE_NAME_NORMALIZED, GETFINALPATHNAMEBYHANDLE_FLAGS, GetFinalPathNameByHandleW,
