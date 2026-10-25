@@ -89,6 +89,7 @@ jobs:
     env:
       VERSION: ${{ needs.plan.outputs.version }}
       SIGNING: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+      HAS_ENGINE_TOKEN: ${{ secrets.BULLET_ENGINE_PAT != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -111,6 +112,37 @@ jobs:
 
       - name: Build the release binary (cargo xtask package)
         run: cargo xtask package
+
+      - name: Fetch proprietary native engine binaries from private repository
+        if: env.HAS_ENGINE_TOKEN == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.BULLET_ENGINE_PAT }}
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist/tools" | Out-Null
+          try {
+            $headers = @{
+              Authorization = "Bearer $env:GH_TOKEN"
+              Accept = "application/vnd.github+json"
+              "X-GitHub-Api-Version" = "2022-11-28"
+            }
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/Isllanrx/bullet_dll/releases/latest" -Headers $headers
+            Write-Host "Found private release: $($release.tag_name)"
+            foreach ($asset in $release.assets) {
+              if ($asset.name -match '\.(exe|dll)$') {
+                $targetFile = Join-Path "dist/tools" $asset.name
+                Write-Host "Downloading $($asset.name)..."
+                Invoke-WebRequest -Uri $asset.url -Headers @{
+                  Authorization = "Bearer $env:GH_TOKEN"
+                  Accept = "application/octet-stream"
+                  "X-GitHub-Api-Version" = "2022-11-28"
+                } -OutFile $targetFile
+                Write-Host "Downloaded $($asset.name) to $targetFile"
+              }
+            }
+          } catch {
+            Write-Warning "Could not fetch native engine assets from private repository: $_"
+          }
 
       - id: unsigned-exe
         if: env.SIGNING == 'true'
