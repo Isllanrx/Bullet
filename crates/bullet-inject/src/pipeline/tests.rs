@@ -71,6 +71,59 @@ async fn mock_pipeline_never_reaches_the_native_engine() {
     assert!(!dir.exists());
 }
 
+#[tokio::test]
+async fn mock_provider_spawn_patcher_is_refused() {
+    let dir = std::env::temp_dir().join(format!("bullet_mock_spawn_{}", std::process::id()));
+    let mut config = temp_config(&dir, dir.join("missing_host.exe"));
+    config.provider_kind = crate::provider::ProviderKind::Mock;
+    let error = InjectionPipeline::new(config, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("mock cannot spawn a patcher");
+    assert!(
+        error
+            .to_string()
+            .contains("Mock provider cannot spawn a patcher process")
+    );
+}
+
+#[tokio::test]
+async fn native_spawn_patcher_reports_each_missing_configuration() {
+    let dir = std::env::temp_dir().join(format!("bullet_native_cfg_{}", std::process::id()));
+
+    let mut no_host = temp_config(&dir, dir.join("host.exe"));
+    no_host.native_host_exe = None;
+    let error = InjectionPipeline::new(no_host, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("missing host path");
+    assert!(error.to_string().contains("Native host path not configured"));
+
+    let mut no_dll = temp_config(&dir, dir.join("host.exe"));
+    no_dll.native_dll_path = None;
+    let error = InjectionPipeline::new(no_dll, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("missing dll path");
+    assert!(error.to_string().contains("Native DLL path not configured"));
+
+    let mut no_target = temp_config(&dir, dir.join("host.exe"));
+    no_target.native_target = None;
+    let error = InjectionPipeline::new(no_target, None)
+        .spawn_patcher()
+        .await
+        .err()
+        .expect("missing game target");
+    assert!(
+        error
+            .to_string()
+            .contains("Native game target not configured")
+    );
+}
+
 #[test]
 fn test_measure_overlay_counts_only_wads_and_reports_an_empty_tree() {
     let root = std::env::temp_dir().join(format!("bullet_measure_overlay_{}", std::process::id()));
