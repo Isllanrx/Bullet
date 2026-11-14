@@ -20,19 +20,16 @@ fn ipc_configuration_never_means_game_hook_installed() {
 
 #[test]
 fn parse_native_failure_handles_mixed_case_and_extracts_win32_codes() {
-    // Rust standard Error: display format
     let err1 = "Error: Supervision(\"SetWindowsHookExW: A operação foi concluída com êxito. (0x00000000)\")";
     let parsed1 = parse_native_failure(err1).expect("parse err1");
     assert_eq!(parsed1.category, NativeFailureCategory::HookRegistration);
     assert_eq!(parsed1.win32_code, Some(0));
 
-    // Access denied with hex code
     let err2 = "Error: Supervision(\"SetWindowsHookExW: Acesso negado. (0x00000005)\")";
     let parsed2 = parse_native_failure(err2).expect("parse err2");
     assert_eq!(parsed2.category, NativeFailureCategory::HookRegistration);
     assert_eq!(parsed2.win32_code, Some(5));
 
-    // Kernel anti-cheat rejection
     let err_kernel = "Error: Supervision(\"SetWindowsHookExW rejected by kernel/anti-cheat (NULL returned with GetLastError=0x00000000). Target PID: 19248, Thread ID: 15080, DLL: bullet_native_dll.dll. Windows Code Integrity / Vanguard rejected hook injection into protected process.\")";
     let parsed_kernel = parse_native_failure(err_kernel).expect("parse err_kernel");
     assert_eq!(
@@ -41,7 +38,6 @@ fn parse_native_failure_handles_mixed_case_and_extracts_win32_codes() {
     );
     assert_eq!(parsed_kernel.win32_code, Some(0));
 
-    // Mixed-case and uppercase variants
     assert!(parse_native_failure("ERROR: fatal pipe error").is_some());
     assert!(parse_native_failure("error: something failed").is_some());
     assert!(parse_native_failure("Failed to connect to Named Pipe").is_some());
@@ -56,7 +52,6 @@ fn parse_native_failure_handles_mixed_case_and_extracts_win32_codes() {
             .expect("parse startup error");
     assert_eq!(parsed_startup.category, NativeFailureCategory::Startup);
 
-    // Informational lines must not be parsed as failures
     assert!(parse_native_failure("Native target watcher armed").is_none());
     assert!(parse_native_failure("Waiting for DLL to connect to Named Pipe...").is_none());
     assert!(parse_native_failure("Native file-open interception confirmed by DLL").is_none());
@@ -73,7 +68,6 @@ fn native_signal_triggers_failed_on_mixed_case_errors() {
 
 #[test]
 fn adversarial_error_parsing_and_warning_discrimination() {
-    // Warnings must NEVER be classified as failures
     assert!(
         parse_native_failure("2026-10-25T00:00:00Z WARN Failed to close process query handle")
             .is_none()
@@ -86,13 +80,11 @@ fn adversarial_error_parsing_and_warning_discrimination() {
     );
     assert!(parse_native_failure("warning: optional feature disabled").is_none());
 
-    // Informational lines with incidental words must NEVER be classified as failures
     assert!(parse_native_failure("Native DLL connected and acknowledged handshake").is_none());
     assert!(parse_native_failure("Handshake completed without error").is_none());
     assert!(parse_native_failure("0 errors encountered during warm-up").is_none());
     assert!(parse_native_failure("Cache invalidated successfully for next match").is_none());
 
-    // Malformed, partial, and empty lines
     assert!(parse_native_failure("").is_none());
     assert!(parse_native_failure("   \t\r\n  ").is_none());
     assert!(parse_native_failure("Error: (0x)").is_some());
@@ -109,14 +101,12 @@ fn adversarial_error_parsing_and_warning_discrimination() {
         Some(31)
     );
 
-    // Panics and fatal crashes
     let panic_line =
         "thread 'main' panicked at 'called `Option::unwrap()` on a `None` value', src/main.rs:42";
     let parsed_panic = parse_native_failure(panic_line).expect("parse panic");
     assert_eq!(parsed_panic.category, NativeFailureCategory::General);
     assert_eq!(native_signal(panic_line), Some(PatcherSignal::Failed));
 
-    // Mixed-case variations
     assert!(parse_native_failure("fatal: failed to spawn host process").is_some());
     assert!(parse_native_failure("FaTaL runtime error").is_some());
     assert!(parse_native_failure("Host_Session_Failed: connection refused").is_some());

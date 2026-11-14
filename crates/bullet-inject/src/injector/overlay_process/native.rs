@@ -160,7 +160,6 @@ pub fn parse_native_failure(line: &str) -> Option<NativeStructuredFailure> {
 
     let lower = trimmed.to_ascii_lowercase();
 
-    // 1. Filter out warnings: non-fatal diagnostic logs must not trigger process failure.
     let is_explicit_warning = (lower.contains("warn") || lower.contains("warning"))
         && !lower.contains("error:")
         && !lower.contains("fatal")
@@ -169,7 +168,6 @@ pub fn parse_native_failure(line: &str) -> Option<NativeStructuredFailure> {
         return None;
     }
 
-    // 2. Filter out false-positive success or informational phrases containing incidental words.
     let has_success_qualifier = lower.contains("without error")
         || lower.contains("no error")
         || lower.contains("zero error")
@@ -181,7 +179,6 @@ pub fn parse_native_failure(line: &str) -> Option<NativeStructuredFailure> {
         return None;
     }
 
-    // 3. Match genuine failure triggers.
     let is_failure = lower.contains("error:")
         || lower.contains("error(")
         || lower.contains("error ")
@@ -256,7 +253,6 @@ pub fn parse_native_failure(line: &str) -> Option<NativeStructuredFailure> {
 }
 
 fn extract_win32_hex_code(line: &str) -> Option<u32> {
-    // Prefer parenthesized hex code like "(0x00000005)" or "(0x0)" standard in Win32 errors
     if let Some(idx) = line.find("(0x") {
         let hex_str = &line[idx + 3..];
         let hex_digits: String = hex_str
@@ -267,14 +263,12 @@ fn extract_win32_hex_code(line: &str) -> Option<u32> {
             return u32::from_str_radix(&hex_digits, 16).ok();
         }
     }
-    // Fall back to plain 0x preceded by error indicators or whitespace
     if let Some(idx) = line.find("0x") {
         let hex_str = &line[idx + 2..];
         let hex_digits: String = hex_str
             .chars()
             .take_while(|c| c.is_ascii_hexdigit())
             .collect();
-        // Ignore likely 64-bit memory addresses (>8 digits) to avoid misclassifying pointers
         if !hex_digits.is_empty() && hex_digits.len() <= 8 {
             return u32::from_str_radix(&hex_digits, 16).ok();
         }
