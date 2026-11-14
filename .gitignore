@@ -81,7 +81,6 @@ crates/bullet-native-dll/
 crates/bullet-native-host/
 crates/bullet-native-protocol/
 crates/bullet-native-test-harness/
-crates/bullet-app/src/diagnostics/native_integration/
 crates/bullet-inject/examples/native_owned_pipeline.rs
 crates/bullet-inject/tests/native_provider_orchestration.rs
 crates/bullet-wad/tests/native_engine_validation.rs
