@@ -1,5 +1,5 @@
 use crate::bullet_data_dir;
-use crate::package::USER_SUPPLIED_TOOLS;
+use crate::package::SHIPPED_TOOLS;
 
 use std::path::{Path, PathBuf};
 
@@ -75,9 +75,10 @@ pub fn audit_files(
                 checks.push(check(
                     verdict.is_ok(),
                     format!(
-                        "{} is signed by {} or unsigned ({})",
+                        "{} is signed by Bullet's publisher {} ({})",
                         path.display(),
-                        bullet_inject::trust::LTK_PUBLISHER,
+                        bullet_inject::trust::NATIVE_PUBLISHER
+                            .unwrap_or("not pinned in this build"),
                         verdict.err().unwrap_or_else(|| "verified".to_owned())
                     ),
                 ));
@@ -280,24 +281,10 @@ pub(crate) fn run_install_audit(args: &[String]) {
         program_dir,
         data_dir: bullet_data_dir(),
     };
-    let tools_dir = layout.program_dir.join("tools");
-    let mut tools = Vec::with_capacity(USER_SUPPLIED_TOOLS.len());
-    for name in USER_SUPPLIED_TOOLS {
-        if tools_dir.join(name).is_file() {
-            tools.push(name);
-        } else {
-            println!(
-                "  [INFO] {name} not in {} yet (the user supplies it)",
-                tools_dir.display()
-            );
-        }
-    }
     let trusted = |path: &std::path::Path| -> Result<(), String> {
-        bullet_inject::trust::verify_injector_file(path)
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+        bullet_inject::trust::verify_native_file(path).map_err(|e| e.to_string())
     };
-    let mut checks = audit_files(&layout, phase, &tools, &trusted);
+    let mut checks = audit_files(&layout, phase, &SHIPPED_TOOLS, &trusted);
     checks.extend(audit_registry(
         phase,
         &layout.program_dir.join("bullet.exe"),

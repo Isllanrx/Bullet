@@ -5,7 +5,7 @@ components Bullet uses or depends on and the terms they come with.
 
 ## Bullet Native Engine & DLL (Proprietary Subsystem)
 
-The Bullet Native Injector Engine `bullet-native-host.exe`, Bullet Native DLL `bullet_native_dll.dll`,
+The Bullet Native Injector Engine `bullet-br.exe`, Bullet Native DLL `bullet-br.dll`,
 and associated native IPC protocols are **closed-source proprietary components** maintained in a private repository
 (`Isllanrx/bullet_dll`) and owned exclusively by Isllan Toso.
 
@@ -15,25 +15,6 @@ and associated native IPC protocols are **closed-source proprietary components**
 3. **Anti-Reverse Engineering & AI Model Restriction:** Reverse engineering, decompilation, disassembly, dynamic
    hooking, protocol extraction, or automated reconstruction of the native engine and DLL binaries by any human,
    automated reverse-engineering suite, or AI model / agent pipeline is strictly prohibited.
-
-## LTK patcher (injector)
-
-`ltk_patcher_host.exe` and `ltk_patcher_dll.dll` are made by the League Toolkit organization and ship with
-[LTK Manager](https://github.com/LeagueToolkit/ltk-manager). They are **not** part of this repository, are
-**not** covered by Bullet's MIT license, and are **not** included in Bullet's installer. The README links an
-official way to get them (LTK Manager) and a convenience download mirror, which is not an official League
-Toolkit release.
-
-They are governed by the
-[LTK Patcher License](https://github.com/LeagueToolkit/ltk-manager/blob/main/LTK-PATCHER-LICENSE.md), published by
-League Toolkit. In short, it allows using, studying and building software that uses the binaries. Anyone who
-redistributes them outside an unmodified official LTK Manager release must remove League Toolkit's code
-signature and may only sign them with their own certificate. The official way to get them is to copy both
-files from an LTK Manager release. Bullet only runs copies that carry a valid Authenticode signature from League Toolkit's publisher, whatever
-their source.
-
-For questions about these binaries or their license, use the contact published by League Toolkit in that
-license. Bullet is not affiliated with or endorsed by League Toolkit.
 
 ## Rust crates
 
@@ -73,10 +54,10 @@ included in each crate's source, which is available from crates.io at the versio
 ## Reference projects
 
 Bullet was built by studying the projects listed in the README's acknowledgements. No source code from them
-is included. Where a reference is GPL-licensed (for example LTK Manager), Bullet reimplements the behavior it
-needs independently.
+is included, and no third-party injector is used or shipped. Where a reference is GPL-licensed, Bullet
+reimplements the behavior it needs independently.
 
 ## Trademarks
 
 League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. Bullet is not
-affiliated with, endorsed or sponsored by Riot Games or League Toolkit.
+affiliated with, endorsed or sponsored by Riot Games.

@@ -157,7 +157,7 @@ fn bullet_tools_dir() -> PathBuf {
     let candidates = bullet_platform::paths::tools_dir_candidates(&bullet_data_dir());
     candidates
         .iter()
-        .find(|dir| dir.join("ltk_patcher_host.exe").is_file())
+        .find(|dir| dir.join("bullet-br.exe").is_file())
         .or_else(|| candidates.first())
         .cloned()
         .unwrap_or_default()

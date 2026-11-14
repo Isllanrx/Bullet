@@ -19,6 +19,8 @@ pub fn logs_dir() -> Result<PathBuf, PlatformError> {
     Ok(data_dir()?.join("logs"))
 }
 
+pub const STAR_GATE_FILE: &str = "star_gate.bin";
+
 pub fn state_dir() -> Result<PathBuf, PlatformError> {
     Ok(data_dir()?.join("state"))
 }

@@ -67,20 +67,14 @@ it, and when the game starts it reads that copy instead of its own. The game ins
    The script checks the installer against the release's `SHA256SUMS` and its Authenticode signature before
    installing.
 
-2. **Add the injector.** Bullet uses two files from League Toolkit, `ltk_patcher_host.exe` and
-   `ltk_patcher_dll.dll`, which are not bundled. On first start Bullet offers to download them from the newest
-   [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) release, refuses any file with a foreign or broken signature and copies them
-   into `C:\Program Files\Bullet\tools` (Windows asks for permission only for that copy). To copy them by hand
-   from an installed LTK Manager, in PowerShell **as administrator**:
-
-   ```powershell
-   Copy-Item "$env:ProgramFiles\LTK Manager\ltk_patcher_host.exe", "$env:ProgramFiles\LTK Manager\ltk_patcher_dll.dll" "$env:ProgramFiles\Bullet\tools" -Force
-   ```
-
-   Bullet accepts the files signed by League Toolkit's publisher (Natoken LLC) or published unsigned in an official
-   LTK Manager release, refuses a foreign or broken signature, and installs a newer injector by itself after a patch.
+2. **The native engine comes with it.** The installer places Bullet's own injection engine, `bullet-br.exe` and
+   `bullet-br.dll`, in `C:\Program Files\Bullet\tools`. Nothing else is downloaded. Official releases carry Bullet's
+   Authenticode signature, and Bullet refuses to run an engine file signed by anyone else.
 
 3. **Start Bullet** from the Start menu, normally (not as administrator). It lives in the system tray.
+   On the first start Bullet asks you to sign in with GitHub: it shows a code, opens github.com and you enter the
+   code there. Bullet then checks that your account starred this repository. The check repeats on every start; while
+   offline, a check from the last 7 days is accepted. The sign-in is stored for your Windows account only.
 
 ## Usage
 
@@ -96,7 +90,7 @@ your lobby. Optional settings are listed in [`.env.example`](.env.example).
 
 Logs are in `%LOCALAPPDATA%\Bullet\logs` (the tray opens the folder); `BULLET_LOG=debug` adds detail. **Export
 diagnostics** in the control panel zips everything needed for a report. If a skin or mod breaks match loading,
-turn off **Inject skins** in the control panel. Close LTK Manager while Bullet runs: two injectors conflict.
+turn off **Inject skins** in the control panel. Close other skin tools while Bullet runs: two injectors conflict.
 
 Attach the log when you open an [issue](https://github.com/Isllanrx/Bullet/issues), or ask on
 [Discord](https://discord.gg/e2dH2nUjd9). Security issues go through a
@@ -132,7 +126,7 @@ affiliated with or endorsed by Riot Games; League of Legends is a trademark of R
 ## License & Intellectual Property
 
 - **Public Repository:** The source code in this repository is licensed under the [MIT License](LICENSE).
-- **Proprietary Native Engine & DLL:** The native injector host `bullet-native-host.exe`, native DLL `bullet_native_dll.dll`,
+- **Proprietary Native Engine & DLL:** The native injector host `bullet-br.exe`, native DLL `bullet-br.dll`,
   and native IPC protocols are **closed-source proprietary software** owned exclusively by Isllan Toso and maintained in
   a private repository (`Isllanrx/bullet_dll`). They are NOT covered by the MIT license.
   - **No Commercial Use:** Commercialization, monetization, sale, or paid distribution of the native binaries is strictly prohibited.

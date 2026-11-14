@@ -65,10 +65,7 @@ Name: "autostart"; Description: "{cm:AutoStartProgram,{#MyAppName}}"; GroupDescr
 
 [InstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Programs\Bullet"
-Type: files; Name: "{app}\tools\*.orig"
-Type: files; Name: "{app}\tools\*.bak"
-Type: files; Name: "{app}\tools\cloudflared.exe"
-Type: files; Name: "{app}\tools\tools.zip"
+Type: filesandordirs; Name: "{app}\tools\*"
 Type: filesandordirs; Name: "{localappdata}\Bullet\webview2"
 
 [Dirs]
@@ -78,7 +75,8 @@ Name: "{localappdata}\Bullet\library"
 
 [Files]
 Source: "..\dist\bullet.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\dist\tools\bullet-br.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\dist\tools\bullet-br.dll"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\assets\bullet.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -105,8 +103,8 @@ Type: filesandordirs; Name: "{localappdata}\Bullet\webview2"
 Type: filesandordirs; Name: "{localappdata}\Bullet\overlay"
 Type: filesandordirs; Name: "{localappdata}\Bullet\mods"
 Type: filesandordirs; Name: "{localappdata}\Bullet\tools"
-Type: files; Name: "{app}\tools\ltk_patcher_host.exe"
-Type: files; Name: "{app}\tools\ltk_patcher_dll.dll"
+Type: files; Name: "{app}\tools\bullet-br.exe"
+Type: files; Name: "{app}\tools\bullet-br.dll"
 Type: dirifempty; Name: "{app}\tools"
 Type: dirifempty; Name: "{app}\assets"
 Type: dirifempty; Name: "{app}"

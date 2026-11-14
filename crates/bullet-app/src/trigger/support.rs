@@ -59,25 +59,14 @@ impl InjectionTrigger {
     }
 
     pub(super) fn pipeline_config(&self, game_dir: PathBuf) -> PipelineConfig {
-        let provider_kind = if bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled() {
-            bullet_inject::provider::ProviderKind::Native
-        } else {
-            bullet_inject::provider::ProviderKind::LtkLegacy
-        };
-
         PipelineConfig {
-            provider_kind,
+            provider_kind: bullet_inject::provider::ProviderKind::Native,
             native_host_exe: Some(self.paths.native_host_exe.clone()),
             native_dll_path: Some(self.paths.native_dll_path.clone()),
-            native_target: (provider_kind == bullet_inject::provider::ProviderKind::Native).then(
-                || bullet_inject::pipeline::NativeWindowTarget {
-                    window_title: "League of Legends (TM) Client".into(),
-                    image_name: "League of Legends.exe".into(),
-                },
-            ),
-            ltk_host_exe: self.paths.ltk_host_exe.clone(),
-            ltk_dll_path: self.paths.ltk_dll_path.clone(),
-            ltk_flags: bullet_inject::ltk_host::default_flags(),
+            native_target: Some(bullet_inject::pipeline::NativeWindowTarget {
+                window_title: "League of Legends (TM) Client".into(),
+                image_name: "League of Legends.exe".into(),
+            }),
             overlay_config: OverlayConfig {
                 mods_dir: self.paths.mods_dir.clone(),
                 overlay_dir: self.paths.overlay_dir.clone(),
