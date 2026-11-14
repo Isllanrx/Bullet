@@ -99,7 +99,11 @@ async fn native_spawn_patcher_reports_each_missing_configuration() {
         .await
         .err()
         .expect("missing host path");
-    assert!(error.to_string().contains("Native host path not configured"));
+    assert!(
+        error
+            .to_string()
+            .contains("Native host path not configured")
+    );
 
     let mut no_dll = temp_config(&dir, dir.join("host.exe"));
     no_dll.native_dll_path = None;
