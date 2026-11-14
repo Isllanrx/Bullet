@@ -24,9 +24,6 @@ pub static INJECTION: Preference = Preference::new("injection.json", "skin injec
 pub static LIGHT_LOADING: Preference =
     Preference::new("light_loading.json", "light game loading", true);
 
-pub static USE_NATIVE_ENGINE: Preference =
-    Preference::new("native_engine.json", "independent native engine", false);
-
 #[derive(Debug, Serialize, Deserialize)]
 struct Stored {
     enabled: bool,
@@ -60,11 +57,6 @@ impl Preference {
 
     #[must_use]
     pub fn is_enabled(&self) -> bool {
-        if self.file == "native_engine.json" {
-            if let Ok(val) = std::env::var("BULLET_USE_NATIVE_ENGINE") {
-                return val.eq_ignore_ascii_case("true") || val == "1";
-            }
-        }
         self.value.load(Ordering::Relaxed)
     }
 

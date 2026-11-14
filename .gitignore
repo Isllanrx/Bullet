@@ -75,7 +75,6 @@ strip_rust_comments.py
 __pycache__/
 *.pyc
 .mypy_cache/
-resultados_ltk/
 
 # Motor de Injeção e DLL Proprietários (mantidos no repositório privado Isllanrx/bullet_dll)
 crates/bullet-native-dll/
