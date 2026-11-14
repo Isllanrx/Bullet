@@ -35,6 +35,13 @@ pub fn game_already_loading() -> Option<(u32, Duration)> {
     (age > SAFE_HOOK_WINDOW).then_some((pid, age))
 }
 
+const TERMINATED_EXTERNALLY: u32 = 0x4001_0004;
+
+#[must_use]
+pub fn closed_by_another_program(exit_code: i32) -> bool {
+    exit_code as u32 == TERMINATED_EXTERNALLY
+}
+
 fn exit_code_hex(code: i32) -> String {
     format!("{:#010X}", code as u32)
 }
@@ -86,12 +93,6 @@ pub struct PipelineConfig {
     pub native_dll_path: Option<PathBuf>,
     pub native_target: Option<NativeWindowTarget>,
 
-    pub ltk_host_exe: PathBuf,
-
-    pub ltk_dll_path: PathBuf,
-
-    pub ltk_flags: u32,
-
     pub overlay_config: OverlayConfig,
 
     pub hook_timeout: Duration,
@@ -139,9 +140,7 @@ impl InjectionPipeline {
         }
     }
 
-    fn validate_patcher_binaries(
-        &self,
-    ) -> Result<(crate::trust::Provenance, crate::trust::Provenance), InjectError> {
+    fn validate_patcher_binaries(&self) -> Result<(), InjectError> {
         validation::validate_patcher_binaries(&self.config)
     }
 
@@ -161,7 +160,7 @@ impl InjectionPipeline {
         self.require_game_integration()?;
 
         if let Err(e) = self.validate_patcher_binaries() {
-            error!(error = %e, "Injection aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Bullet");
+            error!(error = %e, "Injection aborted: the native engine is missing or not signed by Bullet's publisher");
             self.publish(InjectionStatus::Failed {
                 error: format!("injector validation error: {e}"),
             });
@@ -229,37 +228,18 @@ impl InjectionPipeline {
 
         self.require_game_integration()?;
 
-        let (_host, _dll) = match self.validate_patcher_binaries() {
-            Ok(provenance) => provenance,
-            Err(e) => {
-                error!(error = %e, "Arming aborted: an injector file is missing, carries a foreign or broken signature, or cannot serve Bullet");
-                self.publish(InjectionStatus::Failed {
-                    error: format!("injector validation error: {e}"),
-                });
-                return Err(e);
-            }
-        };
-        let (host_path, dll_path) = match self.config.provider_kind {
-            crate::provider::ProviderKind::Native => (
-                self.config
-                    .native_host_exe
-                    .as_deref()
-                    .unwrap_or(&self.config.ltk_host_exe),
-                self.config
-                    .native_dll_path
-                    .as_deref()
-                    .unwrap_or(&self.config.ltk_dll_path),
-            ),
-            _ => (
-                self.config.ltk_host_exe.as_path(),
-                self.config.ltk_dll_path.as_path(),
-            ),
-        };
+        if let Err(e) = self.validate_patcher_binaries() {
+            error!(error = %e, "Arming aborted: the native engine is missing or not signed by Bullet's publisher");
+            self.publish(InjectionStatus::Failed {
+                error: format!("injector validation error: {e}"),
+            });
+            return Err(e);
+        }
         info!(
             provider = ?self.config.provider_kind,
-            host = %host_path.display(),
-            dll = %dll_path.display(),
-            "Injector files accepted"
+            host = ?self.config.native_host_exe,
+            dll = ?self.config.native_dll_path,
+            "Native engine files accepted"
         );
 
         let build = match self.build_overlay(mods, self.config.build_timeout).await {
@@ -305,7 +285,7 @@ impl InjectionPipeline {
                     error = %e,
                     exit_code = ?exit,
                     exit_code_hex = ?exit.map(exit_code_hex),
-                    closed_by_another_program = exit.is_some_and(crate::ltk_host::closed_by_another_program),
+                    closed_by_another_program = exit.is_some_and(closed_by_another_program),
                     "The patcher never reported that it is watching for the game; the skin will not load"
                 );
                 self.publish(match exit {
@@ -349,7 +329,7 @@ impl InjectionPipeline {
                     warn!(
                         exit_code = code,
                         exit_code_hex = %exit_code_hex(code),
-                        closed_by_another_program = crate::ltk_host::closed_by_another_program(code),
+                        closed_by_another_program = closed_by_another_program(code),
                         "The patcher exited before confirming the hook; the overlay is not active"
                     );
                     return InjectionStatus::PatcherExited { code };

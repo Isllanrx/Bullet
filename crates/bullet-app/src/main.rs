@@ -35,8 +35,6 @@ async fn run() -> Result<()> {
         .as_ref()
         .map_or_else(|_| std::env::temp_dir().join("Bullet_state"), Clone::clone);
 
-    bullet_platform::preferences::USE_NATIVE_ENGINE.load();
-
     let mut lock_failure = None;
     let instance_guard = match bullet_platform::single_instance::SingleInstanceGuard::acquire(
         INSTANCE_NAME,
@@ -85,7 +83,12 @@ async fn run() -> Result<()> {
 
     let mut paths = trigger::ResolvedPaths::discover();
 
-    if boot::injector::injector_unusable(&paths, &state_dir_path).await {
+    if !boot::star_gate::enforce_star_gate(&state_dir_path).await? {
+        info!("Bullet startup cancelled: StarGate verification not completed");
+        return Ok(());
+    }
+
+    if boot::injector::injector_unusable(&paths) {
         return Ok(());
     }
 
@@ -140,15 +143,8 @@ async fn run() -> Result<()> {
 
     boot::library::spawn_skin_sync(&mut supervisor, &library_root);
 
-    let installed_dll = bullet_app::ltk_release::InstalledDllCache::default();
-    let game_build =
-        boot::reports::report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
-    boot::reports::report_active_injector_files(
-        bullet_platform::preferences::USE_NATIVE_ENGINE.is_enabled(),
-        &paths,
-        game_build,
-        &installed_dll,
-    );
+    boot::reports::report_game_build(&state_dir_path, &paths.game_dir, &paths.overlay_dir);
+    boot::reports::report_active_injector_files(&paths);
 
     let required_tools = trigger::required_tool_files(&paths);
 
@@ -165,8 +161,6 @@ async fn run() -> Result<()> {
             e
         })
         .ok();
-    let native_engine = bullet_platform::preferences::USE_NATIVE_ENGINE.load();
-    info!(enabled = native_engine, "Native engine setting loaded");
     let injection = bullet_platform::preferences::INJECTION.load();
     info!(enabled = injection, "Skin injection setting loaded");
     let random_skin = bullet_platform::preferences::RANDOM_SKIN.load();
@@ -181,7 +175,6 @@ async fn run() -> Result<()> {
     );
 
     let update_notice = bullet_app::update_check::UpdateNotice::default();
-    let ltk_notice = bullet_app::ltk_release::LtkNotice::default();
     let live_game = bullet_app::live_game::LiveGame::default();
     let live_state = state_rx.clone();
     let live_game_dir = paths.game_dir.clone();
@@ -221,15 +214,9 @@ async fn run() -> Result<()> {
             state_rx.clone(),
             required_tools.clone(),
             paths.game_dir.clone(),
-            game_build,
             elevated,
             boot::panel::ReleaseNotices {
                 bullet: update_notice.clone(),
-                ltk: ltk_notice.clone(),
-                installed: boot::panel::InstalledInjector {
-                    dll: paths.ltk_dll_path.clone(),
-                    cache: installed_dll.clone(),
-                },
                 custom_mods: custom_mods_notice.clone(),
             },
         );
@@ -239,13 +226,6 @@ async fn run() -> Result<()> {
             custom_mods_rx,
         );
         panel_links = Some(links.clone());
-        let install_tx = boot::tasks::spawn_injector_install(
-            &mut supervisor,
-            &ltk_notice,
-            &paths.tools_dir,
-            &state_dir_path,
-            &tray_controller,
-        );
 
         bullet_platform::welcome::show_welcome_window();
 
@@ -261,7 +241,6 @@ async fn run() -> Result<()> {
             links: links.clone(),
             mark_state,
             mark_live,
-            install_tx: install_tx.clone(),
         };
 
         supervisor.spawn_essential("tray-events", move |child_token| async move {
@@ -296,15 +275,6 @@ async fn run() -> Result<()> {
                     shutdown: shutdown_token.clone(),
                 },
                 &update_notice,
-            );
-            boot::tasks::spawn_ltk_check(
-                &mut supervisor,
-                install_tx,
-                &state_dir_path,
-                &paths.ltk_dll_path,
-                &installed_dll,
-                &ltk_notice,
-                &state_rx,
             );
         } else {
             info!("Update check turned off (BULLET_UPDATE_CHECK)");

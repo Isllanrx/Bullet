@@ -22,13 +22,14 @@ the release notes unless you prefer otherwise.
 In scope:
 
 - `bullet.exe`, the installer and the uninstaller,
+- the native engine (`bullet-br.exe`, `bullet-br.dll`), whose source is private but whose behavior can be reported,
+- the GitHub sign-in that checks the repository star,
 - the party mode protocol, its encryption and the relay (`relay-worker/`, `crates/bullet-relay`),
 - the terminal install script (`install.ps1`) and the in-app update, which verify the installer before running it,
 - the build and release pipeline in `.github/`.
 
 Out of scope:
 
-- the LTK patcher binaries (report those to [League Toolkit](https://github.com/LeagueToolkit/ltk-manager)),
 - the League of Legends client or game,
 - detection or penalties by Riot's anti-cheat. Using Bullet is at your own risk, as the README's disclaimer
   explains.
