@@ -21,6 +21,8 @@ pub fn validate_patcher_binaries(config: &PipelineConfig) -> Result<(), InjectEr
                 path.display()
             )));
         }
+    }
+    for path in [host_exe, dll_path] {
         crate::trust::verify_native_file(path)?;
     }
     Ok(())
