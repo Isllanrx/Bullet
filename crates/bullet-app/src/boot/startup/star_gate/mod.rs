@@ -1,8 +1,10 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use bullet_core::phase::GamePhase;
 use bullet_platform::i18n;
 use bullet_platform::star_gate::GateView;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 mod dialog;
@@ -10,7 +12,7 @@ mod github;
 mod grant;
 
 use github::{Github, GithubError, Star};
-use grant::{Freshness, Grant};
+use grant::Grant;
 
 pub(super) struct Session {
     pub login: String,
@@ -78,8 +80,7 @@ fn record(state_dir: &Path, session: &Session, now: u64) {
 }
 
 async fn revalidate(github: &Github, state_dir: &Path, saved: Grant, now: u64) -> Start {
-    let freshness = saved.freshness(now);
-    if freshness == Freshness::FromTheFuture {
+    if saved.is_from_the_future(now) {
         warn!("StarGate verification is dated in the future; it is discarded");
         grant::forget(state_dir);
         return Start::Ask(None, GateView::default());
@@ -101,12 +102,8 @@ async fn revalidate(github: &Github, state_dir: &Path, saved: Grant, now: u64) -
             grant::forget(state_dir);
             Start::Ask(None, GateView::default())
         }
-        Err(e) if freshness == Freshness::Fresh => {
-            warn!(error = %e, "GitHub is unreachable; StarGate uses the verification from the last 7 days");
-            Start::Granted
-        }
         Err(e) => {
-            warn!(error = %e, "GitHub is unreachable and the saved verification is older than 7 days");
+            warn!(error = %e, "GitHub is unreachable; StarGate needs an online check to start Bullet");
             let view = unreachable_view(&e, true);
             Start::Ask(Some(session), view)
         }
@@ -131,6 +128,78 @@ pub async fn enforce_star_gate(state_dir: &Path) -> anyhow::Result<bool> {
     match start {
         Start::Granted => Ok(true),
         Start::Ask(session, view) => dialog::run(&github, state_dir, session, view).await,
+    }
+}
+
+async fn star_lost(state_dir: &Path) -> Option<String> {
+    let Some(client_id) = github::CLIENT_ID.filter(|id| !id.trim().is_empty()) else {
+        return Some(String::new());
+    };
+    let Some(saved) = grant::load(state_dir) else {
+        warn!("StarGate verification disappeared while Bullet was running");
+        return Some(String::new());
+    };
+    let github = match Github::new(client_id) {
+        Ok(github) => github,
+        Err(e) => {
+            warn!(error = %e, "StarGate could not build its GitHub client for the recheck");
+            return None;
+        }
+    };
+    match github.star(&saved.token).await {
+        Ok(Star::Given) => {
+            info!("StarGate confirmed the star again");
+            None
+        }
+        Ok(Star::Missing) => {
+            info!("StarGate found the star removed while Bullet was running");
+            Some(saved.login)
+        }
+        Ok(Star::Revoked) => {
+            info!("StarGate authorization was revoked while Bullet was running");
+            grant::forget(state_dir);
+            Some(saved.login)
+        }
+        Err(e) => {
+            warn!(error = %e, "StarGate could not recheck the star; the check repeats when the next match is searched");
+            None
+        }
+    }
+}
+
+pub async fn watch_star(
+    state_dir: PathBuf,
+    mut state: bullet_core::state::StateReceiver,
+    shutdown: CancellationToken,
+    token: CancellationToken,
+) {
+    let mut last = GamePhase::None;
+    loop {
+        tokio::select! {
+            () = token.cancelled() => return,
+            changed = state.changed() => {
+                if changed.is_err() {
+                    return;
+                }
+            }
+        }
+        let phase = state.borrow_and_update().phase;
+        let entered =
+            phase != last && matches!(phase, GamePhase::Matchmaking | GamePhase::ChampSelect);
+        last = phase;
+        if !entered {
+            continue;
+        }
+        if let Some(login) = star_lost(&state_dir).await {
+            warn!("StarGate closes Bullet: the repository star is required");
+            let text = i18n::text();
+            bullet_platform::shell::message_box_warning(
+                text.star_gate_title,
+                &i18n::fill(text.star_gate_missing_star, "user", &login),
+            );
+            shutdown.cancel();
+            return;
+        }
     }
 }
 

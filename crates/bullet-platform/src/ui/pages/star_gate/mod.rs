@@ -85,6 +85,7 @@ pub(crate) fn fill(window: &StarGateWindow, text: &crate::i18n::Text) {
     window.set_recheck_label(text.star_gate_recheck.into());
     window.set_quit_label(text.star_gate_quit.into());
     window.set_code_hint(text.star_gate_code_hint.into());
+    window.set_copy_code_label(text.star_gate_copy_code.into());
 }
 
 pub(crate) fn apply(window: &StarGateWindow, view: &GateView) {
@@ -111,6 +112,15 @@ pub(crate) fn wire(window: &StarGateWindow, events: &UnboundedSender<GateEvent>)
     window.on_recheck(move || emit(&tx, GateEvent::Recheck));
     let tx = events.clone();
     window.on_quit(move || emit(&tx, GateEvent::Quit));
+    let weak = window.as_weak();
+    window.on_copy_code(move || {
+        if let Some(w) = weak.upgrade() {
+            let code = w.get_code().to_string();
+            if let Err(e) = crate::clipboard::set_text(code.trim()) {
+                warn!(error = %e, "Could not copy star gate code to clipboard");
+            }
+        }
+    });
     window.on_open_repo(|| {
         if let Err(e) = crate::shell::open_web_page(REPOSITORY_URL) {
             warn!(error = %e, "The repository page could not be opened");

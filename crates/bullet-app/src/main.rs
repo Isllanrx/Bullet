@@ -107,6 +107,13 @@ async fn run() -> Result<()> {
 
     boot::tasks::spawn_log_drop_monitor(&mut supervisor, logging.dropped.clone());
 
+    let gate_dir = state_dir_path.clone();
+    let gate_state = state_rx.clone();
+    let gate_shutdown = shutdown_token.clone();
+    supervisor.spawn("star-gate-watch", move |t| {
+        boot::star_gate::watch_star(gate_dir, gate_state, gate_shutdown, t)
+    });
+
     let (party_tx, party_rx) =
         tokio::sync::mpsc::unbounded_channel::<bullet_app::party_manager::PartyCommand>();
     let party_mgr = bullet_app::party_manager::PartyManager::new(
