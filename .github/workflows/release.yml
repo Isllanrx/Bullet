@@ -90,9 +90,7 @@ jobs:
       HAS_CERTUM: ${{ secrets.CERTUM_OTP_URI != '' && vars.CERTUM_CERT_SHA1 != '' }}
       HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
       SIGNING: ${{ (secrets.CERTUM_OTP_URI != '' && vars.CERTUM_CERT_SHA1 != '') || secrets.SIGNPATH_API_TOKEN != '' }}
-      HAS_ENGINE_TOKEN: ${{ secrets.BULLET_ENGINE_PAT != '' }}
       BULLET_GITHUB_CLIENT_ID: ${{ vars.BULLET_GITHUB_CLIENT_ID }}
-      BULLET_NATIVE_PUBLISHER: ${{ vars.BULLET_NATIVE_PUBLISHER }}
       CERTUM_CERT_SHA1: ${{ vars.CERTUM_CERT_SHA1 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -104,10 +102,6 @@ jobs:
         run: |
           if (-not $env:BULLET_GITHUB_CLIENT_ID) {
             Write-Host "::error::Set the BULLET_GITHUB_CLIENT_ID repository variable to the Client ID of the GitHub OAuth App with Device Flow enabled"
-            exit 1
-          }
-          if ($env:SIGNING -eq 'true' -and -not $env:BULLET_NATIVE_PUBLISHER) {
-            Write-Host "::error::Set the BULLET_NATIVE_PUBLISHER repository variable to the certificate subject name so Bullet refuses an engine signed by anyone else"
             exit 1
           }
 
@@ -126,72 +120,8 @@ jobs:
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
 
-      - name: Build the release binary (cargo xtask package)
+      - name: Build the release binary and LTF bridge tools (cargo xtask package)
         run: cargo xtask package
-
-      - name: Require access to the native engine
-        if: env.HAS_ENGINE_TOKEN != 'true'
-        shell: pwsh
-        run: |
-          Write-Host "::error::Set the BULLET_ENGINE_PAT secret; Bullet cannot ship without bullet-br.exe and bullet-br.dll"
-          exit 1
-
-      - name: Fetch the native engine from the private repository
-        if: env.HAS_ENGINE_TOKEN == 'true'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.BULLET_ENGINE_PAT }}
-        run: |
-          New-Item -ItemType Directory -Force -Path "dist/tools" | Out-Null
-          $headers = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
-          }
-          $download = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = "application/octet-stream"
-            "X-GitHub-Api-Version" = "2022-11-28"
-          }
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/Isllanrx/bullet_dll/releases/tags/engine-latest" -Headers $headers
-          $sumsAsset = $release.assets | Where-Object { $_.name -eq 'SHA256SUMS' }
-          if (-not $sumsAsset) { throw "The engine-latest release has no SHA256SUMS; rerun build-engine.yml in bullet_dll" }
-          $sumsFile = Join-Path $env:RUNNER_TEMP "engine-SHA256SUMS"
-          Invoke-WebRequest -Uri $sumsAsset.url -OutFile $sumsFile -Headers $download
-          $expected = @{}
-          foreach ($line in Get-Content $sumsFile) {
-            $parts = $line.Trim() -split '\s+\*?'
-            if ($parts.Count -eq 2) { $expected[$parts[1]] = $parts[0].ToLowerInvariant() }
-          }
-          foreach ($name in @('bullet-br.exe', 'bullet-br.dll')) {
-            if (-not $expected.ContainsKey($name)) { throw "SHA256SUMS of engine-latest does not list $name" }
-            $asset = $release.assets | Where-Object { $_.name -eq $name }
-            if (-not $asset) { throw "The engine-latest release has no asset named $name" }
-            $target = Join-Path "dist/tools" $name
-            Invoke-WebRequest -Uri $asset.url -OutFile $target -Headers $download
-            $hash = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($hash -ne $expected[$name]) {
-              Remove-Item $target -Force
-              throw "$name has SHA-256 $hash, but engine-latest SHA256SUMS lists $($expected[$name])"
-            }
-            Write-Host "$name matches SHA256SUMS ($hash)"
-          }
-
-      - name: Check native engine signatures
-        id: engine-sig
-        if: env.HAS_ENGINE_TOKEN == 'true'
-        shell: pwsh
-        run: |
-          $signed = $true
-          foreach ($file in @('dist/tools/bullet-br.exe', 'dist/tools/bullet-br.dll')) {
-            $sig = Get-AuthenticodeSignature $file
-            $pub = if ($sig.SignerCertificate) { $sig.SignerCertificate.GetNameInfo('SimpleName', $false) } else { '' }
-            if ($sig.Status -ne 'Valid' -or ($env:BULLET_NATIVE_PUBLISHER -and $pub -ne $env:BULLET_NATIVE_PUBLISHER)) {
-              $signed = $false
-            }
-          }
-          if ($signed) { "signed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8 }
-          else { "signed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8 }
 
       - name: Setup Certum SimplySign
         if: env.HAS_CERTUM == 'true'
@@ -250,13 +180,13 @@ jobs:
           if (-not $signtool) { throw 'signtool.exe not found' }
           "SIGNTOOL=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Sign the native engine (Certum)
-        if: env.HAS_CERTUM == 'true' && env.HAS_ENGINE_TOKEN == 'true' && steps.engine-sig.outputs.signed != 'true'
+      - name: Sign LTF bridge tools (Certum)
+        if: env.HAS_CERTUM == 'true'
         shell: pwsh
         run: |
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet Native Patcher Host' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet-br.exe
+          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet LTF Launcher' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_launcher.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet Native Overlay Patcher' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet-br.dll
+          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet LTF Bridge DLL' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_bridge.dll
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Sign bullet.exe (Certum)
@@ -265,31 +195,6 @@ jobs:
         run: |
           & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet' /du 'https://github.com/Isllanrx/Bullet' dist/bullet.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - id: unsigned-engine
-        if: env.HAS_CERTUM != 'true' && env.HAS_SIGNPATH == 'true' && env.HAS_ENGINE_TOKEN == 'true' && steps.engine-sig.outputs.signed != 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unsigned-native-engine-${{ env.VERSION }}
-          if-no-files-found: error
-          path: |
-            dist/tools/bullet-br.exe
-            dist/tools/bullet-br.dll
-
-      - name: Sign the native engine (SignPath)
-        if: env.HAS_CERTUM != 'true' && env.HAS_SIGNPATH == 'true' && env.HAS_ENGINE_TOKEN == 'true' && steps.engine-sig.outputs.signed != 'true'
-        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
-        with:
-          connector-url: https://githubactions.connectors.signpath.io
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: ${{ vars.SIGNPATH_ENGINE_CONFIGURATION_SLUG }}
-          github-artifact-id: ${{ steps.unsigned-engine.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: dist/tools
 
       - id: unsigned-exe
         if: env.HAS_CERTUM != 'true' && env.HAS_SIGNPATH == 'true'
@@ -357,16 +262,10 @@ jobs:
         shell: pwsh
         run: |
           $files = @('dist/bullet.exe', "dist/installer/Bullet-Setup-$env:VERSION-x64.exe")
-          if ($env:HAS_ENGINE_TOKEN -eq 'true') { $files += @('dist/tools/bullet-br.exe', 'dist/tools/bullet-br.dll') }
           foreach ($file in $files) {
             $signature = Get-AuthenticodeSignature $file
             "{0}: {1} {2}" -f $file, $signature.Status, $signature.SignerCertificate.Subject
             if ($signature.Status -ne 'Valid') { throw "$file is not validly signed" }
-          }
-          foreach ($file in @('dist/tools/bullet-br.exe', 'dist/tools/bullet-br.dll')) {
-            if (-not (Test-Path $file)) { continue }
-            $publisher = (Get-AuthenticodeSignature $file).SignerCertificate.GetNameInfo('SimpleName', $false)
-            if ($publisher -ne $env:BULLET_NATIVE_PUBLISHER) { throw "$file is signed by '$publisher', but Bullet expects '$env:BULLET_NATIVE_PUBLISHER'" }
           }
 
       - name: Checksums

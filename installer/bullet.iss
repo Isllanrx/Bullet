@@ -75,8 +75,8 @@ Name: "{localappdata}\Bullet\library"
 
 [Files]
 Source: "..\dist\bullet.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\tools\bullet-br.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
-Source: "..\dist\tools\bullet-br.dll"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\dist\tools\bullet_launcher.exe"; DestDir: "{app}\tools"; Flags: ignoreversion
+Source: "..\dist\tools\bullet_bridge.dll"; DestDir: "{app}\tools"; Flags: ignoreversion
 Source: "..\assets\bullet.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -103,6 +103,8 @@ Type: filesandordirs; Name: "{localappdata}\Bullet\webview2"
 Type: filesandordirs; Name: "{localappdata}\Bullet\overlay"
 Type: filesandordirs; Name: "{localappdata}\Bullet\mods"
 Type: filesandordirs; Name: "{localappdata}\Bullet\tools"
+Type: files; Name: "{app}\tools\bullet_launcher.exe"
+Type: files; Name: "{app}\tools\bullet_bridge.dll"
 Type: files; Name: "{app}\tools\bullet-br.exe"
 Type: files; Name: "{app}\tools\bullet-br.dll"
 Type: dirifempty; Name: "{app}\tools"

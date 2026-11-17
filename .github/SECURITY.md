@@ -22,7 +22,7 @@ the release notes unless you prefer otherwise.
 In scope:
 
 - `bullet.exe`, the installer and the uninstaller,
-- the native engine (`bullet-br.exe`, `bullet-br.dll`), whose source is private but whose behavior can be reported,
+- the LTF bridge and launcher (`bullet_launcher.exe`, `bullet_bridge.dll`), built from `crates/bullet-launcher` and `crates/bullet-bridge`,
 - the GitHub sign-in that checks the repository star,
 - the party mode protocol, its encryption and the relay (`relay-worker/`, `crates/bullet-relay`),
 - the terminal install script (`install.ps1`) and the in-app update, which verify the installer before running it,
