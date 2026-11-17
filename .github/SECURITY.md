@@ -42,7 +42,7 @@ Only the latest release and the latest pre-release receive security fixes.
 
 Every installer published by the release workflow comes with a `SHA256SUMS` file, its signature
 (`SHA256SUMS.sig`) and a build provenance attestation. Bullet itself checks the signed checksum list before it runs
-an update, and `install.ps1` checks the installer against `SHA256SUMS` and its Authenticode signature:
+an update, and `install.ps1` checks the installer against `SHA256SUMS`. Releases are not code-signed:
 
 ```powershell
 Get-FileHash .\Bullet-Setup-<version>-x64.exe -Algorithm SHA256
