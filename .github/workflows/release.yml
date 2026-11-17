@@ -87,9 +87,7 @@ jobs:
       actions: read
     env:
       VERSION: ${{ needs.plan.outputs.version }}
-      HAS_CERTUM: ${{ secrets.CERTUM_OTP_URI != '' && vars.CERTUM_CERT_SHA1 != '' }}
       BULLET_GITHUB_CLIENT_ID: ${{ vars.BULLET_GITHUB_CLIENT_ID }}
-      CERTUM_CERT_SHA1: ${{ vars.CERTUM_CERT_SHA1 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -121,104 +119,8 @@ jobs:
       - name: Build the release binary and bridge tools (cargo xtask package)
         run: cargo xtask package
 
-      - name: Setup Certum SimplySign
-        if: env.HAS_CERTUM == 'true'
-        shell: pwsh
-        env:
-          CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $msi = Join-Path $env:RUNNER_TEMP 'SimplySignDesktop.msi'
-          $expectedSha = '6309e8b46f1f4e786288e777aef515a2c30d885165b71a21191e9941badebd6b'
-          Invoke-WebRequest -Uri 'https://files.certum.eu/software/SimplySignDesktop/Windows/9.4.5.95/SimplySignDesktop-9.4.5.95-64-bit-en.msi' -OutFile $msi
-          $actualSha = (Get-FileHash $msi -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actualSha -ne $expectedSha) { throw "SimplySign MSI SHA-256 mismatch: $actualSha" }
-          $proc = Start-Process msiexec.exe -ArgumentList '/i', $msi, '/qn', '/norestart' -Wait -PassThru
-          if ($proc.ExitCode -notin @(0, 3010)) { throw "SimplySign MSI install failed with exit code $($proc.ExitCode)" }
-          $ssd = 'C:\Program Files\Certum\SimplySign Desktop\SimplySignDesktop.exe'
-          if (-not (Test-Path $ssd)) { throw 'SimplySignDesktop.exe not found after install' }
-          $asm = [System.Reflection.Assembly]::LoadFile($ssd)
-          $cfg = $asm.GetType('CloudService.Config')
-          $flags = [System.Reflection.BindingFlags]::Public -bor [System.Reflection.BindingFlags]::Static
-          $cfg.GetMethod('setRememberPINinCSP', $flags).Invoke($null, @($true))
-          $cfg.GetMethod('setShowLoginDialogOnStart', $flags).Invoke($null, @($false))
-          $cfg.GetMethod('setShowLoginDialogOnAppRequest', $flags).Invoke($null, @($false))
-          $cd = $asm.GetType('CloudService.CloudData')
-          $totp = $asm.GetType('CloudService.TotpCalc')
-          $tmpOtp = Join-Path $env:RUNNER_TEMP 'ssd-otp.txt'
-          try {
-            [System.IO.File]::WriteAllText($tmpOtp, $env:CERTUM_OTP_URI.Trim())
-            if (-not $cd.GetMethod('parseOtpAuthSeed', $flags).Invoke($null, @([string]$tmpOtp))) {
-              throw 'Failed to parse CERTUM_OTP_URI'
-            }
-          } finally {
-            if (Test-Path $tmpOtp) { Remove-Item $tmpOtp -Force }
-          }
-          $qr = $cfg.GetField('otpAuthData', $flags).GetValue($null)
-          $qt = $qr.GetType()
-          $user = $qt.GetField('userLogin').GetValue($qr)
-          $seed = $qt.GetField('userSeed').GetValue($qr)
-          $alg = $qt.GetField('alg').GetValue($qr)
-          $digits = $qt.GetField('digits').GetValue($qr)
-          $period = [int]$qt.GetField('period').GetValue($qr)
-          if ($period -gt 0 -and ($period - ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() % $period)) -lt 5) {
-            Start-Sleep -Seconds 6
-          }
-          $otp = $totp.GetMethod('qrGetOTP', $flags).Invoke($null, @($seed, $alg, $digits, $period))
-          Start-Process -FilePath $ssd -ArgumentList '/autologin', $user, $otp
-          $deadline = (Get-Date).AddSeconds(60)
-          $ready = $false
-          while ((Get-Date) -lt $deadline) {
-            $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:CERTUM_CERT_SHA1 -and $_.HasPrivateKey }
-            if ($cert) { $ready = $true; break }
-            Start-Sleep -Seconds 2
-          }
-          if (-not $ready) { throw "Certum certificate $($env:CERTUM_CERT_SHA1) with private key did not appear in Cert:\CurrentUser\My" }
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $signtool) { throw 'signtool.exe not found' }
-          "SIGNTOOL=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: Sign the bridge tools (Certum)
-        if: env.HAS_CERTUM == 'true'
-        shell: pwsh
-        run: |
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet Launcher' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_launcher.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet Bridge' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_bridge.dll
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Sign bullet.exe (Certum)
-        if: env.HAS_CERTUM == 'true'
-        shell: pwsh
-        run: |
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet' /du 'https://github.com/Isllanrx/Bullet' dist/bullet.exe
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Build installer around that binary (cargo xtask installer --prebuilt)
         run: cargo xtask installer --prebuilt
-
-      - name: Sign the installer (Certum)
-        if: env.HAS_CERTUM == 'true'
-        shell: pwsh
-        run: |
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet Installer' /du 'https://github.com/Isllanrx/Bullet' "dist/installer/Bullet-Setup-$env:VERSION-x64.exe"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Stop Certum SimplySign
-        if: always() && env.HAS_CERTUM == 'true'
-        shell: pwsh
-        run: Stop-Process -Name SimplySignDesktop -Force -ErrorAction SilentlyContinue
-
-      - name: Verify the Authenticode signatures
-        if: env.HAS_CERTUM == 'true'
-        shell: pwsh
-        run: |
-          $files = @('dist/bullet.exe', 'dist/tools/bullet_launcher.exe', 'dist/tools/bullet_bridge.dll', "dist/installer/Bullet-Setup-$env:VERSION-x64.exe")
-          foreach ($file in $files) {
-            $signature = Get-AuthenticodeSignature $file
-            "{0}: {1} {2}" -f $file, $signature.Status, $signature.SignerCertificate.Subject
-            if ($signature.Status -ne 'Valid') { throw "$file is not validly signed" }
-          }
 
       - name: Checksums
         shell: pwsh
