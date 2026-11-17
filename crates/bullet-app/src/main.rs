@@ -314,7 +314,6 @@ async fn run() -> Result<()> {
         own_root: paths.custom_mods_root.clone(),
         state_dir: state_dir_path.clone(),
         game_dir: paths.game_dir.clone(),
-        overlay_dir: paths.overlay_dir.clone(),
         injection_tools: required_tools,
     };
 

@@ -31,10 +31,10 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
 | `build/mod_compat/assets.rs` | Reads asset formats from their headers and finds the game's new name for a renamed asset path |
 | `build/mod_compat/repair.rs` | `Repairer`: rewrites a mod's bins and assets against the installed game, for packed WADs and folders |
 | `build/overlay_builder/mod.rs` | Builds the overlay from the installed game and the selected mods; a custom mod's bins get their stale text paths converted to the file references the game now declares before they are merged |
-| `build/overlay_builder/game_index.rs` | Index of the game's WADs, kept in memory and on disk until a WAD changes; an index built while some WADs were unreadable is used for that run and never kept |
+| `build/overlay_builder/game_index.rs` | Index of the game's WADs, kept in memory and on disk until a WAD changes; an index built while some WADs were unreadable is used for that run and never kept. The saved index is keyed by paths relative to the game folder, so another spelling of that folder keeps it. Also reads a champion's own WAD once, in file order, ahead of the patcher build |
 | `build/overlay_builder/mods.rs` | Index of a mod's WADs and loose files, stale bins retyped against the game, entries identical to the game dropped |
 | `build/overlay_builder/report.rs` | Logs each overlay WAD and writes the overlay manifest |
-| `build/overlay_builder/store.rs` | Shared game WAD copies prepared ahead of a match, the stored base WADs moved in and out of the overlay, and removal of stray WADs left by an earlier build (counted when they cannot be removed or listed) |
+| `build/overlay_builder/store.rs` | The stored base WADs moved in and out of the overlay, and removal of stray WADs left by an earlier build (counted when they cannot be removed or listed) |
 | `build/overlay_cache/mod.rs` | Reuses a previous overlay when the same mods were chosen and the game has not changed; recording fails on a game WAD that exists but cannot be read |
 | `build/overlay.rs` | Overlay configuration and locations |
 | `injector/overlay_process/mod.rs` | Lifecycle of the native host: waits for its signals, notices when it exits and kills it if Bullet drops it; a `Hooked` signal that arrives while waiting for `Armed` satisfies the wait |

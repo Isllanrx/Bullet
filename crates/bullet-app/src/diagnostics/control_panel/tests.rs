@@ -117,6 +117,28 @@ fn test_diagnostics_zip_holds_recent_logs_and_every_manifest() {
 }
 
 #[test]
+fn test_diagnostics_keep_screenshots_as_they_are_and_compress_the_logs() {
+    let root = std::env::temp_dir().join(format!("bullet_diag_shot_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture may not exist yet
+    let dir = root.join("logs");
+    std::fs::create_dir_all(&dir).expect("dir");
+    std::fs::write(dir.join("bullet.log.2026-09-30"), b"today").expect("log");
+    let shot = root.join("Screen01.png");
+    std::fs::write(&shot, [0x89, b'P', b'N', b'G', 1, 2, 3]).expect("shot");
+    let zip_path = export_diagnostics(&dir, std::time::SystemTime::now(), &[shot]).expect("export");
+    let mut archive =
+        zip::ZipArchive::new(std::fs::File::open(&zip_path).expect("zip")).expect("archive");
+    let image = archive.by_name("screenshots/Screen01.png").expect("shot");
+    assert_eq!(image.compression(), zip::CompressionMethod::Stored);
+    assert_eq!(image.size(), 7);
+    drop(image);
+    let log = archive.by_name("bullet.log.2026-09-30").expect("log");
+    assert_eq!(log.compression(), zip::CompressionMethod::Deflated);
+    drop(log);
+    let _ = std::fs::remove_dir_all(&root); // ignore-ok: fixture cleanup
+}
+
+#[test]
 fn test_diagnostics_refuse_an_empty_logs_folder() {
     let dir = std::env::temp_dir().join(format!("bullet_diag_empty_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet

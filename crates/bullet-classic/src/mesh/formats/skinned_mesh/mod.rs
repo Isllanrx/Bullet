@@ -13,6 +13,7 @@ pub(crate) const COLOR_VERTEX: usize = 56;
 pub(crate) const TANGENT_VERTEX: usize = 72;
 pub(crate) const INFLUENCES_AT: usize = 12;
 pub(crate) const COLOR_AT: usize = 52;
+pub const BONE_PALETTES_FLAG: u32 = 1;
 pub const RELATIVE_INDICES_FLAG: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +32,7 @@ pub struct SkinnedMesh {
     pub vertex_type: u32,
     pub vertex_size: usize,
     pub bounds: [f32; BOUNDS],
+    pub bone_palettes: Vec<u8>,
     pub submeshes: Vec<Submesh>,
     pub indices: Vec<u16>,
     pub vertices: Vec<u8>,
@@ -51,6 +53,11 @@ impl SkinnedMesh {
         let start = index.checked_mul(self.vertex_size)?;
         self.vertices
             .get(start..start.checked_add(self.vertex_size)?)
+    }
+
+    #[must_use]
+    pub const fn has_bone_palettes(&self) -> bool {
+        self.flags & BONE_PALETTES_FLAG != 0
     }
 
     #[must_use]
@@ -130,7 +137,14 @@ pub fn parse(bytes: &[u8]) -> Result<SkinnedMesh, ClassicError> {
     for (i, slot) in bounds.iter_mut().enumerate() {
         *slot = r.f32(at + COUNTS + i * 4)?;
     }
-    let indices_at = at + COUNTS + BOUNDS * 4;
+    let flags = r.u32(at)?;
+    let bounds_end = at + COUNTS + BOUNDS * 4;
+    let (bone_palettes, indices_at) = if flags & BONE_PALETTES_FLAG == 0 {
+        (&[][..], bounds_end)
+    } else {
+        let len = usize::from(r.u16(bounds_end)?);
+        (r.section(bounds_end + 2, len)?, bounds_end + 2 + len)
+    };
     let indices: Vec<u16> = r
         .section(indices_at, index_count.saturating_mul(2))?
         .chunks_exact(2)
@@ -150,10 +164,11 @@ pub fn parse(bytes: &[u8]) -> Result<SkinnedMesh, ClassicError> {
     }
     Ok(SkinnedMesh {
         minor: r.u16(6)?,
-        flags: r.u32(at)?,
+        flags,
         vertex_type: r.u32(at + 16)?,
         vertex_size,
         bounds,
+        bone_palettes: bone_palettes.to_vec(),
         submeshes,
         indices,
         vertices: vertices.to_vec(),
@@ -209,6 +224,12 @@ pub fn write(mesh: &SkinnedMesh) -> Result<Vec<u8>, ClassicError> {
     mesh.bounds
         .iter()
         .for_each(|v| out.extend_from_slice(&v.to_le_bytes()));
+    if mesh.has_bone_palettes() {
+        let len = u16::try_from(mesh.bone_palettes.len())
+            .map_err(|_| corrupt("bone palettes do not fit their length field".into()))?;
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&mesh.bone_palettes);
+    }
     mesh.indices
         .iter()
         .for_each(|i| out.extend_from_slice(&i.to_le_bytes()));
