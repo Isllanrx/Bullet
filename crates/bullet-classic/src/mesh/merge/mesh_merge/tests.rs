@@ -154,6 +154,10 @@ fn forms_that_cannot_share_one_model_are_refused_with_the_reason() {
     assert!(merge_forms(&[base_form(), wild]).is_err());
 
     assert!(merge_forms(&[]).is_err());
+    let mut own_palettes = storm_form();
+    own_palettes.mesh.flags |= crate::mesh::skinned_mesh::BONE_PALETTES_FLAG;
+    own_palettes.mesh.bone_palettes = vec![0, 1, 0x21, 0x01];
+    assert!(merge_forms(&[base_form(), own_palettes]).is_err());
 }
 
 #[test]
