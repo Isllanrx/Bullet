@@ -10,6 +10,7 @@ export component StarGateWindow inherits Window {
     in property <string> recheck-label;
     in property <string> quit-label;
     in property <string> code-hint;
+    in property <string> copy-code-label;
     in property <string> code;
     in property <string> message;
     in property <bool> is-error;
@@ -19,6 +20,7 @@ export component StarGateWindow inherits Window {
     callback recheck();
     callback open-repo();
     callback quit();
+    callback copy-code();
     title: "Bullet";
     icon: @image-url("assets/logo.png");
     preferred-width: 520px;
@@ -106,6 +108,11 @@ export component StarGateWindow inherits Window {
                             accessible-role: text;
                             accessible-label: root.code;
                         }
+                    }
+                    GoldButton {
+                        min-height: 36px;
+                        text: root.copy-code-label;
+                        clicked => { root.copy-code(); }
                     }
                 }
                 if root.message != "": Text {

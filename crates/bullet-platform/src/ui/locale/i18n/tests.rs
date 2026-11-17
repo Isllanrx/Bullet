@@ -48,6 +48,9 @@ fn templates_are_filled_and_every_dictionary_keeps_its_placeholders() {
             (text.custom_mods_refused_body, "n"),
             (text.custom_mods_restored_body, "n"),
             (text.custom_mods_restore_failed, "error"),
+            (text.manager_outdated_body, "found"),
+            (text.manager_outdated_body, "bullet"),
+            (text.manager_outdated_body, "required"),
         ] {
             assert!(
                 template.contains(&format!("{{{key}}}")),

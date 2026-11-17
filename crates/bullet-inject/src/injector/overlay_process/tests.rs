@@ -9,6 +9,7 @@ fn idle(signals: mpsc::UnboundedReceiver<PatcherSignal>) -> OverlayProcess {
         _stdout_reader: None,
         _stderr_reader: None,
         hooked: false,
+        shutdown_hook: None,
     }
 }
 
@@ -101,4 +102,24 @@ async fn a_patcher_that_exited_is_not_reused_for_the_next_game() {
     overlay.child = Some(child);
     assert_eq!(overlay.exited_within(Duration::from_secs(5)).await, Some(3));
     assert_eq!(overlay.ready_for_next_game(), Err(3));
+}
+
+#[tokio::test]
+async fn shutdown_awaits_async_hook_completion() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let finished = Arc::new(AtomicBool::new(false));
+    let finished_clone = Arc::clone(&finished);
+    let (_tx, rx) = mpsc::unbounded_channel();
+    let mut overlay = idle(rx);
+    overlay.shutdown_hook = Some(Box::new(move || {
+        Box::pin(async move {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            finished_clone.store(true, Ordering::SeqCst);
+        })
+    }));
+
+    overlay.shutdown().await;
+    assert!(finished.load(Ordering::SeqCst));
 }

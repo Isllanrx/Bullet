@@ -60,13 +60,10 @@ impl InjectionTrigger {
 
     pub(super) fn pipeline_config(&self, game_dir: PathBuf) -> PipelineConfig {
         PipelineConfig {
-            provider_kind: bullet_inject::provider::ProviderKind::Native,
-            native_host_exe: Some(self.paths.native_host_exe.clone()),
-            native_dll_path: Some(self.paths.native_dll_path.clone()),
-            native_target: Some(bullet_inject::pipeline::NativeWindowTarget {
-                window_title: "League of Legends (TM) Client".into(),
-                image_name: "League of Legends.exe".into(),
-            }),
+            provider_kind: bullet_inject::provider::ProviderKind::Ltf,
+            native_host_exe: None,
+            native_dll_path: None,
+            native_target: None,
             overlay_config: OverlayConfig {
                 mods_dir: self.paths.mods_dir.clone(),
                 overlay_dir: self.paths.overlay_dir.clone(),

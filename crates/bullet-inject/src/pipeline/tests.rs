@@ -77,7 +77,7 @@ async fn mock_provider_spawn_patcher_is_refused() {
     let mut config = temp_config(&dir, dir.join("missing_host.exe"));
     config.provider_kind = crate::provider::ProviderKind::Mock;
     let error = InjectionPipeline::new(config, None)
-        .spawn_patcher()
+        .spawn_patcher(&[])
         .await
         .err()
         .expect("mock cannot spawn a patcher");
@@ -95,7 +95,7 @@ async fn native_spawn_patcher_reports_each_missing_configuration() {
     let mut no_host = temp_config(&dir, dir.join("host.exe"));
     no_host.native_host_exe = None;
     let error = InjectionPipeline::new(no_host, None)
-        .spawn_patcher()
+        .spawn_patcher(&[])
         .await
         .err()
         .expect("missing host path");
@@ -108,7 +108,7 @@ async fn native_spawn_patcher_reports_each_missing_configuration() {
     let mut no_dll = temp_config(&dir, dir.join("host.exe"));
     no_dll.native_dll_path = None;
     let error = InjectionPipeline::new(no_dll, None)
-        .spawn_patcher()
+        .spawn_patcher(&[])
         .await
         .err()
         .expect("missing dll path");
@@ -117,7 +117,7 @@ async fn native_spawn_patcher_reports_each_missing_configuration() {
     let mut no_target = temp_config(&dir, dir.join("host.exe"));
     no_target.native_target = None;
     let error = InjectionPipeline::new(no_target, None)
-        .spawn_patcher()
+        .spawn_patcher(&[])
         .await
         .err()
         .expect("missing game target");
@@ -263,7 +263,7 @@ async fn fake_host(
     let mut config = temp_config(&dir, host);
     config.hook_timeout = hook_timeout;
     let pipeline = InjectionPipeline::new(config, None);
-    let overlay = pipeline.spawn_patcher().await.expect("spawn fake host");
+    let overlay = pipeline.spawn_patcher(&[]).await.expect("spawn fake host");
     (pipeline, overlay)
 }
 
@@ -358,6 +358,32 @@ async fn test_a_spent_late_budget_ends_unconfirmed() {
         "an exhausted budget must not wait at all"
     );
     overlay.shutdown().await;
+}
+
+#[test]
+fn test_ltf_prepare_summary_skips_native_wad_build() {
+    let dir = std::env::temp_dir().join(format!("bullet_ltf_summary_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: clean temp dir
+    let mod_dir = dir.join("mods").join("std_sett_1");
+    std::fs::create_dir_all(&mod_dir).expect("mkdir");
+    std::fs::write(mod_dir.join("skin0.bin"), b"prop").expect("write");
+
+    let mut config = temp_config(&dir, dir.join("host.exe"));
+    config.provider_kind = crate::provider::ProviderKind::Ltf;
+    let pipeline = InjectionPipeline::new(config, None);
+    let build = pipeline
+        .prepare_ltf_summary(&["std_sett_1".to_string()])
+        .expect("summary");
+    assert_eq!(build.wad_files, 1);
+    assert_eq!(build.bytes, 4);
+    assert!(!dir.join("overlay").join("overlay_manifest.json").exists());
+    assert!(
+        pipeline
+            .prepare_ltf_summary(&["missing".to_string()])
+            .is_err()
+    );
+
+    let _ = std::fs::remove_dir_all(&dir); // ignore-ok: cleanup temp dir
 }
 
 #[test]

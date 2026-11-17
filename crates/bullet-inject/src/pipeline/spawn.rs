@@ -2,8 +2,23 @@ use crate::error::InjectError;
 use crate::overlay_process::OverlayProcess;
 
 impl super::InjectionPipeline {
-    pub(super) async fn spawn_patcher(&self) -> Result<OverlayProcess, InjectError> {
+    pub(super) async fn spawn_patcher(
+        &self,
+        mods: &[String],
+    ) -> Result<OverlayProcess, InjectError> {
         match self.config.provider_kind {
+            crate::provider::ProviderKind::Ltf => {
+                let tools_dirs = bullet_platform::paths::tools_dir_candidates(
+                    &self.config.overlay_config.overlay_dir,
+                );
+                crate::ltf::spawn_ltf_patcher(
+                    &tools_dirs,
+                    &self.config.overlay_config.mods_dir,
+                    mods,
+                    self.state_tx.clone(),
+                )
+                .await
+            }
             crate::provider::ProviderKind::Native => {
                 let host_exe = self.config.native_host_exe.as_deref().ok_or_else(|| {
                     InjectError::Process("Native host path not configured".into())

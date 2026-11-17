@@ -201,8 +201,12 @@ impl InjectionPipeline {
         let budget = self.config.late_budget.min(LATE_BUDGET_LIMIT);
         let remaining = |now: &std::time::Instant| budget.saturating_sub(now.elapsed());
 
-        let build_timeout = self.config.build_timeout.min(remaining(&started));
-        self.build_overlay(mods, build_timeout).await?;
+        if self.config.provider_kind == crate::provider::ProviderKind::Ltf {
+            self.prepare_ltf_summary(mods)?;
+        } else {
+            let build_timeout = self.config.build_timeout.min(remaining(&started));
+            self.build_overlay(mods, build_timeout).await?;
+        }
 
         if let Some((_, age)) = game_already_loading() {
             return Err(InjectError::GameAlreadyLoading {
@@ -210,7 +214,7 @@ impl InjectionPipeline {
             });
         }
 
-        let mut overlay = self.spawn_patcher().await?;
+        let mut overlay = self.spawn_patcher(mods).await?;
 
         let hook_budget = self.config.hook_timeout.min(remaining(&started));
         let status = self.confirm_hook(&mut overlay, hook_budget).await;
@@ -242,20 +246,33 @@ impl InjectionPipeline {
             "Native engine files accepted"
         );
 
-        let build = match self.build_overlay(mods, self.config.build_timeout).await {
-            Ok(build) => build,
-            Err(e) => {
-                error!(error = %e, "Arming aborted: the overlay could not be built");
-                self.publish(InjectionStatus::Failed {
-                    error: e.to_string(),
-                });
-                return Err(e);
+        let build = if self.config.provider_kind == crate::provider::ProviderKind::Ltf {
+            match self.prepare_ltf_summary(mods) {
+                Ok(build) => build,
+                Err(e) => {
+                    error!(error = %e, "Arming aborted: LTF mod directories contain no injectable files");
+                    self.publish(InjectionStatus::Failed {
+                        error: e.to_string(),
+                    });
+                    return Err(e);
+                }
+            }
+        } else {
+            match self.build_overlay(mods, self.config.build_timeout).await {
+                Ok(build) => build,
+                Err(e) => {
+                    error!(error = %e, "Arming aborted: the overlay could not be built");
+                    self.publish(InjectionStatus::Failed {
+                        error: e.to_string(),
+                    });
+                    return Err(e);
+                }
             }
         };
 
         wait_out_loading_game().await;
 
-        let mut overlay = match self.spawn_patcher().await {
+        let mut overlay = match self.spawn_patcher(mods).await {
             Ok(overlay) => overlay,
             Err(e) => {
                 error!(error = %e, "Arming aborted: the patcher could not be started");

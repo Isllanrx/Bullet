@@ -16,6 +16,12 @@ pub enum PatcherSignal {
     Failed,
 }
 
+pub(crate) type ShutdownHook = Box<
+    dyn FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>
+        + Send
+        + 'static,
+>;
+
 pub struct OverlayProcess {
     pub(crate) child: Option<Child>,
 
@@ -24,6 +30,7 @@ pub struct OverlayProcess {
     pub(crate) _stdout_reader: Option<tokio::task::JoinHandle<()>>,
     pub(crate) _stderr_reader: Option<tokio::task::JoinHandle<()>>,
     pub(crate) hooked: bool,
+    pub(crate) shutdown_hook: Option<ShutdownHook>,
 }
 
 const READER_DRAIN: Duration = Duration::from_millis(500);
@@ -128,6 +135,17 @@ impl OverlayProcess {
     }
 
     pub async fn shutdown(mut self) {
+        if self.child.is_none() {
+            if let Some(h) = self._stdout_reader.take() {
+                h.abort();
+            }
+            if let Some(h) = self._stderr_reader.take() {
+                h.abort();
+            }
+        }
+        if let Some(hook) = self.shutdown_hook.take() {
+            hook().await;
+        }
         drop(self._stdin.take());
 
         if let Some(mut child) = self.child.take() {
@@ -174,6 +192,12 @@ impl OverlayProcess {
 
 impl Drop for OverlayProcess {
     fn drop(&mut self) {
+        if let Some(hook) = self.shutdown_hook.take() {
+            let fut = hook();
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                handle.spawn(fut);
+            }
+        }
         if let Some(child) = self.child.as_mut() {
             if let Err(e) = child.start_kill() {
                 debug!(error = %e, "Overlay process already gone at drop");

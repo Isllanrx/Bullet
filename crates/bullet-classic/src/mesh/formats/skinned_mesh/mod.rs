@@ -13,6 +13,7 @@ pub(crate) const COLOR_VERTEX: usize = 56;
 pub(crate) const TANGENT_VERTEX: usize = 72;
 pub(crate) const INFLUENCES_AT: usize = 12;
 pub(crate) const COLOR_AT: usize = 52;
+pub const RELATIVE_INDICES_FLAG: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Submesh {
@@ -50,6 +51,40 @@ impl SkinnedMesh {
         let start = index.checked_mul(self.vertex_size)?;
         self.vertices
             .get(start..start.checked_add(self.vertex_size)?)
+    }
+
+    #[must_use]
+    pub const fn uses_relative_indices(&self) -> bool {
+        self.flags & RELATIVE_INDICES_FLAG != 0
+    }
+
+    pub fn validate_submesh_indices(&self) -> Result<(), ClassicError> {
+        let total_vertices = self.vertex_count();
+        let relative = self.uses_relative_indices();
+        for part in &self.submeshes {
+            let start = part.first_index as usize;
+            let end = start
+                .checked_add(part.index_count as usize)
+                .filter(|end| *end <= self.indices.len())
+                .ok_or_else(|| {
+                    corrupt(format!("submesh '{}' indices run past the mesh", part.name))
+                })?;
+            let limit = if relative {
+                part.vertex_count as usize
+            } else {
+                total_vertices
+            };
+            if let Some(&bad) = self.indices[start..end]
+                .iter()
+                .find(|&&index| usize::from(index) >= limit)
+            {
+                return Err(corrupt(format!(
+                    "submesh '{}' index {bad} exceeds {limit} (flags={})",
+                    part.name, self.flags
+                )));
+            }
+        }
+        Ok(())
     }
 }
 
