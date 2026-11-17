@@ -130,8 +130,8 @@ fn test_tools_are_present_only_when_every_file_exists() {
     let dir = std::env::temp_dir().join(format!("bullet_panel_tools_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
     std::fs::create_dir_all(&dir).expect("fixture dir");
-    let host = dir.join("bullet-br.exe");
-    let dll = dir.join("bullet-br.dll");
+    let host = dir.join("bullet_launcher.exe");
+    let dll = dir.join("bullet_bridge.dll");
     std::fs::write(&host, b"host").expect("host");
     assert!(!tools_present(&[host.clone(), dll.clone()]));
     std::fs::write(&dll, b"dll").expect("dll");

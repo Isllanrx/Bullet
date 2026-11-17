@@ -95,7 +95,7 @@ fn tools_fixture(tag: &str, files: &[&str]) -> PathBuf {
     dir
 }
 
-const BOTH_TOOLS: [&str; 2] = ["bullet-br.exe", "bullet-br.dll"];
+const BOTH_TOOLS: [&str; 2] = ["bullet_launcher.exe", "bullet_bridge.dll"];
 
 #[test]
 fn test_first_candidate_folder_wins() {
@@ -112,7 +112,7 @@ fn test_first_candidate_folder_wins() {
 
 #[test]
 fn test_half_a_toolset_is_not_a_toolset() {
-    let partial = tools_fixture("partial", &["bullet-br.exe"]);
+    let partial = tools_fixture("partial", &["bullet_launcher.exe"]);
     let (_, source) = resolve_tools_dir(std::slice::from_ref(&partial));
     assert_eq!(source, ToolsSource::Missing);
     let _ = std::fs::remove_dir_all(&partial); // ignore-ok: test temp dir teardown

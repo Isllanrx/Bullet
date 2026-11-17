@@ -1,7 +1,9 @@
 use super::*;
 
-pub const NATIVE_HOST_EXE: &str = "bullet-br.exe";
-pub const NATIVE_DLL_FILE: &str = "bullet-br.dll";
+pub const LTF_LAUNCHER_EXE: &str = "bullet_launcher.exe";
+pub const LTF_BRIDGE_DLL: &str = "bullet_bridge.dll";
+pub const NATIVE_HOST_EXE: &str = LTF_LAUNCHER_EXE;
+pub const NATIVE_DLL_FILE: &str = LTF_BRIDGE_DLL;
 
 #[derive(Debug, Clone)]
 pub struct ResolvedPaths {
@@ -46,8 +48,8 @@ impl ResolvedPaths {
             ToolsSource::Missing => {
                 error!(
                     expected = %tools_dir.display(),
-                    "Bullet's native engine was not found. Reinstall Bullet so {NATIVE_HOST_EXE} and \
-                     {NATIVE_DLL_FILE} are in that folder; no skin can be prepared until then"
+                    "Bullet's injection tools were not found. Reinstall Bullet so {LTF_LAUNCHER_EXE} and \
+                     {LTF_BRIDGE_DLL} are in that folder; no skin can be prepared until then"
                 );
             }
         }
@@ -110,10 +112,12 @@ pub enum ToolsSource {
 }
 
 pub(crate) fn resolve_tools_dir(candidates: &[PathBuf]) -> (PathBuf, ToolsSource) {
-    let complete =
-        |dir: &PathBuf| dir.join(NATIVE_HOST_EXE).is_file() && dir.join(NATIVE_DLL_FILE).is_file();
+    let complete = |dir: &PathBuf| {
+        (dir.join(LTF_LAUNCHER_EXE).is_file() && dir.join(LTF_BRIDGE_DLL).is_file())
+            || (dir.join("bullet-br.exe").is_file() && dir.join("bullet-br.dll").is_file())
+    };
     if let Some(dir) = candidates.iter().find(|dir| complete(dir)) {
-        info!(tools = %dir.display(), "Native engine (host and DLL) found");
+        info!(tools = %dir.display(), "Injection tools found");
         return (dir.clone(), ToolsSource::Own);
     }
     (
