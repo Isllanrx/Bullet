@@ -5,7 +5,6 @@ use tracing::{debug, info, warn};
 
 pub(super) const FILE_NAME: &str = bullet_platform::paths::STAR_GATE_FILE;
 pub(super) const PURPOSE: &str = "bullet-star-gate-v1";
-pub(super) const GRACE_SECS: u64 = 7 * 86_400;
 pub(super) const CLOCK_SKEW_SECS: u64 = 300;
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -16,22 +15,9 @@ pub(super) struct Grant {
     pub verified_at: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Freshness {
-    Fresh,
-    Stale,
-    FromTheFuture,
-}
-
 impl Grant {
-    pub(super) fn freshness(&self, now: u64) -> Freshness {
-        if self.verified_at > now.saturating_add(CLOCK_SKEW_SECS) {
-            Freshness::FromTheFuture
-        } else if now.saturating_sub(self.verified_at) <= GRACE_SECS {
-            Freshness::Fresh
-        } else {
-            Freshness::Stale
-        }
+    pub(super) fn is_from_the_future(&self, now: u64) -> bool {
+        self.verified_at > now.saturating_add(CLOCK_SKEW_SECS)
     }
 }
 

@@ -1,7 +1,7 @@
 use super::github::{
     GithubError, Poll, Star, classify_star, parse_device_code, parse_poll, trusted_verification_uri,
 };
-use super::grant::{self, CLOCK_SKEW_SECS, Freshness, GRACE_SECS, Grant};
+use super::grant::{self, CLOCK_SKEW_SECS, Grant};
 
 fn grant_at(verified_at: u64) -> Grant {
     Grant {
@@ -123,23 +123,13 @@ fn only_github_pages_are_opened_for_the_sign_in() {
 }
 
 #[test]
-fn verification_age_follows_the_grace_period_and_rejects_future_dates() {
+fn verifications_dated_in_the_future_are_rejected() {
     let now = 2_000_000_000;
-    assert_eq!(grant_at(now).freshness(now), Freshness::Fresh);
-    assert_eq!(grant_at(now - GRACE_SECS).freshness(now), Freshness::Fresh);
-    assert_eq!(
-        grant_at(now - GRACE_SECS - 1).freshness(now),
-        Freshness::Stale
-    );
-    assert_eq!(
-        grant_at(now + CLOCK_SKEW_SECS).freshness(now),
-        Freshness::Fresh
-    );
-    assert_eq!(
-        grant_at(now + CLOCK_SKEW_SECS + 1).freshness(now),
-        Freshness::FromTheFuture
-    );
-    assert_eq!(grant_at(u64::MAX).freshness(now), Freshness::FromTheFuture);
+    assert!(!grant_at(0).is_from_the_future(now));
+    assert!(!grant_at(now).is_from_the_future(now));
+    assert!(!grant_at(now + CLOCK_SKEW_SECS).is_from_the_future(now));
+    assert!(grant_at(now + CLOCK_SKEW_SECS + 1).is_from_the_future(now));
+    assert!(grant_at(u64::MAX).is_from_the_future(now));
 }
 
 #[test]

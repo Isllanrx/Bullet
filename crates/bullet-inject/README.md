@@ -19,12 +19,9 @@ mods chosen ──▶ compatibility check ──▶ overlay build ──▶ inje
    when a file's size or modification time changes. For every archive a mod touches, the builder writes a copy
    that holds the mod's files and the original bytes of everything else. Entries that turn out identical to the
    game's are dropped, so the overlay stays small.
-3. **Injector armed.** Bullet's native host (`bullet-br.exe`) is started during champion select with the
-   overlay location, the game window to wait for and the DLL to load. It reports progress on stdout and
-   failures on stderr; Bullet reads both and records them.
-4. **Game starts.** The host installs a window-message hook that loads `bullet-br.dll` into the game, and the
-   DLL connects back over the named pipe `\\.\pipe\bullet-patcher-pipe`. From then on, whenever the game opens
-   one of the archives Bullet rebuilt, it reads the overlay copy instead.
+3. **Injector armed.** Bullet drives the LTF bridge (`bullet_launcher.exe` and `bullet_bridge.dll`) during champion select,
+   connecting to the official Mod Manager via local TCP bridge.
+4. **Game starts.** The patcher redirects WAD reads so the game loads the overlay copies seamlessly.
 
 ## What is inside
 

@@ -58,7 +58,7 @@ pub(super) static SPANISH: Text = Text {
     check_client: "Cliente de League",
     check_privileges: "Privilegios de Bullet",
     detail_ok: "OK",
-    detail_injector_missing: "falta bullet-br.exe o bullet-br.dll",
+    detail_injector_missing: "falta bullet_launcher.exe o bullet_bridge.dll",
     detail_game_missing: "carpeta del juego no encontrada",
     detail_client_connected: "conectado",
     detail_client_waiting: "esperando a que se abra el cliente",
@@ -89,10 +89,10 @@ No: sigues con esta versión; puedes actualizar después desde la página de des
     panel_mark_problem_hint: "Sin salir del juego: durante la partida, Ctrl+Shift+B marca el momento en que algo se ve mal y F12 toma una captura. Al terminar la partida el diagnóstico se guarda solo en la carpeta de logs.",
     panel_export_diagnostics: "Exportar diagnóstico",
 
-    missing_tools_title: "Bullet — Falta el motor nativo",
-    missing_tools_body: "El motor nativo de Bullet (bullet-br.exe y bullet-br.dll) no está en la carpeta 'tools' de Bullet.\n\nReinstale Bullet para restaurarlo.",
-    broken_tools_title: "Bullet — Motor nativo inválido",
-    broken_tools_body: "Un archivo del motor nativo (bullet-br.exe o bullet-br.dll) no está firmado por el editor de Bullet.\n\nReinstale Bullet desde la versión oficial.",
+    missing_tools_title: "Bullet — Faltan las herramientas de inyección",
+    missing_tools_body: "Las herramientas de inyección de Bullet (bullet_launcher.exe y bullet_bridge.dll) no están en la carpeta 'tools'.\n\nReinstale Bullet para restaurarlas.",
+    broken_tools_title: "Bullet — Herramientas de inyección inválidas",
+    broken_tools_body: "Las herramientas de inyección en la carpeta 'tools' no pudieron ser verificadas.\n\nReinstale Bullet desde la versión oficial.",
 
     already_running_title: "Bullet ya está abierto",
     already_running_body: "Bullet ya se está ejecutando en segundo plano.\n\nBusca el icono de Bullet en la \
@@ -212,6 +212,7 @@ No: sigues con esta versión; puedes actualizar después desde la página de des
     star_gate_recheck: "Verificar de nuevo",
     star_gate_quit: "Salir",
     star_gate_code_hint: "Escribe este código en la página de GitHub que se abrió en el navegador. Ya está en el portapapeles.",
+    star_gate_copy_code: "Copiar Código",
     star_gate_waiting: "Esperando la autorización en GitHub…",
     star_gate_checking: "Comprobando la estrella…",
     star_gate_missing_star: "La cuenta {user} todavía no le dio estrella al repositorio. Dale la estrella y haz clic en Verificar de nuevo.",
@@ -220,4 +221,9 @@ No: sigues con esta versión; puedes actualizar después desde la página de des
     star_gate_expired: "El código expiró. Haz clic en Iniciar sesión con GitHub para obtener otro.",
     star_gate_unreachable: "No se pudo conectar con GitHub: {error}",
     star_gate_unconfigured: "Esta compilación de Bullet no tiene el Client ID de GitHub configurado. Descarga la versión oficial.",
+
+    manager_missing_title: "Falta Mod Manager",
+    manager_missing_body: "No se encontró Mod Manager en este PC. Instala la última versión (1.33.0 o superior) para que Bullet funcione correctamente.",
+    manager_outdated_title: "Mod Manager desactualizado",
+    manager_outdated_body: "La versión instalada de Mod Manager ({found}) está desactualizada para esta versión de Bullet ({bullet}). Actualiza Mod Manager en tu PC a la versión {required}+ para que todo funcione correctamente.",
 };

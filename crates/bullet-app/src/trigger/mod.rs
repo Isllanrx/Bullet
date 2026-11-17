@@ -55,6 +55,7 @@ impl InjectionTrigger {
         let mut last_wanted: Option<WantedSkin> = None;
         let mut tools_missing_reported = false;
         let mut injection_off_reported = false;
+        let mut ltf_warmed = false;
 
         info!(
             tools = %self.paths.tools_dir.display(),
@@ -147,6 +148,17 @@ impl InjectionTrigger {
                     }
 
                     let state = state_rx.borrow().clone();
+
+                    if !ltf_warmed && state.lcu_connected && tools_ready(&self.paths) {
+                        ltf_warmed = true;
+                        let mut dirs = tools_dir_candidates(&data_dir().unwrap_or_else(|_| self.paths.tools_dir.clone()));
+                        if !dirs.contains(&self.paths.tools_dir) {
+                            dirs.insert(0, self.paths.tools_dir.clone());
+                        }
+                        tokio::spawn(async move {
+                            bullet_inject::ltf::warmup_bridge(&dirs).await;
+                        });
+                    }
 
                     if !bullet_platform::preferences::INJECTION.is_enabled() {
                         if let Some(overlay) = active_overlay.take() {

@@ -302,6 +302,7 @@ pub struct Text {
     pub star_gate_recheck: &'static str,
     pub star_gate_quit: &'static str,
     pub star_gate_code_hint: &'static str,
+    pub star_gate_copy_code: &'static str,
     pub star_gate_waiting: &'static str,
     pub star_gate_checking: &'static str,
     pub star_gate_missing_star: &'static str,
@@ -310,6 +311,11 @@ pub struct Text {
     pub star_gate_expired: &'static str,
     pub star_gate_unreachable: &'static str,
     pub star_gate_unconfigured: &'static str,
+
+    pub manager_missing_title: &'static str,
+    pub manager_missing_body: &'static str,
+    pub manager_outdated_title: &'static str,
+    pub manager_outdated_body: &'static str,
 }
 
 #[must_use]
