@@ -273,6 +273,9 @@ fn sphere(bounds: &mut [f32; 10], forms: &[FormModel]) {
 
 pub fn merge_forms(forms: &[FormModel]) -> Result<MergedForms, ClassicError> {
     let base = forms.first().ok_or_else(|| refuse("no forms"))?;
+    if forms.iter().any(|f| f.mesh.has_bone_palettes()) {
+        return Err(refuse("a mesh maps its bones through its own palettes"));
+    }
     let (vertex_size, vertex_type) = vertex_layout(forms)?;
     let total: usize = forms.iter().map(|f| f.mesh.vertex_count()).sum();
     if total > MAX_VERTICES {
@@ -287,6 +290,7 @@ pub fn merge_forms(forms: &[FormModel]) -> Result<MergedForms, ClassicError> {
         vertex_type,
         vertex_size,
         bounds: base.mesh.bounds,
+        bone_palettes: Vec::new(),
         submeshes: Vec::new(),
         indices: Vec::new(),
         vertices: Vec::new(),
