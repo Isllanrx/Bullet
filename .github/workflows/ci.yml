@@ -171,10 +171,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  pr-source:
+    name: Pull request source
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Only dev opens pull requests to main
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ "$BASE_REF" = "main" ]; then
+            if [ "$HEAD_REF" != "dev" ] || [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+              echo "::error::Pull requests to main come only from dev; retarget this one to dev"
+              exit 1
+            fi
+          fi
+
   ci-ok:
     name: CI OK
     if: always()
-    needs: [check, release-build, deny, relay-worker, workflow-lint]
+    needs: [check, release-build, deny, relay-worker, workflow-lint, pr-source]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
