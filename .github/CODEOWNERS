@@ -17,6 +17,9 @@
 /crates/bullet-app/src/updates/self_update/ @Isllanrx
 /install.ps1                        @Isllanrx
 /crates/bullet-inject/src/injector/ @Isllanrx
+/crates/bullet-inject/src/ltf/      @Isllanrx
+/crates/bullet-bridge/              @Isllanrx
+/crates/bullet-launcher/            @Isllanrx
 /crates/bullet-party/src/security/  @Isllanrx
 /crates/bullet-platform/src/os/system/authenticode/ @Isllanrx
 /relay-worker/wrangler.toml         @Isllanrx

@@ -88,8 +88,6 @@ jobs:
     env:
       VERSION: ${{ needs.plan.outputs.version }}
       HAS_CERTUM: ${{ secrets.CERTUM_OTP_URI != '' && vars.CERTUM_CERT_SHA1 != '' }}
-      HAS_SIGNPATH: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
-      SIGNING: ${{ (secrets.CERTUM_OTP_URI != '' && vars.CERTUM_CERT_SHA1 != '') || secrets.SIGNPATH_API_TOKEN != '' }}
       BULLET_GITHUB_CLIENT_ID: ${{ vars.BULLET_GITHUB_CLIENT_ID }}
       CERTUM_CERT_SHA1: ${{ vars.CERTUM_CERT_SHA1 }}
     steps:
@@ -120,7 +118,7 @@ jobs:
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
 
-      - name: Build the release binary and LTF bridge tools (cargo xtask package)
+      - name: Build the release binary and bridge tools (cargo xtask package)
         run: cargo xtask package
 
       - name: Setup Certum SimplySign
@@ -150,7 +148,7 @@ jobs:
           $tmpOtp = Join-Path $env:RUNNER_TEMP 'ssd-otp.txt'
           try {
             [System.IO.File]::WriteAllText($tmpOtp, $env:CERTUM_OTP_URI.Trim())
-            if (-not $cd.GetMethod('parseOtpAuthSeed', $flags).Invoke($null, @($tmpOtp))) {
+            if (-not $cd.GetMethod('parseOtpAuthSeed', $flags).Invoke($null, @([string]$tmpOtp))) {
               throw 'Failed to parse CERTUM_OTP_URI'
             }
           } finally {
@@ -180,13 +178,13 @@ jobs:
           if (-not $signtool) { throw 'signtool.exe not found' }
           "SIGNTOOL=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Sign LTF bridge tools (Certum)
+      - name: Sign the bridge tools (Certum)
         if: env.HAS_CERTUM == 'true'
         shell: pwsh
         run: |
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet LTF Launcher' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_launcher.exe
+          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet Launcher' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_launcher.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet LTF Bridge DLL' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_bridge.dll
+          & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet Bridge' /du 'https://github.com/Isllanrx/Bullet' dist/tools/bullet_bridge.dll
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Sign bullet.exe (Certum)
@@ -195,29 +193,6 @@ jobs:
         run: |
           & $env:SIGNTOOL sign /sha1 $env:CERTUM_CERT_SHA1 /fd SHA256 /tr http://time.certum.pl /td SHA256 /d 'Bullet' /du 'https://github.com/Isllanrx/Bullet' dist/bullet.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - id: unsigned-exe
-        if: env.HAS_CERTUM != 'true' && env.HAS_SIGNPATH == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unsigned-bullet-exe-${{ env.VERSION }}
-          if-no-files-found: error
-          path: dist/bullet.exe
-
-      - name: Sign bullet.exe (SignPath)
-        if: env.HAS_CERTUM != 'true' && env.HAS_SIGNPATH == 'true'
-        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
-        with:
-          connector-url: https://githubactions.connectors.signpath.io
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: ${{ vars.SIGNPATH_EXE_CONFIGURATION_SLUG }}
-          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: dist
 
       - name: Build installer around that binary (cargo xtask installer --prebuilt)
         run: cargo xtask installer --prebuilt
@@ -234,34 +209,11 @@ jobs:
         shell: pwsh
         run: Stop-Process -Name SimplySignDesktop -Force -ErrorAction SilentlyContinue
 
-      - id: unsigned-setup
-        if: env.HAS_CERTUM != 'true' && env.HAS_SIGNPATH == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unsigned-setup-${{ env.VERSION }}
-          if-no-files-found: error
-          path: dist/installer/Bullet-Setup-${{ env.VERSION }}-x64.exe
-
-      - name: Sign the installer (SignPath)
-        if: env.HAS_CERTUM != 'true' && env.HAS_SIGNPATH == 'true'
-        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
-        with:
-          connector-url: https://githubactions.connectors.signpath.io
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: ${{ vars.SIGNPATH_SETUP_CONFIGURATION_SLUG }}
-          github-artifact-id: ${{ steps.unsigned-setup.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600
-          output-artifact-directory: dist/installer
-
       - name: Verify the Authenticode signatures
-        if: env.SIGNING == 'true'
+        if: env.HAS_CERTUM == 'true'
         shell: pwsh
         run: |
-          $files = @('dist/bullet.exe', "dist/installer/Bullet-Setup-$env:VERSION-x64.exe")
+          $files = @('dist/bullet.exe', 'dist/tools/bullet_launcher.exe', 'dist/tools/bullet_bridge.dll', "dist/installer/Bullet-Setup-$env:VERSION-x64.exe")
           foreach ($file in $files) {
             $signature = Get-AuthenticodeSignature $file
             "{0}: {1} {2}" -f $file, $signature.Status, $signature.SignerCertificate.Subject
