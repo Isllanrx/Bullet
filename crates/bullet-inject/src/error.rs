@@ -21,6 +21,8 @@ pub enum InjectError {
     SubprocessTimeout { command: String, timeout_secs: u64 },
     #[error("platform error: {0}")]
     Platform(#[from] bullet_platform::error::PlatformError),
+    #[error("zip error: {0}")]
+    Zip(#[from] zip::result::ZipError),
     #[error("I/O: {0}")]
     Io(#[from] std::io::Error),
 }
