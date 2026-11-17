@@ -64,8 +64,8 @@ it, and when the game starts it reads that copy instead of its own. The game ins
    irm https://raw.githubusercontent.com/Isllanrx/Bullet/main/install.ps1 | iex
    ```
 
-   The script checks the installer against the release's `SHA256SUMS` and its Authenticode signature before
-   installing.
+   The script checks the installer against the release's `SHA256SUMS` before installing. Bullet is not
+   code-signed, so Windows SmartScreen may warn about the installer.
 
 2. **The injection tools come with it.** The installer places Bullet's LTF bridge tools, `bullet_launcher.exe` and
    `bullet_bridge.dll`, in `C:\Program Files\Bullet\tools`. Bullet integrates with the official Mod Manager to apply
