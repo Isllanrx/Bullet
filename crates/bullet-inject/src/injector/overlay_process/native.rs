@@ -132,6 +132,7 @@ pub(super) async fn spawn_native_host(
         _stdout_reader: stdout_reader,
         _stderr_reader: stderr_reader,
         hooked: false,
+        shutdown_hook: None,
     })
 }
 

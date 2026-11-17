@@ -3,6 +3,14 @@ use crate::pipeline::PipelineConfig;
 use crate::provider::ProviderKind;
 
 pub fn validate_patcher_binaries(config: &PipelineConfig) -> Result<(), InjectError> {
+    if config.provider_kind == ProviderKind::Ltf {
+        if crate::ltf::find_manager_manager().is_none() {
+            return Err(InjectError::Process(
+                "Mod Manager (ltk-manager.exe) is not installed on this system".into(),
+            ));
+        }
+        return Ok(());
+    }
     if config.provider_kind != ProviderKind::Native {
         return Ok(());
     }
@@ -31,6 +39,9 @@ pub fn validate_patcher_binaries(config: &PipelineConfig) -> Result<(), InjectEr
 impl super::InjectionPipeline {
     pub(super) fn require_game_integration(&self) -> Result<(), InjectError> {
         let (code, reason) = match self.config.provider_kind {
+            crate::provider::ProviderKind::Ltf => {
+                return Ok(());
+            }
             crate::provider::ProviderKind::Native if self.config.native_target.is_some() => {
                 return Ok(());
             }

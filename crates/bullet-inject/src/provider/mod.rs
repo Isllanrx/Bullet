@@ -9,6 +9,7 @@ use crate::pipeline::{InjectionOutcome, PipelineConfig};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ProviderKind {
     #[default]
+    Ltf,
     Native,
     Mock,
 }
@@ -91,6 +92,52 @@ impl InjectorProvider for BulletNativeProvider {
         let mut native_config = config.clone();
         native_config.provider_kind = ProviderKind::Native;
         let pipeline = crate::pipeline::InjectionPipeline::new(native_config, None);
+        pipeline.execute(mods, game_pid).await
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct LtfProvider;
+
+impl LtfProvider {
+    #[must_use]
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl InjectorProvider for LtfProvider {
+    fn name(&self) -> &'static str {
+        "ltf-bridge"
+    }
+
+    fn kind(&self) -> ProviderKind {
+        ProviderKind::Ltf
+    }
+
+    fn check_compatibility(&self, _host_path: &Path, _dll_path: &Path) -> ProviderStatus {
+        if crate::ltf::find_manager_manager().is_none() {
+            return ProviderStatus::Unsupported {
+                reason: "Mod Manager is not installed on this system".into(),
+            };
+        }
+        ProviderStatus::Ready
+    }
+
+    async fn execute(
+        &self,
+        config: &PipelineConfig,
+        mods: &[String],
+        game_pid: u32,
+    ) -> Result<InjectionOutcome, InjectError> {
+        info!(
+            provider = self.name(),
+            game_pid, "Executing LTF Bridge Provider orchestration request"
+        );
+
+        let mut ltf_config = config.clone();
+        ltf_config.provider_kind = ProviderKind::Ltf;
+        let pipeline = crate::pipeline::InjectionPipeline::new(ltf_config, None);
         pipeline.execute(mods, game_pid).await
     }
 }
