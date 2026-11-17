@@ -3,7 +3,12 @@ use std::time::Duration;
 use reqwest::header::{ACCEPT, AUTHORIZATION};
 use serde::Deserialize;
 
-pub(super) const CLIENT_ID: Option<&str> = option_env!("BULLET_GITHUB_CLIENT_ID");
+const DEFAULT_CLIENT_ID: &str = "Ov23liD213i0yYD1n2BJ";
+
+pub(super) const CLIENT_ID: Option<&str> = match option_env!("BULLET_GITHUB_CLIENT_ID") {
+    Some(id) if !id.is_empty() => Some(id),
+    _ => Some(DEFAULT_CLIENT_ID),
+};
 
 const REPOSITORY: &str = "Isllanrx/Bullet";
 const API: &str = "https://api.github.com";

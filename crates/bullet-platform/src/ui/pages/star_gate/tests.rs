@@ -23,6 +23,7 @@ fn every_dictionary_fills_the_window_without_empty_labels() {
             window.get_recheck_label(),
             window.get_quit_label(),
             window.get_code_hint(),
+            window.get_copy_code_label(),
         ] {
             assert!(!label.is_empty(), "{language:?}");
         }
