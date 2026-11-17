@@ -136,7 +136,7 @@ pub fn run(exe: &Path, tools: &Path) -> Vec<Check> {
     let installed_injector = bullet_platform::paths::install_dir()
         .map(|dir| dir.join("tools"))
         .is_ok_and(|tools| {
-            tools.join("bullet-br.exe").is_file() && tools.join("bullet-br.dll").is_file()
+            tools.join("bullet_launcher.exe").is_file() && tools.join("bullet_bridge.dll").is_file()
         });
     if installed_injector {
         println!(
@@ -183,8 +183,10 @@ pub fn run(exe: &Path, tools: &Path) -> Vec<Check> {
         (Ok(staged), Some(cursor)) => {
             let tools_dir = staged.with_file_name("tools");
             let written = std::fs::create_dir_all(&tools_dir)
-                .and_then(|()| std::fs::write(tools_dir.join("bullet-br.exe"), b"not the host"))
-                .and_then(|()| std::fs::write(tools_dir.join("bullet-br.dll"), b"not the dll"));
+                .and_then(|()| {
+                    std::fs::write(tools_dir.join("bullet_launcher.exe"), b"not the host")
+                })
+                .and_then(|()| std::fs::write(tools_dir.join("bullet_bridge.dll"), b"not the dll"));
             match written.and_then(|()| spawn(&staged)) {
                 Ok(mut child) => {
                     let refused = cursor.wait_for(&[
@@ -219,7 +221,7 @@ fn run_audited(exe: &Path, tools: &Path, root: &Path, mut checks: Vec<Check>) ->
         (Ok(staged), Some(cursor)) => {
             let tools_dir = staged.with_file_name("tools");
             let copied = std::fs::create_dir_all(&tools_dir).and_then(|()| {
-                for file in ["bullet-br.exe", "bullet-br.dll"] {
+                for file in ["bullet_launcher.exe", "bullet_bridge.dll"] {
                     std::fs::copy(tools.join(file), tools_dir.join(file))?;
                 }
                 Ok(())

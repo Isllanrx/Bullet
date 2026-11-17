@@ -143,7 +143,7 @@ First public release.
 
 ### Known limitations
 
-- The LTK injector is not bundled in the installer. Users copy it from LTK Manager 1.21.0 or 1.22.0, which ship
+- The Mod Manager injector is not bundled in the installer. Users copy it from Mod Manager 1.21.0 or 1.22.0, which ship
   the audited build, or from the direct download linked in the README.
 
 - Proven in live matches for Draft and Ranked; other modes are still being validated.

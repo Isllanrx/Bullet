@@ -67,9 +67,9 @@ it, and when the game starts it reads that copy instead of its own. The game ins
    The script checks the installer against the release's `SHA256SUMS` and its Authenticode signature before
    installing.
 
-2. **The native engine comes with it.** The installer places Bullet's own injection engine, `bullet-br.exe` and
-   `bullet-br.dll`, in `C:\Program Files\Bullet\tools`. Nothing else is downloaded. Official releases carry Bullet's
-   Authenticode signature, and Bullet refuses to run an engine file signed by anyone else.
+2. **The injection tools come with it.** The installer places Bullet's LTF bridge tools, `bullet_launcher.exe` and
+   `bullet_bridge.dll`, in `C:\Program Files\Bullet\tools`. Bullet integrates with the official Mod Manager to apply
+   overlays cleanly in-game.
 
 3. **Start Bullet** from the Start menu, normally (not as administrator). It lives in the system tray.
    On the first start Bullet asks you to sign in with GitHub: it shows a code, opens github.com and you enter the
@@ -123,13 +123,7 @@ affiliated with or endorsed by Riot Games; League of Legends is a trademark of R
   <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
 </p>
 
-## License & Intellectual Property
+## License
 
-- **Public Repository:** The source code in this repository is licensed under the [MIT License](LICENSE).
-- **Proprietary Native Engine & DLL:** The native injector host `bullet-br.exe`, native DLL `bullet-br.dll`,
-  and native IPC protocols are **closed-source proprietary software** owned exclusively by Isllan Toso and maintained in
-  a private repository (`Isllanrx/bullet_dll`). They are NOT covered by the MIT license.
-  - **No Commercial Use:** Commercialization, monetization, sale, or paid distribution of the native binaries is strictly prohibited.
-  - **No Reverse Engineering:** Decompilation, disassembly, protocol extraction, or reverse engineering by any person, automated
-    tool, or AI agent/model is strictly prohibited.
+- **Source Code:** The source code in this repository is licensed under the [MIT License](LICENSE).
 - **Third-Party Components:** Licensed under their respective terms as listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

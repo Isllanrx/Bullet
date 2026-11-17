@@ -3,19 +3,6 @@
 Bullet's own source code is licensed under the [MIT License](LICENSE). This file lists the third-party
 components Bullet uses or depends on and the terms they come with.
 
-## Bullet Native Engine & DLL (Proprietary Subsystem)
-
-The Bullet Native Injector Engine `bullet-br.exe`, Bullet Native DLL `bullet-br.dll`,
-and associated native IPC protocols are **closed-source proprietary components** maintained in a private repository
-(`Isllanrx/bullet_dll`) and owned exclusively by Isllan Toso.
-
-1. **Not Open Source:** They are **NOT** covered by the open-source MIT License of this repository.
-2. **Commercial Restriction:** Under no circumstances may the native binaries, DLL, injector, or related protocols
-   be sold, relicensed, monetized, or bundled into commercial or paid products.
-3. **Anti-Reverse Engineering & AI Model Restriction:** Reverse engineering, decompilation, disassembly, dynamic
-   hooking, protocol extraction, or automated reconstruction of the native engine and DLL binaries by any human,
-   automated reverse-engineering suite, or AI model / agent pipeline is strictly prohibited.
-
 ## Rust crates
 
 `bullet.exe` statically links open-source Rust crates from [crates.io](https://crates.io). Every crate in the
