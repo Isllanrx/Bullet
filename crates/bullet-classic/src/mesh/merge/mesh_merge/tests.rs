@@ -184,3 +184,22 @@ fn too_many_vertices_or_influences_are_refused() {
     let err = merge_forms(&[crowded(0.0), crowded(50.0)]).expect_err("joints");
     assert!(err.to_string().contains("more than"), "{err}");
 }
+
+#[test]
+fn relative_index_form_meshes_normalize_to_global_submesh_indices() {
+    let mut base = base_form();
+    base.mesh.flags |= crate::mesh::skinned_mesh::RELATIVE_INDICES_FLAG;
+    base.mesh.indices = vec![0, 1, 2, 3, 4, 5, 0, 1, 2];
+    let mut storm = storm_form();
+    storm.mesh.flags |= crate::mesh::skinned_mesh::RELATIVE_INDICES_FLAG;
+    storm.mesh.indices = vec![0, 1, 2, 0, 1, 2];
+
+    let merged = merge_forms(&[base, storm]).expect("merge");
+    assert!(!merged.mesh.uses_relative_indices());
+    merged
+        .mesh
+        .validate_submesh_indices()
+        .expect("merged indices stay inside their submesh");
+    assert_eq!(&merged.mesh.indices[6..9], &[6, 7, 8]);
+    assert_eq!(&merged.mesh.indices[9..15], &[9, 10, 11, 12, 13, 14]);
+}
