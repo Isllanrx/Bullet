@@ -604,6 +604,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bullet-bridge"
+version = "1.2.1"
+dependencies = [
+ "base64 0.23.1",
+ "ring",
+ "serde",
+ "serde_json",
+ "uuid",
+ "windows",
+]
+
+[[package]]
 name = "bullet-classic"
 version = "1.2.1"
 dependencies = [
@@ -633,6 +645,7 @@ dependencies = [
 name = "bullet-inject"
 version = "1.2.1"
 dependencies = [
+ "base64 0.23.1",
  "bullet-core",
  "bullet-platform",
  "bullet-wad",
@@ -643,7 +656,15 @@ dependencies = [
  "tokio",
  "tracing",
  "xxhash-rust",
+ "zip",
  "zstd",
+]
+
+[[package]]
+name = "bullet-launcher"
+version = "1.2.1"
+dependencies = [
+ "windows",
 ]
 
 [[package]]
