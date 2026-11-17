@@ -7,13 +7,21 @@ use std::time::Instant;
 pub async fn execute_probe(tools_dir: &Path) -> DiagnosticSummary {
     let started = Instant::now();
     let correlation_id = uuid::Uuid::new_v4().to_string();
-    let selected = "bullet-native";
+    let selected = "bullet-ltf";
     let mut events = vec![DiagnosticEvent::new("configuration", "provider_selected", &correlation_id, selected, DiagnosticOpStatus::Completed, utc_now_micros())
         .with_transition(DiagnosticTransition::ProviderSelected).with_details(serde_json::json!({
-            "scope": "preference_snapshot", "diagnostic_provider": "bullet-native", "owned_pid": std::process::id(), "pipeline_executed": false
+            "scope": "preference_snapshot", "diagnostic_provider": "bullet-ltf", "owned_pid": std::process::id(), "pipeline_executed": false
         }))];
-    let native_host = tools_dir.join("bullet-br.exe");
-    let native_dll = tools_dir.join("bullet-br.dll");
+    let native_host = if tools_dir.join("bullet_launcher.exe").is_file() {
+        tools_dir.join("bullet_launcher.exe")
+    } else {
+        tools_dir.join("bullet-br.exe")
+    };
+    let native_dll = if tools_dir.join("bullet_bridge.dll").is_file() {
+        tools_dir.join("bullet_bridge.dll")
+    } else {
+        tools_dir.join("bullet-br.dll")
+    };
     let mut available = true;
     for path in [&native_host, &native_dll] {
         let read_started = Instant::now();

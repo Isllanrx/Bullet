@@ -8,9 +8,8 @@ logic that decides **what** to inject and **when**.
 1. **Single instance.** If Bullet is already running, the new process brings it to the front and exits.
 2. **User and logging.** It resolves the signed-in desktop user and starts a daily rotating log in
    `%LOCALAPPDATA%\Bullet\logs`. Logging never blocks the app, and any lines dropped under pressure are counted.
-3. **Discovery.** It finds the game install and Bullet's native engine (`bullet-br.exe` and `bullet-br.dll`, shipped
-   by the installer in the `tools` folder) and checks the engine's publisher signature. A missing or unsigned engine
-   stops the start and asks the user to reinstall Bullet.
+3. **Discovery.** It finds the game install and Bullet's injection tools (`bullet_launcher.exe` and `bullet_bridge.dll`, shipped
+   by the installer in the `tools` folder). Missing tools stop the start and ask the user to reinstall Bullet.
 4. **Game build.** It reads the installed game build. After a patch, cached overlays and locale data are thrown
    away.
 5. **Warm-up.** The index of the game's archives is built in the background, so champion select does not have
@@ -37,7 +36,7 @@ logic that decides **what** to inject and **when**.
 | `main.rs` | Startup, tray, lifecycle and shutdown |
 | `boot/startup/library.rs`, `boot/startup/reports.rs` | Startup steps: the skin library and its seeding, prewarming the game index and custom mods, the profile, game build and native engine file reports |
 | `boot/startup/update.rs` | The update question (Yes/No, once per version), the fallback to the download page, and running the verified installer after shutdown |
-| `boot/startup/injector.rs` | The startup native engine check: a missing or unsigned engine stops the start with a message that asks to reinstall Bullet |
+| `boot/startup/injector.rs` | The startup injection tools check: missing tools stop the start with a message that asks to reinstall Bullet |
 | `boot/tray/panel.rs`, `boot/tray/tasks.rs` | The control panel links, the tray status and actions (including the "mark a problem" log marker and the diagnostics export), and the supervised tasks the tray starts (notices, Bullet's own update check, activation) |
 | `trigger/mod.rs` | Decides when to build and arm, and with which mods; holds the audited tool hashes |
 | `trigger/arm/arm_key.rs`, `trigger/arm/arming.rs`, `trigger/arm/game_start.rs` | What to arm (keys, wanted skin, decision), arming and registering the patcher, and the game-start confirmation and late injection |

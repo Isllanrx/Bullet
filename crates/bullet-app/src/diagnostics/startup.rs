@@ -45,8 +45,8 @@ mod tests {
             std::env::temp_dir().join(format!("bullet_startup_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir); // ignore-ok: fixture may not exist yet
         std::fs::create_dir_all(&dir).expect("fixture dir");
-        let host_path = dir.join("bullet-br.exe");
-        let dll_path = dir.join("bullet-br.dll");
+        let host_path = dir.join("bullet_launcher.exe");
+        let dll_path = dir.join("bullet_bridge.dll");
         if let Some(bytes) = host {
             std::fs::write(&host_path, bytes).expect("host");
         }
