@@ -76,7 +76,7 @@ __pycache__/
 *.pyc
 .mypy_cache/
 
-# Motor de Injeção e DLL Proprietários (mantidos no repositório privado Isllanrx/bullet_dll)
+# Retired native engine sources, kept only in the private repository
 crates/bullet-native-dll/
 crates/bullet-native-host/
 crates/bullet-native-protocol/
