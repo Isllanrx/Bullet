@@ -104,38 +104,71 @@ pub(crate) fn run_package() {
     );
 
     let tools_dest_dir = dist_dir.join("tools");
-    std::fs::create_dir_all(&tools_dest_dir).expect("create tools directory");
-    for tool in SHIPPED_TOOLS {
-        let tool_candidates = [
-            workspace_root.join(format!("target/x86_64-pc-windows-msvc/release/{tool}")),
-            workspace_root.join(format!("target/release/{tool}")),
-        ];
-        let Some(src) = tool_candidates.iter().find(|p| p.exists()) else {
-            eprintln!(
-                "[ERROR] {tool} was not built under target/; the package would ship without it"
-            );
-            std::process::exit(1);
-        };
-        let dest = tools_dest_dir.join(tool);
-        if let Err(e) = std::fs::copy(src, &dest) {
-            eprintln!(
-                "[ERROR] copying {} to {}: {e}",
-                src.display(),
-                dest.display()
-            );
-            std::process::exit(1);
-        }
-        let bytes_tool = std::fs::read(&dest).unwrap_or_else(|e| {
-            eprintln!("[ERROR] reading {}: {e}", dest.display());
-            std::process::exit(1);
-        });
-        let hash_tool = bullet_inject::dll_validator::to_hex(&Sha256::digest(&bytes_tool));
-        checksum_content.push_str(&format!("{hash_tool} *tools/{tool}\n"));
+    let require_ltk = std::env::var("BULLET_REQUIRE_LTK")
+        .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let env_ltk = std::env::var("BULLET_LTK_DIR").ok();
+    let ltk_dir = resolve_ltk_dir_from(&workspace_root, env_ltk.as_deref()).unwrap_or_else(|e| {
+        eprintln!("[ERROR] {e}");
+        std::process::exit(1);
+    });
+
+    if let Some(ltk_dir) = ltk_dir {
         println!(
-            "  Tool:     {} ({} bytes, SHA-256: {})",
-            dest.display(),
-            bytes_tool.len(),
-            hash_tool
+            "==> Compiling private LTK bridge tools from {}...",
+            ltk_dir.display()
+        );
+        let ltk_status = Command::new("cargo")
+            .args(["build", "--release", "--locked"])
+            .current_dir(&ltk_dir)
+            .env("CARGO_ENCODED_RUSTFLAGS", release_rustflags(&ltk_dir))
+            .env_remove("RUSTFLAGS")
+            .status()
+            .expect("failed to compile private LTK tools");
+        check_status("cargo build --release (bullet_ltk)", ltk_status);
+
+        std::fs::create_dir_all(&tools_dest_dir).expect("create tools directory");
+        for tool in SHIPPED_TOOLS {
+            let tool_candidates = [
+                ltk_dir.join(format!("target/x86_64-pc-windows-msvc/release/{tool}")),
+                ltk_dir.join(format!("target/release/{tool}")),
+            ];
+            let Some(src) = tool_candidates.iter().find(|p| p.exists()) else {
+                eprintln!(
+                    "[ERROR] {tool} was not built under {}/target/; the package would ship without it",
+                    ltk_dir.display()
+                );
+                std::process::exit(1);
+            };
+            let dest = tools_dest_dir.join(tool);
+            if let Err(e) = std::fs::copy(src, &dest) {
+                eprintln!(
+                    "[ERROR] copying {} to {}: {e}",
+                    src.display(),
+                    dest.display()
+                );
+                std::process::exit(1);
+            }
+            let bytes_tool = std::fs::read(&dest).unwrap_or_else(|e| {
+                eprintln!("[ERROR] reading {}: {e}", dest.display());
+                std::process::exit(1);
+            });
+            let hash_tool = bullet_inject::dll_validator::to_hex(&Sha256::digest(&bytes_tool));
+            checksum_content.push_str(&format!("{hash_tool} *tools/{tool}\n"));
+            println!(
+                "  Tool:     {} ({} bytes, SHA-256: {})",
+                dest.display(),
+                bytes_tool.len(),
+                hash_tool
+            );
+        }
+    } else if require_ltk {
+        eprintln!(
+            "[ERROR] BULLET_REQUIRE_LTK is set, but no private bullet_ltk repository was found"
+        );
+        std::process::exit(1);
+    } else {
+        println!(
+            "  Tools:    skipped (private bullet_ltk repository not configured; public-only package)"
         );
     }
 
@@ -159,6 +192,43 @@ pub(crate) fn run_package() {
 }
 
 pub(crate) const SHIPPED_TOOLS: [&str; 2] = ["bullet_launcher.exe", "bullet_bridge.dll"];
+
+pub(crate) fn resolve_ltk_dir_from(
+    workspace_root: &std::path::Path,
+    env_override: Option<&str>,
+) -> Result<Option<PathBuf>, String> {
+    if let Some(raw) = env_override {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("none") {
+            return Ok(None);
+        }
+        let candidate = {
+            let path = PathBuf::from(trimmed);
+            if path.is_absolute() {
+                path
+            } else {
+                workspace_root.join(path)
+            }
+        };
+        if !candidate.join("Cargo.toml").is_file() {
+            return Err(format!(
+                "BULLET_LTK_DIR '{}' does not contain Cargo.toml",
+                candidate.display()
+            ));
+        }
+        return Ok(Some(candidate));
+    }
+    let private_dir = workspace_root.join(".private").join("bullet_ltk");
+    if private_dir.join("Cargo.toml").is_file() {
+        return Ok(Some(private_dir));
+    }
+    if let Some(sibling) = workspace_root.parent().map(|p| p.join("bullet_ltk")) {
+        if sibling.join("Cargo.toml").is_file() {
+            return Ok(Some(sibling));
+        }
+    }
+    Ok(None)
+}
 
 pub(crate) fn clean_dist(dist_dir: &std::path::Path) {
     if !dist_dir.exists() {

@@ -6,8 +6,6 @@ members = [
     "crates/bullet-core",
     "crates/bullet-inject",
     "crates/bullet-lcu",
-    "crates/bullet-bridge",
-    "crates/bullet-launcher",
     "crates/bullet-party",
     "crates/bullet-platform",
     "crates/bullet-relay",
