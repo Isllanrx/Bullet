@@ -63,6 +63,7 @@ pub fn pack_mod_fantome(mod_dir: &Path, staging_file: &Path) -> Result<(), Injec
 
     let mut files = Vec::new();
     collect_files_recursive(mod_dir, &mut files)?;
+    let mut packed_summary = Vec::with_capacity(files.len());
 
     for path in files {
         let rel_path = path
@@ -84,7 +85,8 @@ pub fn pack_mod_fantome(mod_dir: &Path, staging_file: &Path) -> Result<(), Injec
 
         writer.start_file(&rel_path, options)?;
         let mut f = std::fs::File::open(&path)?;
-        std::io::copy(&mut f, &mut writer)?;
+        let copied = std::io::copy(&mut f, &mut writer)?;
+        packed_summary.push(format!("{rel_path} ({copied}B)"));
     }
 
     writer.finish()?;
@@ -92,6 +94,16 @@ pub fn pack_mod_fantome(mod_dir: &Path, staging_file: &Path) -> Result<(), Injec
         let _ = std::fs::remove_file(staging_file); // ignore-ok: replace previous staging archive
     }
     std::fs::rename(&tmp_file, staging_file)?;
+    let archive_bytes = std::fs::metadata(staging_file)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    info!(
+        staging_file = %staging_file.display(),
+        file_count = packed_summary.len(),
+        archive_bytes,
+        files = ?packed_summary,
+        "[STAGE 1/5] Packed mod into staging .fantome"
+    );
     Ok(())
 }
 
@@ -271,19 +283,29 @@ pub async fn spawn_ltf_patcher(
         let staging_file = staging_dir.join(format!("{name}.fantome"));
         pack_mod_fantome(&mod_dir, &staging_file)?;
 
-        let mod_id = match client.import_archive(&staging_file, Some(name)).await {
-            Ok(id) => id,
+        let outcome = match client
+            .import_archive_outcome(&staging_file, Some(name))
+            .await
+        {
+            Ok(out) => out,
             Err(first_err) => {
                 warn!(error = %first_err, mod_name = %name, "Path import failed; retrying with byte transfer");
                 let bytes = std::fs::read(&staging_file)?;
-                client.import_bytes(&bytes, name).await?
+                client.import_bytes_outcome(&bytes, name).await?
             }
         };
-        let target_id = if mod_id.is_empty() {
+        let target_id = if outcome.mod_id.is_empty() {
             name.clone()
         } else {
-            mod_id
+            outcome.mod_id.clone()
         };
+        info!(
+            mod_name = %name,
+            mod_id = %target_id,
+            import_kind = outcome.kind.as_str(),
+            was_enabled = ?outcome.enabled,
+            "[STAGE 2/5] Imported mod into LTK Manager"
+        );
 
         if !guard.imported.contains(&target_id) {
             guard.imported.push(target_id.clone());
@@ -300,9 +322,14 @@ pub async fn spawn_ltf_patcher(
     let keep_ids = guard.imported.clone();
     guard.disabled_others = disable_other_enabled_mods(&client, &keep_ids).await;
     guard.persist();
+    info!(
+        enabled_mods = ?keep_ids,
+        disabled_others = ?guard.disabled_others,
+        "[STAGE 3/5] Mod Manager library state configured"
+    );
 
     let log_tail = ManagerLogTail::from_default_dir_at_end();
-    info!("Starting Mod Manager patcher via LTF bridge");
+    info!("[STAGE 4/5] Starting Mod Manager patcher via LTF bridge");
     start_patcher_with_retry(&client).await?;
 
     let (imported_mods, disabled_others) = guard.disarm();
