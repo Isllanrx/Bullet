@@ -208,10 +208,16 @@ impl InjectionPipeline {
             self.build_overlay(mods, build_timeout).await?;
         }
 
-        if let Some((_, age)) = game_already_loading() {
-            return Err(InjectError::GameAlreadyLoading {
-                age_ms: u64::try_from(age.as_millis()).unwrap_or(u64::MAX),
-            });
+        if let Some((pid, age)) = game_already_loading() {
+            let age_ms = u64::try_from(age.as_millis()).unwrap_or(u64::MAX);
+            if bullet_platform::preferences::HOOK_LOADING_GAME.is_enabled() {
+                warn!(
+                    pid,
+                    age_ms, "The game is already loading on the late path; hooking it in place"
+                );
+            } else {
+                return Err(InjectError::GameAlreadyLoading { age_ms });
+            }
         }
 
         let mut overlay = self.spawn_patcher(mods).await?;
@@ -270,7 +276,17 @@ impl InjectionPipeline {
             }
         };
 
-        wait_out_loading_game().await;
+        if bullet_platform::preferences::HOOK_LOADING_GAME.is_enabled() {
+            if let Some((pid, age)) = game_already_loading() {
+                warn!(
+                    pid,
+                    age_ms = age.as_millis(),
+                    "A game is already loading; arming the host to hook it in place instead of waiting it out"
+                );
+            }
+        } else {
+            wait_out_loading_game().await;
+        }
 
         let mut overlay = match self.spawn_patcher(mods).await {
             Ok(overlay) => overlay,
