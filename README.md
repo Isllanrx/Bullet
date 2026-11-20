@@ -11,7 +11,6 @@
 
 <p align="center">
   <a href="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml"><img src="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://scorecard.dev/viewer/?uri=github.com/Isllanrx/Bullet"><img src="https://api.scorecard.dev/projects/github.com/Isllanrx/Bullet/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/v/release/Isllanrx/Bullet?include_prereleases&sort=semver" alt="Release"></a>
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/downloads/Isllanrx/Bullet/total?label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
