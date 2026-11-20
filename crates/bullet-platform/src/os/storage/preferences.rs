@@ -24,6 +24,12 @@ pub static INJECTION: Preference = Preference::new("injection.json", "skin injec
 pub static LIGHT_LOADING: Preference =
     Preference::new("light_loading.json", "light game loading", true);
 
+pub static HOOK_LOADING_GAME: Preference = Preference::new(
+    "hook_loading_game.json",
+    "hook a game that is already loading",
+    false,
+);
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Stored {
     enabled: bool,
@@ -207,6 +213,10 @@ mod tests {
         assert!(
             RANDOM_SKIN.default,
             "no match starts without a skin by accident"
+        );
+        assert!(
+            !HOOK_LOADING_GAME.default,
+            "a late pick must not hook a game that is already loading by default"
         );
     }
 }
