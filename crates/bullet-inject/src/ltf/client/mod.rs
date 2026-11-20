@@ -18,6 +18,33 @@ pub struct BridgeClient {
     endpoint: BridgeEndpoint,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportKind {
+    Installed,
+    Updated,
+    AlreadyInstalled,
+    Unknown,
+}
+
+impl ImportKind {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Installed => "installed",
+            Self::Updated => "updated",
+            Self::AlreadyInstalled => "alreadyInstalled",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportOutcome {
+    pub mod_id: String,
+    pub kind: ImportKind,
+    pub enabled: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ManagerModInfo {
     pub id: String,
@@ -180,6 +207,14 @@ impl BridgeClient {
         path: &Path,
         name: Option<&str>,
     ) -> Result<String, InjectError> {
+        Ok(self.import_archive_outcome(path, name).await?.mod_id)
+    }
+
+    pub async fn import_archive_outcome(
+        &self,
+        path: &Path,
+        name: Option<&str>,
+    ) -> Result<ImportOutcome, InjectError> {
         let path_str = path.to_string_lossy().to_string();
         let mut payload = serde_json::json!({
             "cmd": "import",
@@ -192,10 +227,18 @@ impl BridgeClient {
         }
 
         let resp = self.request(payload, IMPORT_TIMEOUT).await?;
-        Ok(extract_imported_mod_id(&resp))
+        Ok(extract_import_outcome(&resp))
     }
 
     pub async fn import_bytes(&self, data: &[u8], name: &str) -> Result<String, InjectError> {
+        Ok(self.import_bytes_outcome(data, name).await?.mod_id)
+    }
+
+    pub async fn import_bytes_outcome(
+        &self,
+        data: &[u8],
+        name: &str,
+    ) -> Result<ImportOutcome, InjectError> {
         use base64::Engine;
         let encoded = base64::engine::general_purpose::STANDARD.encode(data);
         let payload = serde_json::json!({
@@ -204,7 +247,7 @@ impl BridgeClient {
             "name": name
         });
         let resp = self.request(payload, IMPORT_TIMEOUT).await?;
-        Ok(extract_imported_mod_id(&resp))
+        Ok(extract_import_outcome(&resp))
     }
 
     pub async fn toggle_mod(&self, target: &str, enabled: bool) -> Result<(), InjectError> {
@@ -242,6 +285,27 @@ impl BridgeClient {
     pub async fn kill(&self) -> Result<(), InjectError> {
         let payload = serde_json::json!({ "cmd": "kill" });
         self.request(payload, FAST_TIMEOUT).await.map(|_| ())
+    }
+}
+
+#[must_use]
+pub fn extract_import_outcome(resp: &serde_json::Value) -> ImportOutcome {
+    let val = resp.get("response").and_then(|r| r.get("value"));
+    let kind = match val.and_then(|v| v.get("kind")).and_then(|k| k.as_str()) {
+        Some("installed") => ImportKind::Installed,
+        Some("updated") => ImportKind::Updated,
+        Some("alreadyInstalled") => ImportKind::AlreadyInstalled,
+        _ => ImportKind::Unknown,
+    };
+    let enabled = val
+        .and_then(|v| v.get("mod"))
+        .and_then(|m| m.get("enabled"))
+        .or_else(|| val.and_then(|v| v.get("enabled")))
+        .and_then(|e| e.as_bool());
+    ImportOutcome {
+        mod_id: extract_imported_mod_id(resp),
+        kind,
+        enabled,
     }
 }
 
