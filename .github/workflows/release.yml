@@ -101,14 +101,57 @@ jobs:
             exit 1
           }
 
+      - name: GitHub App token for bullet_ltk
+        id: ltk-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.BULLET_BOT_APP_ID }}
+          private-key: ${{ secrets.BULLET_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: bullet_ltk
+          permission-contents: read
+
+      - name: Checkout private LTK companion repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/bullet_ltk
+          path: .private/bullet_ltk
+          token: ${{ steps.ltk-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Link private LTF bridge module
+        shell: pwsh
+        run: |
+          if (-not (Test-Path .private/bullet_ltk/ltf/mod.rs)) {
+            Write-Host "::error::Private LTK checkout is missing ltf/mod.rs"
+            exit 1
+          }
+          Remove-Item -Recurse -Force crates/bullet-inject/src/ltf
+          Copy-Item -Recurse .private/bullet_ltk/ltf crates/bullet-inject/src/ltf
+          $now = [DateTime]::UtcNow
+          Get-ChildItem -Recurse -File crates/bullet-inject/src/ltf | ForEach-Object { $_.LastWriteTimeUtc = $now }
+
       - name: Install the pinned toolchain
         run: rustup toolchain install
 
       - name: Stamp the release version (cargo xtask set-version)
+        env:
+          BULLET_LTK_DIR: .private/bullet_ltk
         run: cargo xtask set-version "$env:VERSION"
 
       - name: Quality gate (cargo xtask check)
         run: cargo xtask check
+
+      - name: Verify private LTK workspace
+        shell: pwsh
+        working-directory: .private/bullet_ltk
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --workspace --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --workspace --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Ensure Inno Setup 6
         shell: pwsh
@@ -117,6 +160,9 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
 
       - name: Build the release binary and bridge tools (cargo xtask package)
+        env:
+          BULLET_LTK_DIR: .private/bullet_ltk
+          BULLET_REQUIRE_LTK: "1"
         run: cargo xtask package
 
       - name: Build installer around that binary (cargo xtask installer --prebuilt)
