@@ -101,22 +101,12 @@ jobs:
             exit 1
           }
 
-      - name: GitHub App token for bullet_ltk
-        id: ltk-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ vars.BULLET_BOT_APP_ID }}
-          private-key: ${{ secrets.BULLET_BOT_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: bullet_ltk
-          permission-contents: read
-
       - name: Checkout private LTK companion repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository_owner }}/bullet_ltk
           path: .private/bullet_ltk
-          token: ${{ steps.ltk-token.outputs.token }}
+          ssh-key: ${{ secrets.BULLET_LTK_DEPLOY_KEY }}
           persist-credentials: false
 
       - name: Link private LTF bridge module
