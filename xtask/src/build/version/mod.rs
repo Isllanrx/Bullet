@@ -10,13 +10,47 @@ pub(crate) fn run_set_version(args: &[String]) {
         std::process::exit(2);
     };
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    stamp_workspace_dir(&root, &version);
+    println!("[OK] Workspace version set to {version} (displayed as {display})");
+
+    if let Some(ltk_dir) = resolve_ltk_stamp_dir(&root) {
+        stamp_workspace_dir(&ltk_dir, &version);
+        println!(
+            "[OK] Private LTK workspace version set to {version} ({})",
+            ltk_dir.display()
+        );
+    }
+}
+
+fn resolve_ltk_stamp_dir(root: &Path) -> Option<std::path::PathBuf> {
+    if let Ok(raw) = std::env::var("BULLET_LTK_DIR") {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("none") {
+            return None;
+        }
+        let path = std::path::PathBuf::from(trimmed);
+        let resolved = if path.is_absolute() {
+            path
+        } else {
+            root.join(path)
+        };
+        return resolved.join("Cargo.toml").is_file().then_some(resolved);
+    }
+    let private_dir = root.join(".private").join("bullet_ltk");
+    private_dir
+        .join("Cargo.toml")
+        .is_file()
+        .then_some(private_dir)
+}
+
+fn stamp_workspace_dir(root: &Path, version: &str) {
     let prepare = |file: &str, rewrite: fn(&str, &str) -> Result<String, String>| {
         let path = root.join(file);
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
             eprintln!("[ERROR] {}: {e}", path.display());
             std::process::exit(1);
         });
-        let next = rewrite(&text, &version).unwrap_or_else(|e| {
+        let next = rewrite(&text, version).unwrap_or_else(|e| {
             eprintln!("[ERROR] {file}: {e}");
             std::process::exit(1);
         });
@@ -39,7 +73,6 @@ pub(crate) fn run_set_version(args: &[String]) {
         }
         std::process::exit(1);
     }
-    println!("[OK] Workspace version set to {version} (displayed as {display})");
 }
 
 pub(crate) fn cargo_version(display: &str) -> Option<String> {

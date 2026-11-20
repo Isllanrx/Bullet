@@ -83,6 +83,8 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo2-release-
 
       - name: Release binary as shipped (cargo xtask package)
+        env:
+          BULLET_LTK_DIR: none
         run: cargo xtask package
 
       - name: Executable metadata and manifest

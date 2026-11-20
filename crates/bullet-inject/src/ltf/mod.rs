@@ -1,13 +1,44 @@
-pub mod client;
-pub mod discovery;
-pub mod launcher;
-pub mod log_tail;
-pub mod session;
+use std::path::{Path, PathBuf};
 
-pub use client::BridgeClient;
-pub use discovery::{BridgeEndpoint, discover_bridge};
-pub use launcher::{
-    MIN_MANAGER_VERSION, ManagerInstallState, check_manager_install, ensure_bridge_running,
-    find_launcher_tools, find_manager_manager, wait_for_bridge,
-};
-pub use session::{LtfSession, pack_mod_fantome, spawn_ltf_patcher, warmup_bridge};
+use bullet_core::state::StateSender;
+
+use crate::error::InjectError;
+use crate::overlay_process::OverlayProcess;
+
+pub const MIN_MANAGER_VERSION: (u16, u16, u16) = (1, 33, 0);
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ManagerInstallState {
+    Ready {
+        path: PathBuf,
+        version: Option<(u16, u16, u16)>,
+    },
+    Outdated {
+        path: PathBuf,
+        found: (u16, u16, u16),
+    },
+    Missing,
+}
+
+#[must_use]
+pub fn check_manager_install() -> ManagerInstallState {
+    ManagerInstallState::Missing
+}
+
+#[must_use]
+pub fn find_manager_manager() -> Option<PathBuf> {
+    None
+}
+
+pub async fn warmup_bridge(_tools_dirs: &[PathBuf]) {}
+
+pub async fn spawn_ltf_patcher(
+    _tools_dirs: &[PathBuf],
+    _mods_dir: &Path,
+    _mods: &[String],
+    _state_tx: Option<StateSender>,
+) -> Result<OverlayProcess, InjectError> {
+    Err(InjectError::Process(
+        "Private LTK bridge module is not linked in this build".into(),
+    ))
+}
