@@ -9,6 +9,16 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml"><img src="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/v/release/Isllanrx/Bullet?include_prereleases&sort=semver" alt="Release"></a>
+  <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/downloads/Isllanrx/Bullet/total?label=downloads&color=brightgreen" alt="Downloads"></a>
+  <a href="https://github.com/Isllanrx/Bullet/stargazers"><img src="https://img.shields.io/github/stars/Isllanrx/Bullet?style=flat&color=c8aa6e" alt="GitHub Stars"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64%20%C2%B7%20macOS-0078D4" alt="Platform">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <a href="https://discord.gg/e2dH2nUjd9"><img src="https://img.shields.io/badge/Discord-Installation%20Guide%20%26%20Community-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><b>Download</b></a> ·
   <a href="https://discord.gg/e2dH2nUjd9"><b>Installation Guide (Discord)</b></a> ·
   <a href="https://github.com/Isllanrx/Bullet/wiki"><b>Technical Wiki</b></a> ·
