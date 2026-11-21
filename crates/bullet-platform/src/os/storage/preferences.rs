@@ -24,6 +24,12 @@ pub static INJECTION: Preference = Preference::new("injection.json", "skin injec
 pub static LIGHT_LOADING: Preference =
     Preference::new("light_loading.json", "light game loading", true);
 
+pub static IN_CLIENT_UI: Preference = Preference::new(
+    "in_client_ui.json",
+    "pick skins inside the League client",
+    false,
+);
+
 pub static HOOK_LOADING_GAME: Preference = Preference::new(
     "hook_loading_game.json",
     "hook a game that is already loading",
@@ -217,6 +223,10 @@ mod tests {
         assert!(
             !HOOK_LOADING_GAME.default,
             "a late pick must not hook a game that is already loading by default"
+        );
+        assert!(
+            !IN_CLIENT_UI.default,
+            "the native Bullet window is the default until the user opts into the in-client carousel"
         );
     }
 }

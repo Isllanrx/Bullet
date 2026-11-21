@@ -91,27 +91,24 @@ pub fn spawn_prewarm(
         let spawned = std::thread::Builder::new()
             .name("bullet-prewarm".into())
             .spawn(move || {
-                let game_disk = bullet_platform::disk::disk_kind(&game_dir).as_str();
-                let state_disk = bullet_platform::disk::disk_kind(&cache_dir).as_str();
-                let started = std::time::Instant::now();
-                match bullet_inject::overlay_builder::get_or_index_game(&game_dir) {
-                    Ok(index) => info!(
-                        wads = index.len(),
-                        elapsed_ms = started.elapsed().as_millis(),
-                        game_disk,
-                        state_disk,
-                        "Game WAD index ready"
-                    ),
-                    Err(e) => warn!(error = %e, "Game WAD index not prewarmed; the first build indexes on demand"),
-                }
                 let _background = bullet_platform::process::BackgroundThread::enter();
-                let busy = || bullet_app::update_check::is_busy(gate_state.borrow().phase);
+                let busy = || {
+                    let phase = gate_state.borrow().phase;
+                    bullet_app::update_check::is_busy(phase)
+                        || matches!(
+                            phase,
+                            bullet_core::phase::GamePhase::Lobby
+                                | bullet_core::phase::GamePhase::Matchmaking
+                        )
+                };
                 while !gate_token.is_cancelled() && busy() {
                     std::thread::sleep(std::time::Duration::from_secs(2));
                 }
-                bullet_classic::generator::remove_stale_generated(&game_dir, &generated_dir, || {
-                    gate_token.is_cancelled() || busy()
-                });
+                bullet_classic::generator::remove_stale_generated(
+                    &game_dir,
+                    &generated_dir,
+                    || gate_token.is_cancelled() || busy(),
+                );
                 let report = bullet_app::mod_repair::repair_custom_mods(
                     &mod_roots,
                     &game_dir,
@@ -125,7 +122,7 @@ pub fn spawn_prewarm(
                 bullet_classic::generator::prewarm_companions(&game_dir, &cache_dir, || {
                     if gate_token.is_cancelled() {
                         bullet_classic::generator::PrewarmGate::Stop
-                    } else if bullet_app::update_check::is_busy(gate_state.borrow().phase) {
+                    } else if busy() {
                         bullet_classic::generator::PrewarmGate::Wait
                     } else {
                         bullet_classic::generator::PrewarmGate::Go

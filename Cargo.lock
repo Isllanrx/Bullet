@@ -637,6 +637,7 @@ dependencies = [
  "bullet-core",
  "bullet-platform",
  "bullet-wad",
+ "libc",
  "serde",
  "serde_json",
  "sha2",

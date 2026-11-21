@@ -246,7 +246,11 @@ impl InjectionTrigger {
     ) -> Option<u32> {
         let client = self.lcu_client().await?;
 
-        let owned = match client.get_owned_skin_ids().await {
+        let (owned_res, parent) = tokio::join!(
+            client.get_owned_skin_ids(),
+            parent_skin(&client, champ_id, entry_id)
+        );
+        let owned = match owned_res {
             Ok(owned) => owned,
             Err(e) => {
                 warn!(
@@ -258,7 +262,6 @@ impl InjectionTrigger {
             }
         };
 
-        let parent = parent_skin(&client, champ_id, entry_id).await;
         let skin_id =
             bullet_lcu::skin_registration::skin_to_register(champ_id, entry_id, parent, &owned);
         info!(

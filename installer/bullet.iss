@@ -8,7 +8,7 @@
   #define MyAppNumericVersion MyAppVersion
 #endif
 #define MyAppPublisher "Isllan Toso"
-#define MyAppDescription "League of Legends skin changer for Windows"
+#define MyAppDescription "League of Legends skin changer, chroma selector, and custom mod manager for Windows"
 #define MyAppCopyright "Copyright (c) 2026 Isllan Toso. MIT License."
 #define MyAppURL "https://github.com/Isllanrx/Bullet"
 #define MyPublisherURL "https://isllan.dev/"

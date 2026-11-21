@@ -10,13 +10,18 @@ fn facts() -> Facts {
         injection: true,
         random_skin: true,
         light_loading: true,
+        in_client_ui: false,
         autostart: false,
         tools_present: true,
+        manager: ManagerStatus::Ready {
+            version: Some("1.33.0".into()),
+        },
         game_found: true,
         lcu_connected: true,
         elevated: false,
         update: None,
         custom_mods: None,
+        stats: bullet_platform::panel::PanelStats::default(),
     }
 }
 
@@ -187,17 +192,37 @@ fn test_a_room_you_created_says_so_until_you_leave() {
 #[test]
 fn test_missing_pieces_are_reported() {
     let text = Language::Portuguese.text();
-    let snapshot = snapshot(
+    let snap = snapshot(
         &Facts {
             tools_present: false,
+            manager: ManagerStatus::Missing,
             game_found: false,
             lcu_connected: false,
             ..facts()
         },
         text,
     );
-    let details: Vec<&str> = snapshot.checks.iter().map(|c| c.detail.as_str()).collect();
+    let details: Vec<&str> = snap.checks.iter().map(|c| c.detail.as_str()).collect();
     assert!(details.contains(&text.detail_injector_missing));
+    assert!(details.contains(&text.detail_manager_missing));
     assert!(details.contains(&text.detail_game_missing));
     assert!(details.contains(&text.detail_client_waiting));
+
+    let outdated = snapshot(
+        &Facts {
+            manager: ManagerStatus::Outdated {
+                found: "1.29.0".into(),
+                required: "1.33.0".into(),
+            },
+            ..facts()
+        },
+        text,
+    );
+    let row = outdated
+        .checks
+        .into_iter()
+        .find(|c| c.label == text.check_manager)
+        .expect("manager check row");
+    assert!(!row.ok);
+    assert!(row.detail.contains("1.29.0") && row.detail.contains("1.33.0"));
 }

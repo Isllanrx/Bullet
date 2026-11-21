@@ -141,12 +141,18 @@ pub(crate) fn run_package() {
             };
             let dest = tools_dest_dir.join(tool);
             if let Err(e) = std::fs::copy(src, &dest) {
-                eprintln!(
-                    "[ERROR] copying {} to {}: {e}",
-                    src.display(),
-                    dest.display()
-                );
-                std::process::exit(1);
+                let same_bytes = std::fs::read(src)
+                    .ok()
+                    .zip(std::fs::read(&dest).ok())
+                    .is_some_and(|(a, b)| a == b);
+                if !same_bytes {
+                    eprintln!(
+                        "[ERROR] copying {} to {}: {e}",
+                        src.display(),
+                        dest.display()
+                    );
+                    std::process::exit(1);
+                }
             }
             let bytes_tool = std::fs::read(&dest).unwrap_or_else(|e| {
                 eprintln!("[ERROR] reading {}: {e}", dest.display());
