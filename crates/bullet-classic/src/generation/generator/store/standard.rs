@@ -38,7 +38,11 @@ impl StandardChampion {
         self.options = options;
         self
     }
-
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache_dir: &Path) -> Self {
+        self.cache_dir = Some(cache_dir.to_path_buf());
+        self
+    }
     fn slot0_identity(&self, character: &str) -> Option<SlotIdentity> {
         identity_at(&self.wad, character, 0).map(|identity| SlotIdentity {
             classification: identity
@@ -47,7 +51,6 @@ impl StandardChampion {
             ..identity
         })
     }
-
     fn finish_slot0(
         &self,
         character: &str,
@@ -70,17 +73,12 @@ impl StandardChampion {
     }
 
     #[must_use]
-    pub fn with_cache_dir(mut self, cache_dir: &Path) -> Self {
-        self.cache_dir = Some(cache_dir.to_path_buf());
-        self
-    }
-
-    #[must_use]
     pub fn has_skin(&self, skin: u32) -> bool {
-        let main = self.alias.to_ascii_lowercase();
-        self.wad.contains(wad_path_hash(&skin_bin(&main, skin)))
+        self.wad.contains(wad_path_hash(&skin_bin(
+            &self.alias.to_ascii_lowercase(),
+            skin,
+        )))
     }
-
     #[must_use]
     pub fn skin_numbers(&self, limit: u32) -> Vec<u32> {
         (0..limit).filter(|n| self.has_skin(*n)).collect()
@@ -148,6 +146,10 @@ impl StandardChampion {
         self.wad.contains(wad_path_hash(&path.to_ascii_lowercase()))
     }
 
+    pub fn read_path(&self, path: &str) -> Result<Option<Vec<u8>>, ClassicError> {
+        Ok(self.wad.read(wad_path_hash(&path.to_ascii_lowercase()))?)
+    }
+
     pub fn read_skin_bin(
         &self,
         character: &str,
@@ -191,7 +193,7 @@ impl StandardChampion {
         self.build(skin, base_skin, Some(form), mods_dir)
     }
 
-    pub(crate) fn gear_body(&self, source: &[u8], key: u32) -> Result<Vec<u8>, ClassicError> {
+    pub fn gear_body(&self, source: &[u8], key: u32) -> Result<Vec<u8>, ClassicError> {
         let parsed = parse_prop_file(source).map_err(|e| ClassicError::Bin(e.to_string()))?;
         if let Some(entry) = parsed.entries.iter().find(|e| e.key_hash == key) {
             return Ok(entry.body.clone());
@@ -253,7 +255,7 @@ impl StandardChampion {
             "game_wad": self.wad_stamp,
             "generator": reuse::generator_stamp(),
             "options": format!("{:?}", self.options),
-            "baseskin_rebase": 9,
+            "baseskin_rebase": 10,
         });
         let _claim = reuse::Claim::wait_for(&final_dir);
         if reuse::already_built(&final_dir, &key) {

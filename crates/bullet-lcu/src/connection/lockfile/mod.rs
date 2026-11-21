@@ -176,12 +176,10 @@ impl Lockfile {
         for proc_name in &bullet_platform::game_version::CLIENT_EXES {
             match ProcessFinder::find_process_path(proc_name) {
                 Ok(Some(exe_path)) => {
-                    let mut candidates = Vec::with_capacity(2);
-                    if let Some(parent) = exe_path.parent() {
-                        candidates.push(parent.join("lockfile"));
-                        if let Some(grandparent) = parent.parent() {
-                            candidates.push(grandparent.join("lockfile"));
-                        }
+                    let mut candidates = Vec::with_capacity(8);
+                    for ancestor in exe_path.ancestors().skip(1).take(7) {
+                        candidates.push(ancestor.join("lockfile"));
+                        candidates.push(ancestor.join("Contents/LoL/lockfile"));
                     }
 
                     for candidate in &candidates {
@@ -216,10 +214,12 @@ impl Lockfile {
         }
 
         for install in bullet_platform::paths::riot_league_installs() {
-            let candidate = install.join("lockfile");
-            if candidate.is_file() {
-                debug!(path = %candidate.display(), source = "riot-client-installs", "Lockfile located");
-                return Some(candidate);
+            for sub in ["lockfile", "Contents/LoL/lockfile"] {
+                let candidate = install.join(sub);
+                if candidate.is_file() {
+                    debug!(path = %candidate.display(), source = "riot-client-installs", "Lockfile located");
+                    return Some(candidate);
+                }
             }
         }
 
@@ -280,21 +280,21 @@ impl Lockfile {
                 );
             }
         }
-        if let Some(pid) = ProcessFinder::find_process_by_name("LeagueClientUx.exe")
-            .ok()
-            .flatten()
-        {
-            if let Some(cmd) = bullet_platform::process::query_process_cmdline(pid) {
-                if let Some(found) = Self::parse_ux_cmdline(&cmd, pid) {
-                    debug!(
-                        pid = found.pid,
-                        port = found.port,
-                        token_len = found.auth_token.len(),
-                        "LCU credentials recovered from LeagueClientUx command line"
-                    );
-                    clear_report();
-                    return Ok(found);
-                }
+        for proc_name in &bullet_platform::game_version::CLIENT_EXES {
+            if let Some(pid) = ProcessFinder::find_process_by_name(proc_name)
+                .ok()
+                .flatten()
+                && let Some(cmd) = bullet_platform::process::query_process_cmdline(pid)
+                && let Some(found) = Self::parse_ux_cmdline(&cmd, pid)
+            {
+                debug!(
+                    pid = found.pid,
+                    port = found.port,
+                    token_len = found.auth_token.len(),
+                    "LCU credentials recovered from LeagueClientUx command line"
+                );
+                clear_report();
+                return Ok(found);
             }
         }
         Err(LcuError::LockfileNotFound)

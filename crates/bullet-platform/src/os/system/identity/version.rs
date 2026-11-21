@@ -84,8 +84,47 @@ pub fn read_pe_version(path: &Path) -> Option<(u16, u16, u16)> {
 
 #[cfg(not(windows))]
 #[must_use]
-pub fn read_pe_version(_path: &Path) -> Option<(u16, u16, u16)> {
+pub fn read_pe_version(path: &Path) -> Option<(u16, u16, u16)> {
+    read_macos_bundle_version(path)
+}
+
+#[must_use]
+pub fn read_macos_bundle_version(path: &Path) -> Option<(u16, u16, u16)> {
+    for ancestor in path.ancestors().take(4) {
+        let plist = if ancestor.ends_with("Contents") {
+            ancestor.join("Info.plist")
+        } else {
+            ancestor.join("Contents").join("Info.plist")
+        };
+        if let Ok(text) = std::fs::read_to_string(&plist)
+            && let Some(ver) = parse_plist_short_version(&text)
+        {
+            return Some(ver);
+        }
+    }
     None
+}
+
+#[must_use]
+pub fn parse_plist_short_version(plist_xml: &str) -> Option<(u16, u16, u16)> {
+    let key_idx = plist_xml.find("CFBundleShortVersionString")?;
+    let after_key = &plist_xml[key_idx..];
+    let start_tag = after_key.find("<string>")?;
+    let after_start = &after_key[start_tag + "<string>".len()..];
+    let end_tag = after_start.find("</string>")?;
+    let raw = after_start[..end_tag].trim().trim_start_matches('v');
+    let mut parts = raw.split('.');
+    let major = parts.next()?.parse::<u16>().ok()?;
+    let minor = parts.next().unwrap_or("0").parse::<u16>().ok()?;
+    let patch = parts
+        .next()
+        .unwrap_or("0")
+        .split(|c: char| !c.is_ascii_digit())
+        .next()
+        .unwrap_or("0")
+        .parse::<u16>()
+        .ok()?;
+    Some((major, minor, patch))
 }
 
 #[must_use]
@@ -330,5 +369,7 @@ mod tests {
             ))
         );
         assert_eq!(parse_registry_path_value("   "), None);
+        let plist = "<plist><dict><key>CFBundleShortVersionString</key><string>1.34.2</string></dict></plist>";
+        assert_eq!(parse_plist_short_version(plist), Some((1, 34, 2)));
     }
 }

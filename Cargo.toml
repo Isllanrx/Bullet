@@ -26,6 +26,10 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 repository = "https://github.com/Isllanrx/Bullet"
+homepage = "https://github.com/Isllanrx/Bullet"
+description = "Bullet — Open-source League of Legends skin changer, chroma selector, TFT cosmetic unlocker, and custom mod manager (.fantome / .modpkg) for Windows, written in Rust."
+keywords = ["league-of-legends", "lol-skin-changer", "custom-skins", "fantome", "tft"]
+categories = ["games", "GUI"]
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }

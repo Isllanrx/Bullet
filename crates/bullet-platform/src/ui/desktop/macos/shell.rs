@@ -91,8 +91,13 @@ pub fn message_box_question(title: &str, text: &str) -> bool {
     }
 }
 
-pub fn run_elevated_wait(_exe: &Path, _args: &str) -> Result<bool, PlatformError> {
-    Ok(false)
+pub fn run_elevated_wait(exe: &Path, args: &str) -> Result<bool, PlatformError> {
+    match crate::elevation::run_elevated(exe, args)? {
+        crate::elevation::ElevatedRun::Finished(0) => Ok(true),
+        crate::elevation::ElevatedRun::Finished(_) | crate::elevation::ElevatedRun::Declined => {
+            Ok(false)
+        }
+    }
 }
 
 #[must_use]

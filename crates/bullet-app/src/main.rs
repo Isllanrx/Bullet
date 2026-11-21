@@ -14,6 +14,7 @@ const INSTANCE_NAME: &str = "bullet";
 
 const BLOCKING_TASKS_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
+#[cfg(not(target_os = "macos"))]
 fn main() -> Result<()> {
     boot::cli::attach_parent_console();
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -22,6 +23,11 @@ fn main() -> Result<()> {
     let outcome = runtime.block_on(run());
     runtime.shutdown_timeout(BLOCKING_TASKS_GRACE);
     outcome
+}
+
+#[cfg(target_os = "macos")]
+fn main() -> Result<()> {
+    boot::cli::run_macos_main(BLOCKING_TASKS_GRACE, || Box::pin(run()))
 }
 
 async fn run() -> Result<()> {
