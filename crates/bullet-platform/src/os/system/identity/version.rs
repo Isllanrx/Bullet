@@ -66,19 +66,20 @@ pub fn read_pe_version(path: &Path) -> Option<(u16, u16, u16)> {
     let base = buffer.as_ptr() as usize;
     let ptr = info_ptr as usize;
     let needed = std::mem::size_of::<VS_FIXEDFILEINFO>();
-    if !found.as_bool()
-        || info_ptr.is_null()
-        || (info_len as usize) < needed
-        || ptr < base
-        || ptr.saturating_add(needed) > base.saturating_add(buffer.len())
-    {
+    if !found.as_bool() || info_ptr.is_null() || (info_len as usize) < needed || ptr < base {
         return None;
     }
-
-    let fixed = unsafe { std::ptr::read_unaligned(info_ptr.cast::<VS_FIXEDFILEINFO>()) };
-    let major = ((fixed.dwFileVersionMS >> 16) & 0xFFFF) as u16;
-    let minor = (fixed.dwFileVersionMS & 0xFFFF) as u16;
-    let patch = ((fixed.dwFileVersionLS >> 16) & 0xFFFF) as u16;
+    let offset = ptr - base;
+    let slice = buffer.get(offset..offset.checked_add(needed)?)?;
+    let sig = u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]);
+    if sig != 0xFEEF_04BD {
+        return None;
+    }
+    let ms = u32::from_le_bytes([slice[8], slice[9], slice[10], slice[11]]);
+    let ls = u32::from_le_bytes([slice[12], slice[13], slice[14], slice[15]]);
+    let major = ((ms >> 16) & 0xFFFF) as u16;
+    let minor = (ms & 0xFFFF) as u16;
+    let patch = ((ls >> 16) & 0xFFFF) as u16;
     Some((major, minor, patch))
 }
 
