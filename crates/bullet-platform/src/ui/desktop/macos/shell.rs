@@ -91,6 +91,15 @@ pub fn message_box_question(title: &str, text: &str) -> bool {
     }
 }
 
+pub fn run_elevated_wait(_exe: &Path, _args: &str) -> Result<bool, PlatformError> {
+    Ok(false)
+}
+
+#[must_use]
+pub fn read_hklm_string(_subkey: &str, _value_name: &str) -> Option<String> {
+    None
+}
+
 pub fn dismiss_question(_title: &str) -> bool {
     false
 }

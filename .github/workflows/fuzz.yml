@@ -1,0 +1,36 @@
+name: Fuzzing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  fuzz-tests:
+    name: Property and fuzz tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run WAD, RST, Party, and Lockfile fuzz suites
+        run: |
+          cargo test --locked -p bullet-wad --test property_fuzz_tests
+          cargo test --locked -p bullet-classic --test rigorous_rst_tft_tests
+          cargo test --locked -p bullet-party --test rigorous_protocol_tests
+          cargo test --locked -p bullet-lcu --test rigorous_lockfile_tests

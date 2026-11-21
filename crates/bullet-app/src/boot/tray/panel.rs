@@ -71,6 +71,24 @@ pub fn panel_links_for(
                 false
             }
         };
+        let manager = match bullet_inject::ltf::check_manager_install() {
+            bullet_inject::ltf::ManagerInstallState::Ready { version, .. } => {
+                bullet_app::control_panel::ManagerStatus::Ready {
+                    version: version.map(bullet_platform::version::format_version),
+                }
+            }
+            bullet_inject::ltf::ManagerInstallState::Outdated { found, .. } => {
+                bullet_app::control_panel::ManagerStatus::Outdated {
+                    found: bullet_platform::version::format_version(found),
+                    required: bullet_platform::version::format_version(
+                        bullet_inject::ltf::MIN_MANAGER_VERSION,
+                    ),
+                }
+            }
+            bullet_inject::ltf::ManagerInstallState::Missing => {
+                bullet_app::control_panel::ManagerStatus::Missing
+            }
+        };
         let facts = bullet_app::control_panel::Facts {
             status: controller.status(),
             party_line,
@@ -79,13 +97,19 @@ pub fn panel_links_for(
             injection: bullet_platform::preferences::INJECTION.is_enabled(),
             random_skin: bullet_platform::preferences::RANDOM_SKIN.is_enabled(),
             light_loading: bullet_platform::preferences::LIGHT_LOADING.is_enabled(),
+            in_client_ui: bullet_platform::preferences::IN_CLIENT_UI.is_enabled(),
             autostart,
             tools_present: bullet_app::control_panel::tools_present(&tools),
+            manager,
             game_found: bullet_app::control_panel::game_found(&game_dir),
             lcu_connected,
             elevated,
             update: notices.bullet.available().map(|latest| latest.to_string()),
             custom_mods: notices.custom_mods.summary(),
+            stats: bullet_platform::paths::state_dir()
+                .ok()
+                .map(|dir| bullet_app::stats::load_summary(&dir))
+                .unwrap_or_default(),
         };
         let snapshot = bullet_app::control_panel::snapshot(&facts, bullet_platform::i18n::text());
         let failing: Vec<String> = snapshot
@@ -203,6 +227,25 @@ impl TrayActions {
                     Err(e) => warn!(error = %e, "Could not change the light match loading setting"),
                 }
             }
+            bullet_platform::tray::TrayEvent::ToggleInClientUi => {
+                match bullet_platform::preferences::IN_CLIENT_UI.toggle() {
+                    Ok(enabled) => {
+                        info!(
+                            enabled,
+                            "In-client skin selection changed from the control panel"
+                        );
+                        if !enabled {
+                            let tools = vec![self.tools_dir.clone()];
+                            drop(tokio::spawn(async move {
+                                bullet_inject::ltf::deactivate_in_client_ui(&tools).await;
+                            }));
+                        }
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Could not change the in-client skin selection setting")
+                    }
+                }
+            }
             bullet_platform::tray::TrayEvent::OpenLogs => {
                 match self.logs_dir {
                     Some(ref dir) => {
@@ -266,10 +309,37 @@ impl TrayActions {
                     ),
                 }
             }
+            bullet_platform::tray::TrayEvent::RepairSkins => {
+                let mods = self.mods_dir.clone();
+                let state = self.state_dir.clone();
+                let game = bullet_platform::paths::discover_game_dir().unwrap_or_default();
+                drop(tokio::task::spawn_blocking(move || {
+                    let report =
+                        bullet_app::control_panel::repair_skins_and_mods(&mods, &state, &game);
+                    info!(
+                        repaired = report.repaired.len(),
+                        incompatible = report.incompatible.len(),
+                        "Manual skin and mod repair completed"
+                    );
+                }));
+            }
+            bullet_platform::tray::TrayEvent::RepairClient => {
+                let state = self.state_dir.clone();
+                drop(tokio::task::spawn_blocking(move || {
+                    bullet_app::control_panel::repair_client(&state);
+                    info!("Manual client and Bullet cache repair completed");
+                }));
+            }
             bullet_platform::tray::TrayEvent::OpenRelease => {
                 let page = bullet_app::update_check::release_page();
                 if let Err(e) = bullet_platform::shell::open_web_page(&page) {
                     warn!(error = %e, page = %page, "Could not open the release page");
+                }
+            }
+            bullet_platform::tray::TrayEvent::OpenProject => {
+                let page = bullet_platform::star_gate::REPOSITORY_URL;
+                if let Err(e) = bullet_platform::shell::open_web_page(page) {
+                    warn!(error = %e, page = %page, "Could not open the GitHub repository page");
                 }
             }
             bullet_platform::tray::TrayEvent::ToggleAutostart => {

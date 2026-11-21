@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use bullet_core::overlay::{Catalog, OverlayCommand};
 use bullet_core::state::StateSender;
 
 use crate::error::InjectError;
@@ -31,6 +32,19 @@ pub fn find_manager_manager() -> Option<PathBuf> {
 }
 
 pub async fn warmup_bridge(_tools_dirs: &[PathBuf]) {}
+
+pub async fn shutdown_bridge() {}
+
+pub async fn deactivate_in_client_ui(_tools_dirs: &[PathBuf]) {}
+
+pub async fn sync_in_client_ui(
+    _enabled: bool,
+    _tools_dirs: &[PathBuf],
+    _catalog: Option<&Catalog>,
+    _selected_id: Option<u32>,
+) -> (Vec<OverlayCommand>, bool) {
+    (Vec::new(), false)
+}
 
 pub async fn spawn_ltf_patcher(
     _tools_dirs: &[PathBuf],

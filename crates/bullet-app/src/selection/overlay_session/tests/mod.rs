@@ -124,6 +124,7 @@ fn zed_catalog() -> Catalog {
         notice: None,
         classic: false,
         lobby: Vec::new(),
+        party: Default::default(),
     }
 }
 
@@ -281,4 +282,13 @@ fn test_the_random_skin_never_overrides_a_choice() {
     ] {
         assert!(!should_roll_random(157, blocked), "{blocked:?}");
     }
+}
+
+#[tokio::test]
+async fn in_client_ui_stub_returns_no_commands_when_not_linked() {
+    let cat = zed_catalog();
+    let (cmds, active) =
+        bullet_inject::ltf::sync_in_client_ui(false, &[], Some(&cat), Some(238_001)).await;
+    assert!(cmds.is_empty());
+    assert!(!active);
 }

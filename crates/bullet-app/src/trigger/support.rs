@@ -50,9 +50,7 @@ impl InjectionTrigger {
             .or_else(|| bullet_platform::paths::normalize_game_dir(&self.paths.game_dir))
             .or_else(bullet_platform::paths::discover_game_dir)
             .unwrap_or_else(|| self.paths.game_dir.clone());
-        if dir.is_dir() {
-            bullet_inject::overlay_builder::prewarm_game_index(&dir);
-        } else {
+        if !dir.is_dir() {
             warn!(game = %dir.display(), "The game folder is not known or does not exist; the overlay build may fail");
         }
         dir

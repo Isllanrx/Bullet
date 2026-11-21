@@ -9,6 +9,13 @@ mod redact;
 
 pub use export::export_diagnostics;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ManagerStatus {
+    Ready { version: Option<String> },
+    Outdated { found: String, required: String },
+    Missing,
+}
+
 #[derive(Debug, Clone)]
 pub struct Facts {
     pub status: String,
@@ -18,13 +25,16 @@ pub struct Facts {
     pub injection: bool,
     pub random_skin: bool,
     pub light_loading: bool,
+    pub in_client_ui: bool,
     pub autostart: bool,
     pub tools_present: bool,
+    pub manager: ManagerStatus,
     pub game_found: bool,
     pub lcu_connected: bool,
     pub elevated: bool,
     pub update: Option<String>,
     pub custom_mods: Option<crate::mod_repair::ScanSummary>,
+    pub stats: bullet_platform::panel::PanelStats,
 }
 
 #[must_use]
@@ -76,6 +86,7 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         injection: facts.injection,
         random_skin: facts.random_skin,
         light_loading: facts.light_loading,
+        in_client_ui: facts.in_client_ui,
         autostart: facts.autostart,
         update_line: facts.update.as_deref().map(|latest| {
             fill(
@@ -84,6 +95,7 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
                 bullet_platform::version::display_version(),
             )
         }),
+        stats: facts.stats.clone(),
         checks: vec![
             check(
                 text.check_injector,
@@ -95,6 +107,24 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
                 }
                 .to_owned(),
             ),
+            {
+                let (ok, detail) = match &facts.manager {
+                    ManagerStatus::Ready { version: Some(v) } => {
+                        (true, format!("{} (v{v})", text.detail_ok))
+                    }
+                    ManagerStatus::Ready { version: None } => (true, text.detail_ok.to_owned()),
+                    ManagerStatus::Outdated { found, required } => (
+                        false,
+                        fill(
+                            &fill(text.detail_manager_outdated, "found", found),
+                            "required",
+                            required,
+                        ),
+                    ),
+                    ManagerStatus::Missing => (false, text.detail_manager_missing.to_owned()),
+                };
+                check(text.check_manager, ok, detail)
+            },
             check(
                 text.check_game,
                 facts.game_found,
@@ -141,6 +171,57 @@ pub fn game_found(configured: &std::path::Path) -> bool {
 #[must_use]
 pub fn tools_present(files: &[PathBuf]) -> bool {
     files.iter().all(|file| file.is_file())
+}
+
+pub fn repair_skins_and_mods(
+    mods_dir: &std::path::Path,
+    state_dir: &std::path::Path,
+    game_dir: &std::path::Path,
+) -> crate::mod_repair::RepairReport {
+    let _ = std::fs::remove_file(state_dir.join("mod_repair.json")); // ignore-ok: force fresh repair scan
+    if let Ok(data_dir) = bullet_platform::paths::data_dir() {
+        let generated_dir = data_dir.join("mods");
+        if let Ok(entries) = std::fs::read_dir(&generated_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                if let Some(s) = name.to_str() {
+                    if s.starts_with("std_") || s == "bullet_loading_name" {
+                        let _ = std::fs::remove_dir_all(entry.path()); // ignore-ok: clear cached generated skin mod
+                    }
+                }
+            }
+        }
+    }
+    let resolved_game = bullet_platform::paths::normalize_game_dir(game_dir)
+        .or_else(bullet_platform::paths::discover_game_dir)
+        .unwrap_or_else(|| game_dir.to_path_buf());
+    crate::mod_repair::repair_custom_mods(
+        &[mods_dir.to_path_buf()],
+        &resolved_game,
+        state_dir,
+        &|| false,
+    )
+}
+
+pub fn repair_client(state_dir: &std::path::Path) {
+    if let Ok(data_dir) = bullet_platform::paths::data_dir() {
+        for sub in ["staging", "overlay"] {
+            let _ = std::fs::remove_dir_all(data_dir.join(sub)); // ignore-ok: clear transient overlay/staging cache
+        }
+    }
+    let _ = std::fs::remove_file(state_dir.join("ltf_journal.json")); // ignore-ok: clear stale journal
+    #[cfg(windows)]
+    if let Ok(Some(pid)) = bullet_platform::process::ProcessFinder::find_any_process(&[
+        "ltk-manager.exe",
+        "LTK Manager.exe",
+    ]) {
+        let _ = bullet_platform::process::terminate_process(pid); // ignore-ok: restart stalled mod manager
+    }
+    if let Ok(local_app) = std::env::var("LOCALAPPDATA") {
+        let bridge_dir = std::path::PathBuf::from(local_app).join("BulletBridge");
+        let _ = std::fs::remove_file(bridge_dir.join("port.txt")); // ignore-ok: reset bridge discovery
+        let _ = std::fs::remove_file(bridge_dir.join("token.txt")); // ignore-ok: reset bridge token
+    }
 }
 
 #[cfg(test)]

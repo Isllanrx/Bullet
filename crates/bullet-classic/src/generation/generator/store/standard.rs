@@ -19,9 +19,7 @@ impl StandardChampion {
             return Err(ClassicError::InvalidAlias(alias.to_owned()));
         }
         let wad_path = game_dir
-            .join("DATA")
-            .join("FINAL")
-            .join("Champions")
+            .join("DATA/FINAL/Champions")
             .join(format!("{alias}.wad.client"));
         let wad = WadFile::open(&wad_path).map_err(ClassicError::Wad)?;
         let stamp = wad_stamp(&wad_path);
@@ -214,14 +212,23 @@ impl StandardChampion {
     ) -> Result<String, ClassicError> {
         let main = self.alias.to_ascii_lowercase();
         let target_bin = skin_bin(&main, skin);
-        if !self.wad.contains(wad_path_hash(&target_bin)) {
-            return Err(ClassicError::SkinNotFound {
-                champion_id: 0,
-                skin_id: skin,
-            });
-        }
+        let source =
+            self.wad
+                .read(wad_path_hash(&target_bin))?
+                .ok_or(ClassicError::SkinNotFound {
+                    champion_id: 0,
+                    skin_id: skin,
+                })?;
 
-        let game_parent = self.parent_skin(skin);
+        let game_parent = match slot_identity(&source) {
+            Ok(identity) => {
+                (identity.parent != 0 && identity.parent != skin).then_some(identity.parent)
+            }
+            Err(e) => {
+                warn!(alias = %self.alias, skin, error = %e, "Skin identity unreadable; the client's parent skin is used");
+                None
+            }
+        };
         if game_parent.is_some() && base_skin.is_some() && game_parent != base_skin {
             debug!(
                 alias = %self.alias,
@@ -265,10 +272,6 @@ impl StandardChampion {
             .join(format!("{}.wad.client", self.alias));
         let characters_dir = wad_root.join("data").join("characters");
 
-        let source = self
-            .wad
-            .read(wad_path_hash(&target_bin))?
-            .ok_or_else(|| ClassicError::Bin(format!("{main} skin{skin}.bin not found in WAD")))?;
         let bins_dir = characters_dir.join(&main).join("skins");
         std::fs::create_dir_all(&bins_dir)?;
         let retargeted =
@@ -381,10 +384,8 @@ impl StandardChampion {
             meta.join("manifest.json"),
             serde_json::to_vec_pretty(&manifest).map_err(|e| ClassicError::Bin(e.to_string()))?,
         )?;
-
         remove_if_present(&final_dir)?;
         std::fs::rename(&partial, &final_dir)?;
-
         info!(
             alias = %self.alias,
             skin,
@@ -392,7 +393,6 @@ impl StandardChampion {
             folder = %folder,
             "Standard skin mod generated directly from installed game WAD"
         );
-
         Ok(folder)
     }
 }

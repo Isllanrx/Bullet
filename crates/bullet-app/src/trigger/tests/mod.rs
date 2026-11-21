@@ -280,6 +280,7 @@ fn with_party(mut state: bullet_core::state::AppState) -> bullet_core::state::Ap
         champion_id: 103,
         skin_id: 103_015,
         chroma_id: None,
+        identity: None,
     }];
     state
 }

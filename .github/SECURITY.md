@@ -1,48 +1,40 @@
-# Security policy
+# Security Policy
 
-## Reporting a vulnerability
+## Reporting a Vulnerability
 
-Please report security issues **privately** through
-[GitHub Security Advisories](https://github.com/Isllanrx/Bullet/security/advisories/new). Do not open a
-public issue or post details on Discord.
+Report security issues **privately** through [GitHub Security Advisories](https://github.com/Isllanrx/Bullet/security/advisories/new). Do not open a public issue or post details on Discord.
 
-Useful details to include:
+Include when possible:
 
-- the Bullet version (Explorer → `bullet.exe` → Properties → Details),
-- what an attacker could do, and under which conditions,
-- steps to reproduce, and the log from `%LOCALAPPDATA%\Bullet\logs` if relevant.
+- Bullet version (`bullet.exe` → Properties → Details),
+- Impact and preconditions,
+- Reproduction steps and logs from `%LOCALAPPDATA%\Bullet\logs` (or **Support → Export diagnostics**).
 
-Maintainer: Isllan Toso, [isllan.dev](https://isllan.dev/).
-
-You will get an acknowledgement within a few days. Fixes ship as a new pre-release first and are credited in
-the release notes unless you prefer otherwise.
+Maintainer: **Isllan Toso** — [isllan.dev](https://isllan.dev/). Acknowledgements are sent within a few days; fixes ship first as a pre-release and are credited unless you prefer otherwise.
 
 ## Scope
 
-In scope:
+**In scope:**
 
-- `bullet.exe`, the installer and the uninstaller,
-- the bridge and launcher (`bullet_launcher.exe`, `bullet_bridge.dll`), built from the private `bullet_ltk` repository during official releases,
-- the GitHub sign-in that checks the repository star,
-- the party mode protocol, its encryption and the relay (`relay-worker/`, `crates/bullet-relay`),
-- the terminal install script (`install.ps1`) and the in-app update, which verify the installer before running it,
-- the build and release pipeline in `.github/`.
+- `bullet.exe`, installer, and uninstaller,
+- `bullet_launcher.exe` and `bullet_bridge.dll` (built from private `bullet_ltk` during official releases),
+- GitHub sign-in and repository star check,
+- Party Mode protocol, E2EE cipher, and relay (`relay-worker/`, `crates/bullet-relay`),
+- `install.ps1` and the in-app updater,
+- CI/release workflows in `.github/`.
 
-Out of scope:
+**Out of scope:**
 
-- the League of Legends client or game,
-- detection or penalties by Riot's anti-cheat. Using Bullet is at your own risk, as the README's disclaimer
-  explains.
+- The League of Legends client or game,
+- Detection or penalties by Riot's anti-cheat (see the README [Disclaimer](../README.md#disclaimer)).
 
-## Supported versions
+## Supported Versions
 
 Only the latest release and the latest pre-release receive security fixes.
 
-## Verifying a download
+## Verifying a Download
 
-Every installer published by the release workflow comes with a `SHA256SUMS` file, its signature
-(`SHA256SUMS.sig`) and a build provenance attestation. Bullet itself checks the signed checksum list before it runs
-an update, and `install.ps1` checks the installer against `SHA256SUMS`. Releases are not code-signed:
+Every release includes `SHA256SUMS`, its signature (`SHA256SUMS.sig`), and a GitHub build provenance attestation. Both the in-app updater and `install.ps1` verify checksums before running the installer. Releases are not code-signed:
 
 ```powershell
 Get-FileHash .\Bullet-Setup-<version>-x64.exe -Algorithm SHA256

@@ -7,7 +7,7 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use tracing::{debug, warn};
 
 use super::runtime;
-use super::views::{ControlPanel, PanelAction, PanelCheckRow, PanelLabels};
+use super::views::{ControlPanel, PanelAction, PanelCheckRow, PanelLabels, PanelSkinStatRow};
 use crate::tray::TrayEvent;
 
 const REFRESH: Duration = Duration::from_millis(700);
@@ -20,6 +20,22 @@ pub struct PanelCheck {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelSkinStat {
+    pub name: String,
+    pub wins: u32,
+    pub losses: u32,
+    pub winrate: u8,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PanelStats {
+    pub wins: u32,
+    pub losses: u32,
+    pub winrate: u8,
+    pub top: Vec<PanelSkinStat>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PanelSnapshot {
     pub status: String,
     pub party_line: String,
@@ -28,9 +44,11 @@ pub struct PanelSnapshot {
     pub injection: bool,
     pub random_skin: bool,
     pub light_loading: bool,
+    pub in_client_ui: bool,
     pub autostart: bool,
     pub update_line: Option<String>,
     pub checks: Vec<PanelCheck>,
+    pub stats: PanelStats,
 }
 
 pub type SnapshotSource = Arc<dyn Fn() -> PanelSnapshot + Send + Sync>;
@@ -56,6 +74,7 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
         PanelAction::ToggleInjection => TrayEvent::ToggleInjection,
         PanelAction::ToggleRandomSkin => TrayEvent::ToggleRandomSkin,
         PanelAction::ToggleLightLoading => TrayEvent::ToggleLightLoading,
+        PanelAction::ToggleInClientUi => TrayEvent::ToggleInClientUi,
         PanelAction::ToggleAutoAccept => TrayEvent::ToggleAutoAccept,
         PanelAction::ToggleAutostart => TrayEvent::ToggleAutostart,
         PanelAction::PartyCreate => TrayEvent::PartyCreate,
@@ -68,6 +87,9 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
         PanelAction::OpenRelease => TrayEvent::OpenRelease,
         PanelAction::MarkProblem => TrayEvent::MarkProblem,
         PanelAction::ExportDiagnostics => TrayEvent::ExportDiagnostics,
+        PanelAction::RepairSkins => TrayEvent::RepairSkins,
+        PanelAction::RepairClient => TrayEvent::RepairClient,
+        PanelAction::OpenProject => TrayEvent::OpenProject,
         PanelAction::About => TrayEvent::About,
         PanelAction::Quit => TrayEvent::Quit,
     }
@@ -92,6 +114,11 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
         random_skin_hint: text.panel_random_skin_hint.into(),
         light_loading: text.menu_light_loading.into(),
         light_loading_hint: text.panel_light_loading_hint.into(),
+        in_client_ui: text.menu_in_client_ui.into(),
+        in_client_ui_hint: text.panel_in_client_ui_hint.into(),
+        mode_title: text.panel_mode_title.into(),
+        mode_window: text.panel_mode_window.into(),
+        mode_client: text.panel_mode_client.into(),
         auto_accept: text.menu_auto_accept.into(),
         autostart: text.menu_autostart.into(),
         party_create: text.menu_party_create.into(),
@@ -102,11 +129,20 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
         open_tools: text.folder_tools.into(),
         open_logs: text.folder_logs.into(),
         about: text.menu_about.into(),
+        open_project: text.panel_open_project.into(),
+        project_star_hint: text.panel_project_star_hint.into(),
         quit: text.menu_quit.into(),
         update_download: text.panel_update_download.into(),
         mark_problem: text.panel_mark_problem.into(),
         mark_problem_hint: text.panel_mark_problem_hint.into(),
         export_diagnostics: text.panel_export_diagnostics.into(),
+        repair_skins: text.panel_repair_skins.into(),
+        repair_client: text.panel_repair_client.into(),
+        stats_title: text.panel_stats_title.into(),
+        stats_empty: text.panel_stats_empty.into(),
+        stats_games: text.panel_stats_games.into(),
+        stats_wins_short: text.panel_stats_wins_short.into(),
+        stats_losses_short: text.panel_stats_losses_short.into(),
     }
 }
 
@@ -127,6 +163,7 @@ pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
     window.set_injection(state.injection);
     window.set_random_skin(state.random_skin);
     window.set_light_loading(state.light_loading);
+    window.set_in_client_ui(state.in_client_ui);
     window.set_auto_accept(state.auto_accept);
     window.set_autostart(state.autostart);
     window.set_update_line(state.update_line.as_deref().unwrap_or_default().into());
@@ -142,6 +179,25 @@ pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
         })
         .collect();
     window.set_checks(ModelRc::new(VecModel::from(checks)));
+    window.set_stats_wins(i32::try_from(state.stats.wins).unwrap_or(i32::MAX));
+    window.set_stats_losses(i32::try_from(state.stats.losses).unwrap_or(i32::MAX));
+    window.set_stats_winrate(i32::from(state.stats.winrate));
+    let t = crate::i18n::text();
+    let rows: Vec<PanelSkinStatRow> = state
+        .stats
+        .top
+        .iter()
+        .map(|s| PanelSkinStatRow {
+            name: s.name.as_str().into(),
+            record: format!(
+                "{}{} / {}{}",
+                s.wins, t.panel_stats_wins_short, s.losses, t.panel_stats_losses_short
+            )
+            .into(),
+            winrate: i32::from(s.winrate),
+        })
+        .collect();
+    window.set_stats_rows(ModelRc::new(VecModel::from(rows)));
 }
 
 pub fn show_panel(links: PanelLinks) {

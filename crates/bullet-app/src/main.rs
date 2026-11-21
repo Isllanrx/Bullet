@@ -180,6 +180,11 @@ async fn run() -> Result<()> {
         enabled = light_loading,
         "Light match loading setting loaded"
     );
+    let in_client_ui = bullet_platform::preferences::IN_CLIENT_UI.load();
+    info!(
+        enabled = in_client_ui,
+        "In-client skin selection setting loaded"
+    );
 
     let update_notice = bullet_app::update_check::UpdateNotice::default();
     let live_game = bullet_app::live_game::LiveGame::default();
@@ -318,7 +323,7 @@ async fn run() -> Result<()> {
     };
 
     if instance_guard.is_some() {
-        boot::tasks::spawn_activation_listener(&mut supervisor, panel_links);
+        boot::tasks::spawn_activation_listener(&mut supervisor, panel_links.clone());
     }
 
     match bullet_platform::overlay_window::OverlayWindow::spawn() {
@@ -330,7 +335,8 @@ async fn run() -> Result<()> {
                 state_rx.clone(),
                 library_root,
                 mods_config,
-            );
+            )
+            .with_panel_links(panel_links);
             supervisor.spawn_essential("overlay-session", move |child_token| async move {
                 session.run(child_token).await;
                 drop(overlay);
@@ -353,6 +359,7 @@ async fn run() -> Result<()> {
 
     info!("Shutting down supervised tasks");
     supervisor.shutdown().await;
+    bullet_inject::ltf::shutdown_bridge().await;
     let dropped = logging.dropped.dropped_lines();
     if dropped > 0 {
         warn!(

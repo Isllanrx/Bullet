@@ -30,6 +30,10 @@ impl Drop for BackgroundThread {
     }
 }
 
+pub fn query_process_cmdline(_pid: u32) -> Option<String> {
+    None
+}
+
 pub struct ProcessFinder;
 
 impl ProcessFinder {

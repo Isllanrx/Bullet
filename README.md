@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml"><img src="https://github.com/Isllanrx/Bullet/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Isllanrx/Bullet"><img src="https://api.scorecard.dev/projects/github.com/Isllanrx/Bullet/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/v/release/Isllanrx/Bullet?include_prereleases&sort=semver" alt="Release"></a>
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><img src="https://img.shields.io/github/downloads/Isllanrx/Bullet/total?label=downloads" alt="Downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D4" alt="Platform">
@@ -27,8 +28,7 @@
 
 ---
 
-Pick any skin in Bullet's own window during champion select. Bullet builds a copy of the game files that contain
-it, and when the game starts it reads that copy instead of its own. The game installation is never modified.
+Bullet generates skins straight from your installed League of Legends files and applies them in-game via LTK Manager — without modifying your game files, without Pengu Loader, and without external plugins.
 
 <p align="center">
   <img src="assets/urgot-select.png" alt="Bullet in Champion Select" width="49%">
@@ -36,66 +36,45 @@ it, and when the game starts it reads that copy instead of its own. The game ins
 </p>
 
 > [!IMPORTANT]
-> **Educational project**, provided as is, without warranty. The author accepts no responsibility for any damage,
-> account penalty or loss caused by its use. See the [Disclaimer](#disclaimer).
+> **Educational project**, provided as is, without warranty. The author is not responsible for any damage, account penalty, or loss caused by its use. See the [Disclaimer](#disclaimer).
+
+## How to Use Bullet
+
+Follow these 4 simple steps to get started:
+
+1. **Download and install Bullet**
+   - https://github.com/Isllanrx/Bullet/releases
+2. **Download and install LTK Manager** (`1.33.0+`)
+   - https://github.com/LeagueToolkit/ltk-manager/releases
+3. **Open Bullet and authenticate**
+   - Launch Bullet (no administrator rights needed).
+   - Log in with your GitHub account and finish authentication.
+   - Visit the Bullet repository and click **Star**: https://github.com/Isllanrx/Bullet
+4. **Choose your skin**
+   - Open League of Legends and enter Champion Select (or Lobby in Swiftplay/Brawl).
+   - Pick your champion and select your skin or chroma in Bullet's window or directly inside the client carousel.
+   - That's it — your selected skin loads automatically when the match starts.
+
+Enjoy Bullet!
 
 ## Features
 
-- **Every skin and chroma**, including form skins, chosen in champion select and loaded when the game starts.
-- **Random skin and history**: roll one, or reuse the last skin you played on each champion.
-- **Custom mods**: `.fantome`, `.zip` and `.modpkg`, checked and adjusted against the current patch before use.
-- **Classic Rift**: legacy champion models, generated from your installed game.
-- **Party mode**: friends see each other's skins through an end-to-end encrypted relay, up to five players. Friends
-  in the same lobby need no code.
-- **Always up to date**: skins are generated from the game you have installed, so a patch never breaks them.
-- **Safe by design**: runs without administrator rights, never writes to the game folder, verifies every binary
-  and collects no telemetry.
-- **Updates you approve**, verified against the release's signed checksum list.
-- English, Portuguese and Spanish. **Free and open source**: if you paid for it, you were scammed.
-
-## Installation
-
-1. **Install Bullet.** Download `Bullet-Setup-<version>-x64.exe` from
-   [Releases](https://github.com/Isllanrx/Bullet/releases/latest) and run it, or from PowerShell (not as
-   administrator):
-
-   ```powershell
-   irm https://raw.githubusercontent.com/Isllanrx/Bullet/main/install.ps1 | iex
-   ```
-
-   The script checks the installer against the release's `SHA256SUMS` before installing. Bullet is not
-   code-signed, so Windows SmartScreen may warn about the installer.
-
-2. **The injection tools come with it.** The installer places Bullet's LTF bridge tools, `bullet_launcher.exe` and
-   `bullet_bridge.dll`, in `C:\Program Files\Bullet\tools`. Bullet integrates with the official Mod Manager to apply
-   overlays cleanly in-game.
-
-3. **Start Bullet** from the Start menu, normally (not as administrator). It lives in the system tray.
-   On the first start Bullet asks you to sign in with GitHub: it shows a code, opens github.com and you enter the
-   code there. Bullet then checks that your account starred this repository. The check repeats on every start; while
-   offline, a check from the last 7 days is accepted. The sign-in is stored for your Windows account only.
-
-## Usage
-
-1. Open the League client and Bullet, in either order.
-2. Pick a champion in champion select. Bullet's window lists its skins and chromas.
-3. Choose one and play.
-
-Custom mods go into the category folders under `%LOCALAPPDATA%\Bullet\custom_mods`, or are imported from the
-**Mods** tab. Party rooms are created from the tray, or offered automatically when friends running Bullet share
-your lobby. Optional settings are listed in [`.env.example`](.env.example).
+- **Every skin, chroma, and form** — includes Exalted, Hall of Legends, and Elementalist forms, plus localized skin names on the loading screen.
+- **Two picker modes** — switch on the Home tab between **Bullet's window** and **In-Client mode** (native Hextech chroma flyout, Swiftplay banner sync, and top-bar Mods & Panel menu — zero Pengu Loader).
+- **Every server** — works across all Riot regions (BR, NA, EUW, KR, JP, SEA, TW, VN, PBE) and regional clients (including China/WeGame).
+- **Custom mods & one-click repair** — `.fantome`, `.zip`, and `.modpkg` (maps, fonts, announcers, skins) verified against the current patch, plus skin and client repair in **Support**.
+- **Classic Rift (JADE)** — legacy models built directly from your installed game.
+- **Party Mode** — end-to-end encrypted skin sharing with up to 5 friends and automatic lobby pairing.
+- **Local skin stats** — clean offline win/loss and win-rate tracking per skin, zero telemetry.
+- **Safe by design** — runs without admin rights, never modifies game files, verifies signed updates, and supports English, Portuguese, and Spanish.
 
 ## Troubleshooting
 
-Logs are in `%LOCALAPPDATA%\Bullet\logs` (the tray opens the folder); `BULLET_LOG=debug` adds detail. **Export
-diagnostics** in the control panel zips everything needed for a report. If a skin or mod breaks match loading,
-turn off **Inject skins** in the control panel. Close other skin tools while Bullet runs: two injectors conflict.
+- Run **Repair skins and mods** or **Repair client** in **Support** if a patch or mod breaks.
+- Click **Export diagnostics** in **Support** (`%LOCALAPPDATA%\Bullet\logs`) before opening an [issue](https://github.com/Isllanrx/Bullet/issues) or asking on [Discord](https://discord.gg/e2dH2nUjd9).
+- Close other skin tools while Bullet is running to avoid injector conflicts.
 
-Attach the log when you open an [issue](https://github.com/Isllanrx/Bullet/issues), or ask on
-[Discord](https://discord.gg/e2dH2nUjd9). Security issues go through a
-[private advisory](https://github.com/Isllanrx/Bullet/security/advisories/new).
-
-## Building from source
+## Building from Source
 
 ```powershell
 cargo xtask check
@@ -103,26 +82,15 @@ cargo xtask package
 cargo xtask installer
 ```
 
-Contributions: [CONTRIBUTING.md](.github/CONTRIBUTING.md).
-
 ## Acknowledgements
 
-Bullet was inspired by [Rose](https://github.com/Alban1911/Rose) and built by studying the open projects listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Maintained by **Isllan Toso** — [isllan.dev](https://isllan.dev/).
+Inspired by [Rose](https://github.com/Alban1911/Rose) and the open-source projects in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Maintained by **Isllan Toso** — [isllan.dev](https://isllan.dev/).
 
 ## Disclaimer
 
-Bullet is published **for educational purposes**, **as is, without warranty of any kind**, as stated in the MIT
-license. The author assumes no responsibility for any damage caused by its use, including account suspensions or
-bans. Using third-party software with League of Legends goes against Riot Games' Terms of Service: you decide
-whether to use it and bear the consequences. Bullet only changes what you see on your own machine. It is not
-affiliated with or endorsed by Riot Games; League of Legends is a trademark of Riot Games, Inc.
-
-<p align="center">
-  <a href="https://slint.dev"><img src="https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-dark.svg" alt="Made with Slint" height="44"></a>
-</p>
+Bullet is published **for educational purposes**, **as is, without warranty of any kind**, under the MIT license. Using third-party software with League of Legends violates Riot Games' Terms of Service; you use it at your own risk. Bullet only changes visuals locally on your machine and is not affiliated with or endorsed by Riot Games. League of Legends is a trademark of Riot Games, Inc.
 
 ## License
 
-- **Source Code:** The source code in this repository is licensed under the [MIT License](LICENSE).
-- **Third-Party Components:** Licensed under their respective terms as listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+- **Source Code:** [MIT License](LICENSE)
+- **Third-Party Components:** [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
