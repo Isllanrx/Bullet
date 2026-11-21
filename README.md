@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/bullet.png" width="96" alt="Bullet — League of Legends Skin Changer and Custom Mod Manager for Windows">
+  <img src="assets/bullet.png" width="96" alt="Bullet — League of Legends Skin Changer and Custom Mod Manager">
 </p>
 
 <h1 align="center">Bullet — League of Legends Skin Changer & Mod Manager</h1>
@@ -22,15 +22,15 @@
 
 <p align="center">
   <a href="https://github.com/Isllanrx/Bullet/releases/latest"><b>Download Bullet</b></a> ·
+  <a href="https://discord.gg/e2dH2nUjd9"><b>Installation Tutorial (Discord)</b></a> ·
   <a href="#how-to-use-bullet"><b>Quick Start Guide</b></a> ·
   <a href="#frequently-asked-questions-faq"><b>FAQ</b></a> ·
-  <a href="https://discord.gg/e2dH2nUjd9"><b>Discord Community</b></a> ·
   <a href="https://github.com/Isllanrx/Bullet/issues"><b>Report a Bug</b></a>
 </p>
 
 ---
 
-**Bullet** is a fast, native **League of Legends skin changer** and **LoL custom skin / `.fantome` mod manager** for Windows. Written in **Rust**, Bullet dynamically generates official League of Legends skins, chromas, Exalted forms (`Ctrl+5`), Teamfight Tactics (TFT) cosmetics, and profile identity loadouts directly from your installed game WAD archives (`DATA/FINAL/Champions/*.wad.client`) and applies them via [LTK Manager](https://github.com/LeagueToolkit/ltk-manager) — **without modifying your game installation, without administrator privileges, and without Pengu Loader**.
+**Bullet** is a fast, native **League of Legends skin changer** and **LoL custom skin / `.fantome` mod manager** for Windows and macOS. Written in **Rust**, Bullet dynamically generates official League of Legends skins, chromas, Exalted forms (`Ctrl+5`), Teamfight Tactics (TFT) cosmetics, and profile identity loadouts directly from your installed game WAD archives (`DATA/FINAL/Champions/*.wad.client`) — **without modifying your game installation, without administrator privileges on Windows, and without Pengu Loader**.
 
 <p align="center">
   <img src="assets/urgot-select.png" alt="Bullet League of Legends Skin Changer in Champion Select" width="49%">
@@ -38,16 +38,28 @@
 </p>
 
 > [!IMPORTANT]
+> **Full step-by-step installation tutorial & support:** Join our official Discord server at **[https://discord.gg/e2dH2nUjd9](https://discord.gg/e2dH2nUjd9)** — the complete installation guide, setup walkthrough, and community support are available inside the Discord server.
+
+> [!NOTE]
 > **Educational project**, provided as is, without warranty. The author is not responsible for any damage, account penalty, or loss caused by its use. See the [Disclaimer](#disclaimer).
 
 ## How to Use Bullet
 
+> **Need the step-by-step setup guide?** The complete installation tutorial is available inside our **[Discord server](https://discord.gg/e2dH2nUjd9)**.
+
 ### Windows (10 & 11 x64)
 
 1. **Download and install Bullet**
-   - [Download the latest `Bullet-Setup-x64.exe` installer from GitHub Releases](https://github.com/Isllanrx/Bullet/releases/latest)
-2. **Download and install LTK Manager** (`1.33.0+`)
-   - [Download LTK Manager from LeagueToolkit Releases](https://github.com/LeagueToolkit/ltk-manager/releases)
+   - [Download the latest `Bullet-Setup-x64.exe` installer from GitHub Releases](https://github.com/Isllanrx/Bullet/releases/latest), or install via CLI in **PowerShell**:
+     ```powershell
+     irm https://raw.githubusercontent.com/Isllanrx/Bullet/main/install.ps1 | iex
+     ```
+     Or build/install directly with Cargo:
+     ```powershell
+     cargo install --git https://github.com/Isllanrx/Bullet.git bullet-app --locked
+     ```
+2. **Follow the installation tutorial on Discord**
+   - Check the complete setup instructions inside **[discord.gg/e2dH2nUjd9](https://discord.gg/e2dH2nUjd9)**.
 3. **Open Bullet and authenticate**
    - Launch Bullet (no administrator rights needed).
    - Log in with your GitHub account and finish authentication.
@@ -59,7 +71,7 @@
 
 ### macOS (Intel `x86_64` & Apple Silicon `M1` / `M2` / `M3` / `M4`) — Install via CLI
 
-On macOS, Bullet includes a built-in native Mach-O memory patcher (`x86_64` Rosetta 2 and `arm64` Apple Silicon) and does **not** require an external LTK Manager installation. Run the following command in **Terminal**:
+On macOS, Bullet includes a built-in native Mach-O memory patcher (`x86_64` Rosetta 2 and `arm64` Apple Silicon). Run the following command in **Terminal**:
 
 ```bash
 command -v cargo >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && source "$HOME/.cargo/env"; cargo install --git https://github.com/Isllanrx/Bullet.git bullet-app --locked && bullet
@@ -88,29 +100,32 @@ Enjoy Bullet!
 - **Customize Identity & TFT Cosmetics** — unlock Summoner Icons, Borders, Ranked/Event Banners, Titles, and Tokens in the League Client identity customizer (visible to your friends via Party Mode), plus Teamfight Tactics (**TFT**) Tacticians (Little Legends / Chibis), Booms, Portals, and Arenas.
 - **Custom mods (`.fantome`, `.modpkg`, `.zip`) & one-click repair** — import custom skins, map skins, HUDs, fonts, and announcer packs verified against the current League patch, with instant one-click skin and client repair in **Support**.
 - **Party Mode (Encrypted Skin & Identity Sharing)** — end-to-end encrypted (`X25519` + `ChaCha20-Poly1305`) real-time skin, chroma, and profile identity synchronization with up to 5 friends in your lobby.
-- **Every Riot region & server** — works across BR, NA, EUW, EUNE, KR, JP,LAN, LAS, OCE, TR, RU, ME, SEA, TW, VN, PBE, and regional clients (including China / WeGame).
+- **Every Riot region & server** — works across BR, NA, EUW, EUNE, KR, JP, LAN, LAS, OCE, TR, RU, ME, SEA, TW, VN, PBE, and regional clients (including China / WeGame).
 - **Classic Rift (JADE)** — rebuilds legacy champion geometry directly from your installed game WADs.
 - **Local skin stats & safe architecture** — offline win/loss and win-rate tracking per skin, zero telemetry, runs as standard user (`asInvoker`), never touches original Riot files, and supports **English**, **Português (BR)**, and **Español**.
 
 ## Why Choose Bullet Over Other LoL Skin Changers?
 
-| Capability | Bullet (Rust) | Rose (Python) | Traditional `.fantome` Managers |
-| :--- | :--- | :--- | :--- |
-| **Built-in Official Skins & Chromas** | Generated on demand from installed game WADs | Requires external skin database / Python runtime | Manual `.fantome` download per skin |
-| **Exalted, Ultimate & Multi-Form Cycling (`Ctrl+5`)** | Native animation graph, submesh, material & Wwise audio switching | Partial | Static single-form only |
-| **In-Client Carousel & Top-Bar Menu** | Native LCU & Hextech UI without Pengu Loader | Requires Pengu Loader plugin | External window only |
-| **TFT Tacticians, Arenas, Booms & Portals** | Included | Not supported | Manual mod files only |
-| **Customize Identity (Icons, Borders, Banners, Titles)** | Included + synced with Party Mode | Not supported | Not supported |
-| **Custom Mods (`.fantome` / `.modpkg` / `.zip`)** | Automatic patch validation & conflict check | Basic import | Manual management |
-| **Runtime Footprint** | Single native Rust binary (`asInvoker`, no admin) | Python + dependencies | Varies |
+| Capability | Bullet (Rust) | Traditional `.fantome` Managers |
+| :--- | :--- | :--- |
+| **Built-in Official Skins & Chromas** | Generated on demand from installed game WADs | Manual `.fantome` download per skin |
+| **Exalted, Ultimate & Multi-Form Cycling (`Ctrl+5`)** | Native animation graph, submesh, material & Wwise audio switching | Static single-form only |
+| **In-Client Carousel & Top-Bar Menu** | Native LCU & Hextech UI without Pengu Loader | External window only |
+| **TFT Tacticians, Arenas, Booms & Portals** | Included | Manual mod files only |
+| **Customize Identity (Icons, Borders, Banners, Titles)** | Included + synced with Party Mode | Not supported |
+| **Custom Mods (`.fantome` / `.modpkg` / `.zip`)** | Automatic patch validation & conflict check | Manual management |
+| **Runtime Footprint** | Single native Rust binary (`asInvoker`, no admin) | Varies |
 
 ## Frequently Asked Questions (FAQ)
 
+### Where can I find the complete installation tutorial?
+The complete step-by-step installation tutorial and troubleshooting guide are inside our official Discord server: **[https://discord.gg/e2dH2nUjd9](https://discord.gg/e2dH2nUjd9)**.
+
 ### How does Bullet change League of Legends skins without modifying game files?
-Bullet reads the official `.wad.client`, `.bin` (`PROP`), `.skn`, `.skl`, `.anm`, `.tex`, and `.bnk` files already installed in your `League of Legends/Game/DATA/FINAL/Champions` folder, builds a clean slot-0 overlay mod in `%LOCALAPPDATA%\Bullet\mods`, and hands the overlay to **LTK Manager** at match start. Your original Riot Games installation remains 100% untouched.
+Bullet reads the official `.wad.client`, `.bin` (`PROP`), `.skn`, `.skl`, `.anm`, `.tex`, and `.bnk` files already installed in your `League of Legends/Game/DATA/FINAL/Champions` folder, builds a clean slot-0 overlay mod, and applies it in memory at match start. Your original Riot Games installation remains 100% untouched.
 
 ### Does Bullet require Pengu Loader or Administrator privileges?
-No. Bullet runs as a standard Windows user (`asInvoker`) and connects directly to the League Client (LCU) and Chromium DevTools APIs to render the in-client skin carousel, chroma selector, and top-bar **Bullet** popover without installing Pengu Loader.
+No. On Windows, Bullet runs as a standard user (`asInvoker`) and connects directly to the League Client (LCU) and Chromium DevTools APIs to render the in-client skin carousel, chroma selector, and top-bar **Bullet** popover without installing Pengu Loader.
 
 ### Does Bullet work in Swiftplay, ARAM, Arena, and Practice Tool?
 Yes. Bullet supports Draft Pick, Ranked Solo/Duo, Ranked Flex, Swiftplay, Brawl, ARAM, Arena, Nexus Blitz, Custom Games, and Practice Tool across every Riot server.
@@ -120,9 +135,10 @@ Skin overlays are local to your machine by default. When you and your friends en
 
 ## Troubleshooting
 
+- Check the installation & troubleshooting channels inside our **[Discord server](https://discord.gg/e2dH2nUjd9)**.
 - Run **Repair skins and mods** or **Repair client** in **Support** if a game patch or custom mod breaks.
 - Click **Export diagnostics** in **Support** (`%LOCALAPPDATA%\Bullet\logs`) before opening an [issue](https://github.com/Isllanrx/Bullet/issues) or asking on [Discord](https://discord.gg/e2dH2nUjd9).
-- Close other skin tools (CSLoL Manager, Rose, Bocchi) while Bullet is running to avoid overlay hook conflicts.
+- Close other skin tools while Bullet is running to avoid overlay hook conflicts.
 
 ## Building from Source
 
@@ -134,7 +150,7 @@ cargo xtask installer
 
 ## Acknowledgements
 
-Inspired by [Rose](https://github.com/Alban1911/Rose), [LeagueToolkit](https://github.com/LeagueToolkit/ltk-manager), and the open-source projects in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Maintained by **Isllan Toso** — [isllan.dev](https://isllan.dev/).
+Built in Rust by **Isllan Toso** — [isllan.dev](https://isllan.dev/). See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for open-source dependency notices.
 
 ## Disclaimer
 
