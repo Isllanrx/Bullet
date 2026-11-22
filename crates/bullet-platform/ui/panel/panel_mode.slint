@@ -1,4 +1,4 @@
-import { Theme, Surface } from "../theme.slint";
+import { Theme, Surface, CheckGlyph } from "../theme.slint";
 
 component ModeOption inherits Rectangle {
     in property <string> label;
@@ -103,6 +103,71 @@ export component ModeCard inherits Surface {
                         root.toggled();
                     }
                 }
+            }
+        }
+    }
+}
+
+export component RepairBanner inherits Rectangle {
+    in property <int> state;
+    in property <string> text;
+    property <float> phase: mod(animation-tick() / 1100ms, 1.0);
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: root.state == 3 ? #7c3037 : root.state == 2 ? #1b5a55 : Theme.gold-dim;
+    background: root.state == 3 ? #241419 : root.state == 2 ? #0d2126 : #1a1811;
+    VerticalLayout {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            if root.state == 2: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 9px;
+                    background: Theme.cyan.with-alpha(0.2);
+                    CheckGlyph {
+                        x: 4px;
+                        y: 4px;
+                        stroke: Theme.cyan;
+                    }
+                }
+            }
+            if root.state != 2: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.state == 3 ? Theme.danger : Theme.gold;
+                }
+            }
+            Text {
+                text: root.text;
+                color: root.state == 3 ? Theme.danger-text : root.state == 2 ? Theme.text : Theme.gold-bright;
+                font-size: Theme.text-sm;
+                font-weight: 500;
+                wrap: word-wrap;
+                horizontal-stretch: 1;
+            }
+        }
+        if root.state == 1: Rectangle {
+            height: 4px;
+            border-radius: 2px;
+            background: #243043;
+            clip: true;
+            Rectangle {
+                width: parent.width * 0.36;
+                height: parent.height;
+                border-radius: 2px;
+                x: (parent.width + self.width) * root.phase - self.width;
+                background: @linear-gradient(90deg, #8a6a30 0%, #e0c48a 50%, #18d4c4 100%);
             }
         }
     }

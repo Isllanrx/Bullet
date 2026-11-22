@@ -51,7 +51,7 @@ fn main() {
 <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
         <requestedPrivileges>
-            <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+            <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
         </requestedPrivileges>
     </security>
 </trustInfo>

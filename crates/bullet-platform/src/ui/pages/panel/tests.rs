@@ -61,6 +61,7 @@ fn snapshot() -> PanelSnapshot {
             },
         ],
         stats: PanelStats::default(),
+        repair: PanelRepair::default(),
     }
 }
 
@@ -109,6 +110,9 @@ fn every_language_fills_every_label() {
             ("quit", &labels.quit),
             ("mark", &labels.mark_problem),
             ("export", &labels.export_diagnostics),
+            ("repair skins", &labels.repair_skins),
+            ("repair client", &labels.repair_client),
+            ("repair running", &labels.repair_running),
         ] {
             assert!(!value.is_empty(), "{language:?} {name}");
         }
@@ -225,6 +229,8 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
         (3, text.folder_tools, PanelAction::OpenTools),
         (3, text.folder_logs, PanelAction::OpenLogs),
         (3, text.folder_restore_mods, PanelAction::RestoreMods),
+        (3, text.panel_repair_skins, PanelAction::RepairSkins),
+        (3, text.panel_repair_client, PanelAction::RepairClient),
         (3, text.panel_mark_problem, PanelAction::MarkProblem),
         (
             3,

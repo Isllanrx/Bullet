@@ -227,6 +227,7 @@ async fn run() -> Result<()> {
                 }
             }));
         }
+        let repair_state = bullet_app::control_panel::RepairState::default();
         let links = boot::panel::panel_links_for(
             &tray_controller,
             state_rx.clone(),
@@ -236,6 +237,7 @@ async fn run() -> Result<()> {
             boot::panel::ReleaseNotices {
                 bullet: update_notice.clone(),
                 custom_mods: custom_mods_notice.clone(),
+                repair: repair_state.clone(),
             },
         );
         boot::tasks::spawn_custom_mods_notice(
@@ -259,6 +261,8 @@ async fn run() -> Result<()> {
             links: links.clone(),
             mark_state,
             mark_live,
+            custom_mods: custom_mods_notice.clone(),
+            repair: repair_state,
         };
 
         supervisor.spawn_essential("tray-events", move |child_token| async move {
