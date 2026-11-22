@@ -155,6 +155,20 @@ jobs:
           BULLET_REQUIRE_LTK: "1"
         run: cargo xtask package
 
+      - name: Verify private LTK module linked into dist/bullet.exe
+        shell: pwsh
+        run: |
+          foreach ($f in @("dist/bullet.exe", "dist/tools/bullet_launcher.exe", "dist/tools/bullet_bridge.dll")) {
+            if (-not (Test-Path $f)) { throw "Missing required packaged artifact: $f" }
+          }
+          $text = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes("dist/bullet.exe"))
+          foreach ($marker in @("bullet_launcher.exe", "ltk-manager.exe")) {
+            if (-not $text.Contains($marker)) {
+              throw "dist/bullet.exe is missing private LTK marker '$marker' (public stub was compiled)"
+            }
+          }
+          Write-Host "Verified dist/bullet.exe contains private LTK bridge module and tools"
+
       - name: Build installer around that binary (cargo xtask installer --prebuilt)
         run: cargo xtask installer --prebuilt
 

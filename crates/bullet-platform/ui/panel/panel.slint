@@ -2,7 +2,7 @@ import { Theme, ExposeLayer, GoldButton, Wordmark, StatusDot, Halo } from "../th
 import { ScrollView } from "std-widgets.slint";
 import { PanelLabels, PanelCheckRow, PanelSkinStatRow, PanelAction } from "panel_types.slint";
 import { Section, PanelTab, CheckRow, Toggle, Notice, PowerCard, AllClearBanner } from "panel_parts.slint";
-import { ModeCard } from "panel_mode.slint";
+import { ModeCard, RepairBanner } from "panel_mode.slint";
 import { StatsCard } from "panel_stats.slint";
 
 export component ControlPanel inherits Window {
@@ -24,6 +24,10 @@ export component ControlPanel inherits Window {
     in property <int> stats-losses;
     in property <int> stats-winrate;
     in property <[PanelSkinStatRow]> stats-rows;
+    in property <bool> repair-skins-busy;
+    in property <bool> repair-client-busy;
+    in property <int> repair-state;
+    in property <string> repair-message;
     in-out property <int> tab;
     callback action(PanelAction);
     title: "Bullet";
@@ -278,13 +282,19 @@ export component ControlPanel inherits Window {
                             HorizontalLayout {
                                 spacing: 8px;
                                 GoldButton {
-                                    text: root.labels.repair-skins;
+                                    text: root.repair-skins-busy ? root.labels.repair-running : root.labels.repair-skins;
+                                    enabled: !root.repair-skins-busy;
                                     clicked => { root.action(PanelAction.repair-skins); }
                                 }
                                 GoldButton {
-                                    text: root.labels.repair-client;
+                                    text: root.repair-client-busy ? root.labels.repair-running : root.labels.repair-client;
+                                    enabled: !root.repair-client-busy;
                                     clicked => { root.action(PanelAction.repair-client); }
                                 }
+                            }
+                            if root.repair-message != "": RepairBanner {
+                                state: root.repair-state;
+                                text: root.repair-message;
                             }
                             HorizontalLayout {
                                 spacing: 8px;

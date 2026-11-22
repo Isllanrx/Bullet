@@ -98,13 +98,12 @@ jobs:
           }
           $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
           $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-          if ($text -notmatch 'requestedExecutionLevel level="asInvoker"') { Write-Error 'asInvoker manifest missing'; exit 1 }
-          if ($text -match 'requireAdministrator') { Write-Error 'the executable requests elevation'; exit 1 }
+          if ($text -notmatch 'requestedExecutionLevel level="requireAdministrator"') { Write-Error 'requireAdministrator manifest missing'; exit 1 }
           if ($text -match 'VCRUNTIME140') { Write-Error 'the C runtime is not linked statically'; exit 1 }
           if ($text.Contains($env:USERPROFILE) -or $text.Contains($env:GITHUB_WORKSPACE)) { Write-Error 'build machine paths are embedded'; exit 1 }
           $pe = [BitConverter]::ToInt32($bytes, 0x3C)
           if ([BitConverter]::ToUInt32($bytes, $pe + 24 + 64) -eq 0) { Write-Error 'the PE checksum is not set'; exit 1 }
-          Write-Output "OK: $($info.ProductName) $($info.ProductVersion) by $($info.CompanyName), runs as invoker"
+          Write-Output "OK: $($info.ProductName) $($info.ProductVersion) by $($info.CompanyName), requests elevation on launch"
 
       - name: Save cargo registry & build
         if: github.event_name == 'push' && steps.cargo-cache.outputs.cache-hit != 'true'

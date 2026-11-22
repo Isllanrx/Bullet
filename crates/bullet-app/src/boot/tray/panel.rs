@@ -49,6 +49,7 @@ pub fn tray_status(
 pub struct ReleaseNotices {
     pub bullet: bullet_app::update_check::UpdateNotice,
     pub custom_mods: bullet_app::mod_repair::CustomModsNotice,
+    pub repair: bullet_app::control_panel::RepairState,
 }
 
 pub fn panel_links_for(
@@ -110,6 +111,7 @@ pub fn panel_links_for(
                 .ok()
                 .map(|dir| bullet_app::stats::load_summary(&dir))
                 .unwrap_or_default(),
+            repair: notices.repair.snapshot(),
         };
         let snapshot = bullet_app::control_panel::snapshot(&facts, bullet_platform::i18n::text());
         let failing: Vec<String> = snapshot
@@ -149,6 +151,8 @@ pub struct TrayActions {
     pub links: bullet_platform::panel::PanelLinks,
     pub mark_state: bullet_core::state::StateReceiver,
     pub mark_live: bullet_app::live_game::LiveGame,
+    pub custom_mods: bullet_app::mod_repair::CustomModsNotice,
+    pub repair: bullet_app::control_panel::RepairState,
 }
 
 impl TrayActions {
@@ -310,25 +314,20 @@ impl TrayActions {
                 }
             }
             bullet_platform::tray::TrayEvent::RepairSkins => {
-                let mods = self.mods_dir.clone();
-                let state = self.state_dir.clone();
-                let game = bullet_platform::paths::discover_game_dir().unwrap_or_default();
-                drop(tokio::task::spawn_blocking(move || {
-                    let report =
-                        bullet_app::control_panel::repair_skins_and_mods(&mods, &state, &game);
-                    info!(
-                        repaired = report.repaired.len(),
-                        incompatible = report.incompatible.len(),
-                        "Manual skin and mod repair completed"
-                    );
-                }));
+                super::repair::spawn_repair_skins(
+                    self.repair.clone(),
+                    self.custom_mods.clone(),
+                    self.mod_roots.clone(),
+                    self.state_dir.clone(),
+                    self.notifier.clone(),
+                );
             }
             bullet_platform::tray::TrayEvent::RepairClient => {
-                let state = self.state_dir.clone();
-                drop(tokio::task::spawn_blocking(move || {
-                    bullet_app::control_panel::repair_client(&state);
-                    info!("Manual client and Bullet cache repair completed");
-                }));
+                super::repair::spawn_repair_client(
+                    self.repair.clone(),
+                    self.state_dir.clone(),
+                    self.notifier.clone(),
+                );
             }
             bullet_platform::tray::TrayEvent::OpenRelease => {
                 let page = bullet_app::update_check::release_page();

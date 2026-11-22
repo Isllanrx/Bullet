@@ -91,20 +91,35 @@ function Install-Bullet {
         Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    $uninstallKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{D387A5B1-8C56-4D2A-94B8-975DE11C6B45}_is1'
-    $installDir = (Get-ItemProperty -Path $uninstallKey -ErrorAction SilentlyContinue).InstallLocation
-    if (-not $installDir) { $installDir = Join-Path $env:ProgramFiles 'Bullet' }
+    $installDir = $null
+    try {
+        $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+            [Microsoft.Win32.RegistryHive]::LocalMachine,
+            [Microsoft.Win32.RegistryView]::Registry64
+        )
+        $subKey = $baseKey.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{D387A5B1-8C56-4D2A-94B8-975DE11C6B45}_is1')
+        if ($subKey) {
+            $installDir = $subKey.GetValue('InstallLocation')
+            $subKey.Close()
+        }
+        $baseKey.Close()
+    } catch {}
+    if (-not $installDir) {
+        $pf = if ($env:ProgramW6432) { $env:ProgramW6432 } else { $env:ProgramFiles }
+        $installDir = Join-Path $pf 'Bullet'
+    }
     $exe = Join-Path $installDir 'bullet.exe'
+    $launcher = Join-Path $installDir 'tools\bullet_launcher.exe'
+    $bridge = Join-Path $installDir 'tools\bullet_bridge.dll'
     if (-not (Test-Path -LiteralPath $exe)) { throw "Bullet was not found at $exe after the install." }
+    if (-not (Test-Path -LiteralPath $launcher) -or -not (Test-Path -LiteralPath $bridge)) {
+        throw "Bullet bridge tools were not found under $installDir\tools after the install."
+    }
     Write-Host "Bullet $($release.tag_name) installed in $installDir"
 
     if ($NoLaunch) { return }
-    if ($elevated) {
-        Write-Host 'This terminal runs as administrator, so Bullet is not started from it. Open Bullet from the Start menu.'
-        return
-    }
     Start-Process -FilePath $exe
-    Write-Host 'Bullet started in the system tray. On first start it offers to download and verify the injector.'
+    Write-Host 'Bullet started in the system tray. Make sure LTK Manager 1.33.0+ is installed.'
 }
 
 Install-Bullet -Version $Version -PreRelease:$PreRelease -NoLaunch:$NoLaunch

@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+pub use super::search::discover_installed_exe;
+
 #[must_use]
 pub fn display_version() -> &'static str {
     const RAW: &str = env!("CARGO_PKG_VERSION");
@@ -137,7 +139,7 @@ pub fn parse_registry_path_value(raw: &str) -> Option<PathBuf> {
     let without_quotes = if let Some(rest) = trimmed.strip_prefix('"') {
         rest.split('"').next().unwrap_or(rest)
     } else {
-        trimmed
+        strip_unquoted_cli_args(trimmed)
     };
     let clean = match without_quotes.rfind(',') {
         Some(idx)
@@ -155,172 +157,58 @@ pub fn parse_registry_path_value(raw: &str) -> Option<PathBuf> {
     (!clean.is_empty()).then(|| PathBuf::from(clean))
 }
 
-#[cfg(windows)]
-#[must_use]
-pub fn discover_installed_exe(keywords: &[&str], exe_names: &[&str]) -> Option<PathBuf> {
-    use windows::Win32::Foundation::ERROR_NO_MORE_ITEMS;
-    use windows::Win32::System::Registry::{
-        HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
-        RegCloseKey, RegEnumKeyExW, RegGetValueW, RegOpenKeyExW,
-    };
-    use windows::core::PCWSTR;
-
-    unsafe fn read_reg_str(hkey: HKEY, name: &str) -> Option<String> {
-        let wide_name: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
-        let mut buf = vec![0u16; 512];
-        let mut bytes = (buf.len() * 2) as u32;
-        let status = unsafe {
-            RegGetValueW(
-                hkey,
-                PCWSTR::null(),
-                PCWSTR(wide_name.as_ptr()),
-                RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
-                None,
-                Some(buf.as_mut_ptr().cast()),
-                Some(&mut bytes),
-            )
-        };
-        if status.is_err() {
-            return None;
-        }
-        let chars = (bytes as usize / 2).min(buf.len());
-        let slice = &buf[..chars];
-        let end = slice.iter().position(|&c| c == 0).unwrap_or(slice.len());
-        Some(String::from_utf16_lossy(&slice[..end]))
-    }
-
-    let roots = [
-        (
-            HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
-        ),
-        (
-            HKEY_LOCAL_MACHINE,
-            r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
-        ),
-        (
-            HKEY_LOCAL_MACHINE,
-            r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-        ),
-    ];
-
-    for (hive, subkey_path) in roots {
-        let subkey_wide: Vec<u16> = subkey_path
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
-        let mut root_key = HKEY::default();
-        if unsafe {
-            RegOpenKeyExW(
-                hive,
-                PCWSTR(subkey_wide.as_ptr()),
-                Some(0),
-                KEY_READ,
-                &mut root_key,
-            )
-        }
-        .is_err()
+fn strip_unquoted_cli_args(input: &str) -> &str {
+    let lower = input.to_ascii_lowercase();
+    if let Some(idx) = lower.find(".exe") {
+        let end = idx + 4;
+        if let Some(after) = input.get(end..)
+            && (after.is_empty()
+                || after.starts_with(char::is_whitespace)
+                || after.starts_with(','))
+            && let Some(head) = input.get(..end)
         {
-            continue;
+            return head;
         }
-
-        let mut index = 0u32;
-        let mut name_buf = [0u16; 256];
-        loop {
-            let mut name_len = name_buf.len() as u32;
-            let status = unsafe {
-                RegEnumKeyExW(
-                    root_key,
-                    index,
-                    Some(windows::core::PWSTR(name_buf.as_mut_ptr())),
-                    &mut name_len,
-                    None,
-                    None,
-                    None,
-                    None,
-                )
-            };
-            if status == ERROR_NO_MORE_ITEMS || status.is_err() {
-                break;
-            }
-            index += 1;
-
-            let child_name = String::from_utf16_lossy(&name_buf[..name_len as usize]);
-            let child_wide: Vec<u16> = child_name
-                .encode_utf16()
-                .chain(std::iter::once(0))
-                .collect();
-            let mut app_key = HKEY::default();
-            if unsafe {
-                RegOpenKeyExW(
-                    root_key,
-                    PCWSTR(child_wide.as_ptr()),
-                    Some(0),
-                    KEY_READ,
-                    &mut app_key,
-                )
-            }
-            .is_err()
-            {
-                continue;
-            }
-
-            let display_name = unsafe { read_reg_str(app_key, "DisplayName") }
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            let key_lower = child_name.to_ascii_lowercase();
-            let matched = keywords
-                .iter()
-                .any(|kw| display_name.contains(kw) || key_lower.contains(kw));
-            if matched {
-                if let Some(icon) = unsafe { read_reg_str(app_key, "DisplayIcon") }
-                    .and_then(|v| parse_registry_path_value(&v))
-                    && icon.is_file()
-                    && exe_names.iter().any(|e| {
-                        icon.file_name()
-                            .and_then(|n| n.to_str())
-                            .is_some_and(|n| n.eq_ignore_ascii_case(e))
-                    })
-                {
-                    let _ = unsafe { RegCloseKey(app_key) }; // ignore-ok: close app uninstall key
-                    let _ = unsafe { RegCloseKey(root_key) }; // ignore-ok: close uninstall root key
-                    return Some(icon);
-                }
-
-                for field in ["InstallLocation", "UninstallString"] {
-                    let Some(raw) = (unsafe { read_reg_str(app_key, field) }) else {
-                        continue;
-                    };
-                    let Some(parsed) = parse_registry_path_value(&raw) else {
-                        continue;
-                    };
-                    let dir = if field == "UninstallString" {
-                        parsed.parent().map(Path::to_path_buf)
-                    } else {
-                        Some(parsed)
-                    };
-                    if let Some(dir) = dir {
-                        for exe in exe_names {
-                            let candidate = dir.join(exe);
-                            if candidate.is_file() {
-                                let _ = unsafe { RegCloseKey(app_key) }; // ignore-ok: close app uninstall key
-                                let _ = unsafe { RegCloseKey(root_key) }; // ignore-ok: close uninstall root key
-                                return Some(candidate);
-                            }
-                        }
-                    }
-                }
-            }
-            let _ = unsafe { RegCloseKey(app_key) }; // ignore-ok: close app uninstall key
-        }
-        let _ = unsafe { RegCloseKey(root_key) }; // ignore-ok: close uninstall root key
     }
-    None
+    input
 }
 
-#[cfg(not(windows))]
+#[cfg(any(windows, test))]
 #[must_use]
-pub fn discover_installed_exe(_keywords: &[&str], _exe_names: &[&str]) -> Option<PathBuf> {
+pub(crate) fn extract_history_exe_path(value_name: &str, exe_names: &[&str]) -> Option<PathBuf> {
+    let trimmed = value_name.trim().trim_matches('"');
+    let stripped = trimmed
+        .strip_suffix(".FriendlyAppName")
+        .or_else(|| trimmed.strip_suffix(".ApplicationCompany"))
+        .unwrap_or(trimmed);
+    let path = PathBuf::from(stripped);
+    matches_exe_name(&path, exe_names).then_some(path)
+}
+
+#[cfg(any(windows, test))]
+pub(crate) fn matches_exe_name(path: &Path, exe_names: &[&str]) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|name| exe_names.iter().any(|e| name.eq_ignore_ascii_case(e)))
+}
+
+#[cfg(windows)]
+pub(crate) fn resolve_exe_from_path(parsed: &Path, exe_names: &[&str]) -> Option<PathBuf> {
+    if parsed.is_file() && matches_exe_name(parsed, exe_names) {
+        return Some(parsed.to_path_buf());
+    }
+    let dir = if parsed.is_dir() {
+        Some(parsed)
+    } else {
+        parsed.parent()
+    };
+    let dir = dir?;
+    for exe in exe_names {
+        let candidate = dir.join(exe);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
     None
 }
 
@@ -369,8 +257,25 @@ mod tests {
                 r"C:\Program Files\LTK Manager\ltk-manager.exe"
             ))
         );
+        assert_eq!(
+            parse_registry_path_value(r#""E:\Custom\LTK Manager\ltk-manager.exe" "%1""#),
+            Some(PathBuf::from(r"E:\Custom\LTK Manager\ltk-manager.exe"))
+        );
+        assert_eq!(
+            parse_registry_path_value(r"F:\Jogos\LTK Manager\uninstall.exe /S"),
+            Some(PathBuf::from(r"F:\Jogos\LTK Manager\uninstall.exe"))
+        );
         assert_eq!(parse_registry_path_value("   "), None);
         let plist = "<plist><dict><key>CFBundleShortVersionString</key><string>1.34.2</string></dict></plist>";
         assert_eq!(parse_plist_short_version(plist), Some((1, 34, 2)));
+        let exes = ["ltk-manager.exe", "LTK Manager.exe"];
+        assert_eq!(
+            extract_history_exe_path(r"G:\Custom Path\LTK\ltk-manager.exe.FriendlyAppName", &exes),
+            Some(PathBuf::from(r"G:\Custom Path\LTK\ltk-manager.exe"))
+        );
+        assert_eq!(
+            extract_history_exe_path(r"H:\Portable\LTK Manager.exe", &exes),
+            Some(PathBuf::from(r"H:\Portable\LTK Manager.exe"))
+        );
     }
 }

@@ -133,10 +133,15 @@ pub fn run_elevated_wait(exe: &Path, args: &str) -> Result<bool, PlatformError> 
 
     let file_h = HSTRING::from(exe.as_os_str());
     let params_h = HSTRING::from(args);
+    let verb = if crate::elevation::is_elevated() {
+        w!("open")
+    } else {
+        w!("runas")
+    };
     let mut info = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
         fMask: SEE_MASK_NOCLOSEPROCESS,
-        lpVerb: w!("runas"),
+        lpVerb: verb,
         lpFile: PCWSTR(file_h.as_ptr()),
         lpParameters: PCWSTR(params_h.as_ptr()),
         nShow: SW_HIDE.0,

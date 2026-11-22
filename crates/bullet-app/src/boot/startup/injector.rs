@@ -90,7 +90,21 @@ fn warn_if_manager_outdated(text: &bullet_platform::i18n::Text) {
             bullet_platform::shell::message_box_warning(text.manager_outdated_title, &body);
         }
         ManagerInstallState::Missing => {
-            warn!("Mod Manager is not installed on this PC");
+            let desktop_roaming = bullet_platform::user_profile::local_app_data()
+                .ok()
+                .and_then(|p| p.parent().map(|a| a.join("Roaming")));
+            let appdata_exists = desktop_roaming
+                .into_iter()
+                .chain(std::env::var("APPDATA").ok().map(std::path::PathBuf::from))
+                .any(|dir| dir.join("dev.leaguetoolkit.manager").is_dir());
+            let env_override = std::env::var("BULLET_LTK_MANAGER")
+                .or_else(|_| std::env::var("LTK_MANAGER_EXE"))
+                .ok();
+            warn!(
+                appdata_profile_exists = appdata_exists,
+                env_override_set = env_override.is_some(),
+                "Mod Manager (ltk-manager.exe) was not found on this PC"
+            );
             bullet_platform::shell::message_box_warning(
                 text.manager_missing_title,
                 text.manager_missing_body,

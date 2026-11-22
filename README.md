@@ -51,12 +51,6 @@ Download [`Bullet-Setup-x64.exe`](https://github.com/Isllanrx/Bullet/releases/la
 irm https://raw.githubusercontent.com/Isllanrx/Bullet/main/install.ps1 | iex
 ```
 
-Or install with Cargo:
-
-```powershell
-cargo install --git https://github.com/Isllanrx/Bullet.git bullet-app --locked
-```
-
 ### macOS (Intel `x86_64` & Apple Silicon)
 
 Run in **Terminal**:
@@ -89,7 +83,7 @@ Inside our Discord server: **[discord.gg/e2dH2nUjd9](https://discord.gg/e2dH2nUj
 No. Overlays are built separately and loaded in memory at match start. Your game files stay untouched.
 
 **Does it require Administrator privileges or Pengu Loader?**
-No. On Windows it runs as a standard user (`asInvoker`) and does not use Pengu Loader.
+On Windows, Bullet asks for Administrator permission once on launch so switching between Window and Native In-Client modes never interrupts you with repeated UAC prompts. It does not use Pengu Loader.
 
 **Can other players see my skin?**
 Only locally, unless you and your friends enable **Party Mode** inside Bullet.
