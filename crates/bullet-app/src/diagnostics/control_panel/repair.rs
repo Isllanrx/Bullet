@@ -188,6 +188,9 @@ pub fn repair_client(state_dir: &Path) -> RepairClientReport {
                 break;
             }
         }
+        if report.stopped_processes > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
     }
 
     if let Ok(data_dir) = bullet_platform::paths::data_dir() {
@@ -197,8 +200,18 @@ pub fn repair_client(state_dir: &Path) -> RepairClientReport {
     }
     remove_path_tracked(&state_dir.join("ltf_journal.json"), &mut report);
 
-    if let Ok(local_app) = std::env::var("LOCALAPPDATA") {
-        let bridge_dir = PathBuf::from(local_app).join("BulletBridge");
+    let mut local_roots = Vec::new();
+    if let Ok(desktop_local) = bullet_platform::user_profile::local_app_data() {
+        local_roots.push(desktop_local);
+    }
+    if let Ok(env_local) = std::env::var("LOCALAPPDATA") {
+        let p = PathBuf::from(env_local);
+        if !local_roots.contains(&p) {
+            local_roots.push(p);
+        }
+    }
+    for local_root in &local_roots {
+        let bridge_dir = local_root.join("BulletBridge");
         for file in ["port.txt", "token.txt"] {
             let path = bridge_dir.join(file);
             if path.exists() {
@@ -208,8 +221,22 @@ pub fn repair_client(state_dir: &Path) -> RepairClientReport {
         }
     }
 
+    let mut roaming_roots = Vec::new();
+    for local_root in &local_roots {
+        if let Some(roaming) = local_root.parent().map(|p| p.join("Roaming"))
+            && !roaming_roots.contains(&roaming)
+        {
+            roaming_roots.push(roaming);
+        }
+    }
     if let Ok(roaming) = std::env::var("APPDATA") {
-        let profile = PathBuf::from(roaming)
+        let p = PathBuf::from(roaming);
+        if !roaming_roots.contains(&p) {
+            roaming_roots.push(p);
+        }
+    }
+    for roaming in roaming_roots {
+        let profile = roaming
             .join("dev.leaguetoolkit.manager")
             .join("profiles")
             .join("default");

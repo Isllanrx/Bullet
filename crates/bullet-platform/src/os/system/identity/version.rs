@@ -173,6 +173,7 @@ fn strip_unquoted_cli_args(input: &str) -> &str {
     input
 }
 
+#[cfg(any(windows, test))]
 #[must_use]
 pub(crate) fn extract_history_exe_path(value_name: &str, exe_names: &[&str]) -> Option<PathBuf> {
     let trimmed = value_name.trim().trim_matches('"');
@@ -184,6 +185,7 @@ pub(crate) fn extract_history_exe_path(value_name: &str, exe_names: &[&str]) -> 
     matches_exe_name(&path, exe_names).then_some(path)
 }
 
+#[cfg(any(windows, test))]
 pub(crate) fn matches_exe_name(path: &Path, exe_names: &[&str]) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())

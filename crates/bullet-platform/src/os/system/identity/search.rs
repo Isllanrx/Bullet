@@ -1,5 +1,8 @@
-use std::path::{Path, PathBuf};
+#[cfg(any(windows, test))]
+use std::path::Path;
+use std::path::PathBuf;
 
+#[cfg(any(windows, test))]
 use super::version::matches_exe_name;
 
 #[cfg(windows)]
@@ -23,6 +26,7 @@ pub fn discover_installed_exe(_keywords: &[&str], _exe_names: &[&str]) -> Option
     None
 }
 
+#[cfg(any(windows, test))]
 #[must_use]
 pub(crate) fn extract_lnk_exe_targets(bytes: &[u8], exe_names: &[&str]) -> Vec<PathBuf> {
     let mut found = Vec::new();
@@ -31,6 +35,7 @@ pub(crate) fn extract_lnk_exe_targets(bytes: &[u8], exe_names: &[&str]) -> Vec<P
     found
 }
 
+#[cfg(any(windows, test))]
 fn collect_ascii_drive_paths(bytes: &[u8], exe_names: &[&str], out: &mut Vec<PathBuf>) {
     let mut i = 0usize;
     while i + 6 < bytes.len() {
@@ -54,6 +59,7 @@ fn collect_ascii_drive_paths(bytes: &[u8], exe_names: &[&str], out: &mut Vec<Pat
     }
 }
 
+#[cfg(any(windows, test))]
 fn collect_utf16le_drive_paths(bytes: &[u8], exe_names: &[&str], out: &mut Vec<PathBuf>) {
     let mut i = 0usize;
     while i + 12 < bytes.len() {
@@ -83,6 +89,7 @@ fn collect_utf16le_drive_paths(bytes: &[u8], exe_names: &[&str], out: &mut Vec<P
     }
 }
 
+#[cfg(any(windows, test))]
 fn push_matching_exe_candidate(text: &str, exe_names: &[&str], out: &mut Vec<PathBuf>) {
     let lower = text.to_ascii_lowercase();
     for exe in exe_names {
@@ -100,31 +107,44 @@ fn push_matching_exe_candidate(text: &str, exe_names: &[&str], out: &mut Vec<Pat
 }
 
 #[cfg(windows)]
+fn desktop_user_profile_dirs() -> (Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
+    let Ok(local) = crate::user_profile::local_app_data() else {
+        return (None, None, None);
+    };
+    let appdata = local.parent();
+    let roaming = appdata.map(|a| a.join("Roaming"));
+    let home = appdata.and_then(|a| a.parent()).map(Path::to_path_buf);
+    (Some(local), roaming, home)
+}
+
+#[cfg(windows)]
 fn discover_from_shortcuts(keywords: &[&str], exe_names: &[&str]) -> Option<PathBuf> {
     let mut roots = Vec::new();
-    if let Ok(pd) = std::env::var("PROGRAMDATA") {
+    let (_, desktop_roaming, desktop_home) = desktop_user_profile_dirs();
+    for base in [
+        std::env::var("PROGRAMDATA").ok().map(PathBuf::from),
+        desktop_roaming,
+        std::env::var("APPDATA").ok().map(PathBuf::from),
+    ]
+    .into_iter()
+    .flatten()
+    {
         roots.push(
-            PathBuf::from(pd)
-                .join("Microsoft")
+            base.join("Microsoft")
                 .join("Windows")
                 .join("Start Menu")
                 .join("Programs"),
         );
     }
-    if let Ok(app) = std::env::var("APPDATA") {
-        roots.push(
-            PathBuf::from(app)
-                .join("Microsoft")
-                .join("Windows")
-                .join("Start Menu")
-                .join("Programs"),
-        );
-    }
-    if let Ok(home) = std::env::var("USERPROFILE") {
-        roots.push(PathBuf::from(home).join("Desktop"));
-    }
-    if let Ok(pub_dir) = std::env::var("PUBLIC") {
-        roots.push(PathBuf::from(pub_dir).join("Desktop"));
+    for base in [
+        desktop_home,
+        std::env::var("USERPROFILE").ok().map(PathBuf::from),
+        std::env::var("PUBLIC").ok().map(PathBuf::from),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        roots.push(base.join("Desktop"));
     }
 
     for root in roots {
@@ -219,6 +239,18 @@ fn discover_from_fixed_drives(keywords: &[&str], exe_names: &[&str]) -> Option<P
             scan_roots.push(PathBuf::from(base));
         }
     }
+    let (desktop_local, desktop_roaming, desktop_home) = desktop_user_profile_dirs();
+    if let Some(local) = desktop_local {
+        scan_roots.push(local.join("Programs"));
+        scan_roots.push(local);
+    }
+    if let Some(roaming) = desktop_roaming {
+        scan_roots.push(roaming);
+    }
+    if let Some(home) = desktop_home {
+        scan_roots.push(home.join("Desktop"));
+        scan_roots.push(home.join("Downloads"));
+    }
     if let Ok(la) = std::env::var("LOCALAPPDATA") {
         let base = PathBuf::from(la);
         scan_roots.push(base.join("Programs"));
@@ -270,6 +302,7 @@ fn discover_from_fixed_drives(keywords: &[&str], exe_names: &[&str]) -> Option<P
     None
 }
 
+#[cfg(any(windows, test))]
 fn check_dir_for_exes(dir: &Path, exe_names: &[&str]) -> Option<PathBuf> {
     for exe in exe_names {
         let candidate = dir.join(exe);
@@ -280,6 +313,7 @@ fn check_dir_for_exes(dir: &Path, exe_names: &[&str]) -> Option<PathBuf> {
     None
 }
 
+#[cfg(any(windows, test))]
 pub(crate) fn scan_matching_folders(
     root: &Path,
     depth: u8,

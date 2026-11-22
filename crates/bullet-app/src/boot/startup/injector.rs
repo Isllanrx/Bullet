@@ -90,11 +90,13 @@ fn warn_if_manager_outdated(text: &bullet_platform::i18n::Text) {
             bullet_platform::shell::message_box_warning(text.manager_outdated_title, &body);
         }
         ManagerInstallState::Missing => {
-            let appdata_exists = std::env::var("APPDATA").ok().is_some_and(|dir| {
-                std::path::PathBuf::from(dir)
-                    .join("dev.leaguetoolkit.manager")
-                    .is_dir()
-            });
+            let desktop_roaming = bullet_platform::user_profile::local_app_data()
+                .ok()
+                .and_then(|p| p.parent().map(|a| a.join("Roaming")));
+            let appdata_exists = desktop_roaming
+                .into_iter()
+                .chain(std::env::var("APPDATA").ok().map(std::path::PathBuf::from))
+                .any(|dir| dir.join("dev.leaguetoolkit.manager").is_dir());
             let env_override = std::env::var("BULLET_LTK_MANAGER")
                 .or_else(|_| std::env::var("LTK_MANAGER_EXE"))
                 .ok();
