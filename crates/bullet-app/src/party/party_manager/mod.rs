@@ -214,13 +214,15 @@ impl PartyManager {
             }
         };
         let stop = CancellationToken::new();
+        let fallbacks = bullet_party::config::fallback_relay_urls(&self.state_dir, &relay);
         let client = PartyClient::new(
             relay,
             token,
             member_id,
             self.state_tx.clone(),
             self.state_rx.clone(),
-        );
+        )
+        .with_fallbacks(fallbacks);
         set_party_share(&self.state_tx, room == Room::Code);
         *running = Some(Running {
             task: Box::pin(client.run(stop.clone())),
