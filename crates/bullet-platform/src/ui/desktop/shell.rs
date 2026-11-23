@@ -64,6 +64,9 @@ pub fn open_web_page(url: &str) -> Result<(), PlatformError> {
 }
 
 pub fn message_box(title: &str, text: &str) {
+    if crate::notice::show_info(title, text).is_ok() {
+        return;
+    }
     use windows::Win32::UI::WindowsAndMessaging::{
         MB_ICONINFORMATION, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
     };
@@ -92,6 +95,9 @@ pub(crate) fn note_if_not_shown(answer: i32, title: &str) -> bool {
 }
 
 pub fn message_box_warning(title: &str, text: &str) {
+    if crate::notice::show_warning(title, text).is_ok() {
+        return;
+    }
     use windows::Win32::UI::WindowsAndMessaging::{
         MB_ICONWARNING, MB_OK, MB_SETFOREGROUND, MB_TOPMOST, MessageBoxW,
     };
@@ -109,6 +115,9 @@ pub fn message_box_warning(title: &str, text: &str) {
 
 #[must_use]
 pub fn message_box_question(title: &str, text: &str) -> bool {
+    if let Ok(accepted) = crate::notice::ask_question(title, text) {
+        return accepted;
+    }
     use windows::Win32::UI::WindowsAndMessaging::{
         IDYES, MB_ICONQUESTION, MB_SETFOREGROUND, MB_TOPMOST, MB_YESNO, MessageBoxW,
     };
@@ -218,6 +227,9 @@ pub fn read_hklm_string(subkey: &str, value_name: &str) -> Option<String> {
 }
 
 pub fn dismiss_question(title: &str) -> bool {
+    if crate::notice::dismiss_question(title) {
+        return true;
+    }
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::System::Threading::GetCurrentProcessId;
     use windows::Win32::UI::WindowsAndMessaging::{

@@ -183,6 +183,9 @@ fn open(
     answer: Answer<Option<String>>,
 ) -> Result<(), slint::PlatformError> {
     let dialog = PartyDialog::new()?;
+    dialog
+        .global::<super::views::Theme>()
+        .set_reduced_motion(crate::preferences::REDUCE_MOTION.is_enabled());
     runtime::repaint_on_expose(&dialog, |d| d.set_expose_flip(!d.get_expose_flip()));
     wire(&dialog, content, answer);
     dialog.show()?;
@@ -220,6 +223,9 @@ pub(crate) fn wire_invite(invite: &PartyInvite, text: &crate::i18n::Text, answer
 
 fn open_invite(text: &crate::i18n::Text, answer: Answer<bool>) -> Result<(), slint::PlatformError> {
     let invite = PartyInvite::new()?;
+    invite
+        .global::<super::views::Theme>()
+        .set_reduced_motion(crate::preferences::REDUCE_MOTION.is_enabled());
     runtime::repaint_on_expose(&invite, |i| i.set_expose_flip(!i.get_expose_flip()));
     wire_invite(&invite, text, answer);
     invite.show()?;

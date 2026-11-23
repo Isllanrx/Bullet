@@ -18,7 +18,7 @@ const blob = { v: 1, n: 'abc', c: 'def' };
 
 describe('limits', () => {
   it('match the Rust relay', () => {
-    assert.equal(MAX_MEMBERS, 5);
+    assert.equal(MAX_MEMBERS, 10);
     assert.equal(MAX_MESSAGE_BYTES, 8192);
   });
 });
@@ -28,9 +28,9 @@ describe('isRoomFull', () => {
     for (let open = 0; open < MAX_MEMBERS; open += 1) assert.equal(isRoomFull(open), false);
   });
 
-  it('refuses the sixth member', () => {
-    assert.equal(isRoomFull(5), true);
-    assert.equal(isRoomFull(6), true);
+  it('refuses the eleventh member', () => {
+    assert.equal(isRoomFull(10), true);
+    assert.equal(isRoomFull(11), true);
   });
 });
 

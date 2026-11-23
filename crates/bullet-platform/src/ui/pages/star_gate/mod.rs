@@ -66,6 +66,9 @@ impl StarGateDialog {
 
 fn create(events: UnboundedSender<GateEvent>) -> Result<StarGateWindow, slint::PlatformError> {
     let window = StarGateWindow::new()?;
+    window
+        .global::<super::views::Theme>()
+        .set_reduced_motion(crate::preferences::REDUCE_MOTION.is_enabled());
     fill(&window, crate::i18n::text());
     runtime::repaint_on_expose(&window, |w| w.set_expose_flip(!w.get_expose_flip()));
     wire(&window, &events);
@@ -86,6 +89,7 @@ pub(crate) fn fill(window: &StarGateWindow, text: &crate::i18n::Text) {
     window.set_quit_label(text.star_gate_quit.into());
     window.set_code_hint(text.star_gate_code_hint.into());
     window.set_copy_code_label(text.star_gate_copy_code.into());
+    window.set_copied_label(text.star_gate_copied.into());
 }
 
 pub(crate) fn apply(window: &StarGateWindow, view: &GateView) {
@@ -116,8 +120,17 @@ pub(crate) fn wire(window: &StarGateWindow, events: &UnboundedSender<GateEvent>)
     window.on_copy_code(move || {
         if let Some(w) = weak.upgrade() {
             let code = w.get_code().to_string();
-            if let Err(e) = crate::clipboard::set_text(code.trim()) {
-                warn!(error = %e, "Could not copy star gate code to clipboard");
+            match crate::clipboard::set_text(code.trim()) {
+                Ok(()) => {
+                    w.set_copied(true);
+                    let weak_reset = w.as_weak();
+                    slint::Timer::single_shot(std::time::Duration::from_millis(2200), move || {
+                        if let Some(w) = weak_reset.upgrade() {
+                            w.set_copied(false);
+                        }
+                    });
+                }
+                Err(e) => warn!(error = %e, "Could not copy star gate code to clipboard"),
             }
         }
     });

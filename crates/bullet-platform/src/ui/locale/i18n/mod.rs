@@ -1,100 +1,7 @@
-use std::sync::OnceLock;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Language {
-    Portuguese,
-    Spanish,
-    English,
-}
-
-impl Language {
-    #[must_use]
-    pub fn from_locale(locale: &str) -> Option<Self> {
-        let language = locale.split(['_', '-']).next()?.to_ascii_lowercase();
-        match language.as_str() {
-            "pt" => Some(Self::Portuguese),
-            "es" => Some(Self::Spanish),
-            "en" => Some(Self::English),
-            _ => None,
-        }
-    }
-
-    #[must_use]
-    pub fn of_windows() -> Self {
-        static CACHED: OnceLock<Language> = OnceLock::new();
-        *CACHED.get_or_init(Self::of_system)
-    }
-
-    #[cfg(windows)]
-    fn of_system() -> Self {
-        let lang_id = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
-        Self::from_primary_lang_id(lang_id & 0x3ff)
-    }
-
-    #[cfg(target_os = "macos")]
-    fn of_system() -> Self {
-        std::process::Command::new("/usr/bin/defaults")
-            .args(["read", "-g", "AppleLocale"])
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .and_then(|output| Self::from_locale(String::from_utf8_lossy(&output.stdout).trim()))
-            .unwrap_or(Self::English)
-    }
-
-    #[cfg(windows)]
-    fn from_primary_lang_id(primary: u16) -> Self {
-        match primary {
-            0x16 => Self::Portuguese,
-            0x0a => Self::Spanish,
-            _ => Self::English,
-        }
-    }
-
-    #[must_use]
-    pub fn for_locale(locale: Option<&str>) -> Self {
-        locale
-            .and_then(Self::from_locale)
-            .unwrap_or_else(Self::of_windows)
-    }
-
-    #[must_use]
-    pub fn text(self) -> &'static Text {
-        match self {
-            Self::Portuguese => &PORTUGUESE,
-            Self::Spanish => &SPANISH,
-            Self::English => &ENGLISH,
-        }
-    }
-}
-
-static ACTIVE_LANGUAGE: std::sync::RwLock<Option<Language>> = std::sync::RwLock::new(None);
-
-pub fn set_active_locale(locale: &str) {
-    match Language::from_locale(locale) {
-        Some(lang) => {
-            *ACTIVE_LANGUAGE.write().unwrap_or_else(|e| e.into_inner()) = Some(lang);
-        }
-        None => tracing::debug!(locale, "Unsupported locale; the language is unchanged"),
-    }
-}
-
-pub fn reset_active_language() {
-    *ACTIVE_LANGUAGE.write().unwrap_or_else(|e| e.into_inner()) = None;
-}
-
-#[must_use]
-pub fn active_language() -> Language {
-    match *ACTIVE_LANGUAGE.read().unwrap_or_else(|e| e.into_inner()) {
-        Some(lang) => lang,
-        None => Language::of_windows(),
-    }
-}
-
-#[must_use]
-pub fn text() -> &'static Text {
-    active_language().text()
-}
+pub use super::lang::{
+    Language, active_language, clear_user_language, effective_language, init_language_store,
+    reset_active_language, set_active_locale, set_user_language, text,
+};
 
 #[derive(Debug)]
 pub struct Text {
@@ -342,6 +249,39 @@ pub struct Text {
     pub panel_stats_games: &'static str,
     pub panel_stats_wins_short: &'static str,
     pub panel_stats_losses_short: &'static str,
+
+    pub notice_badge_info: &'static str,
+    pub notice_badge_warning: &'static str,
+    pub notice_badge_question: &'static str,
+    pub notice_btn_ok: &'static str,
+    pub notice_btn_yes: &'static str,
+    pub notice_btn_no: &'static str,
+    pub ltk_update_title: &'static str,
+    pub ltk_update_body: &'static str,
+    pub ltk_update_download: &'static str,
+    pub panel_ltk_update_line: &'static str,
+    pub detail_manager_update: &'static str,
+    pub panel_language_label: &'static str,
+    pub panel_pick_ltk: &'static str,
+    pub panel_pick_ltk_title: &'static str,
+    pub panel_pick_ltk_saved: &'static str,
+    pub panel_pick_ltk_invalid: &'static str,
+    pub panel_problem_marked: &'static str,
+    pub panel_diagnostics_exported: &'static str,
+    pub panel_diagnostics_failed: &'static str,
+    pub star_gate_copied: &'static str,
+    pub menu_reduce_motion: &'static str,
+    pub panel_reduce_motion_hint: &'static str,
+    pub panel_reset_defaults: &'static str,
+    pub panel_reset_defaults_done: &'static str,
+    pub panel_section_match: &'static str,
+    pub panel_section_interface: &'static str,
+    pub menu_notifications: &'static str,
+    pub panel_notifications_hint: &'static str,
+    pub panel_copy_error: &'static str,
+    pub overlay_filter_all: &'static str,
+    pub overlay_filter_chromas: &'static str,
+    pub overlay_filter_preset: &'static str,
 }
 
 #[must_use]
@@ -353,9 +293,9 @@ mod en;
 mod es;
 mod pt;
 
-use en::ENGLISH;
-use es::SPANISH;
-use pt::PORTUGUESE;
+pub(crate) use en::ENGLISH;
+pub(crate) use es::SPANISH;
+pub(crate) use pt::PORTUGUESE;
 
 #[cfg(test)]
 mod tests;

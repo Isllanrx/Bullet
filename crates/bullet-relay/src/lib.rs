@@ -20,7 +20,7 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-pub const MAX_MEMBERS: usize = 5;
+pub const MAX_MEMBERS: usize = 10;
 
 pub const MAX_MESSAGE_BYTES: usize = 8192;
 

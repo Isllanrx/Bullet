@@ -14,12 +14,13 @@ component PeopleGlyph inherits Path {
 component InlineButton inherits Rectangle {
     in property <string> text;
     callback clicked();
+    property <bool> focused: keys.has-focus;
     width: max(64px, label.preferred-width + 24px);
     border-radius: 6px;
-    border-width: 1px;
-    border-color: touch.has-hover ? Theme.gold-bright : Theme.button-line;
-    background: touch.has-hover ? Theme.gold : Theme.gold.with-alpha(0.12);
-    animate background, border-color { duration: 150ms; }
+    border-width: root.focused ? 2px : 1px;
+    border-color: root.focused ? Theme.gold-bright : touch.has-hover ? Theme.gold-bright : Theme.button-line;
+    background: touch.pressed ? Theme.gold-dim : touch.has-hover ? Theme.gold : Theme.gold.with-alpha(0.12);
+    animate background, border-color { duration: Theme.dur-fast; }
     label := Text {
         text: root.text;
         color: touch.has-hover ? Theme.bg-0 : Theme.gold;
@@ -27,7 +28,16 @@ component InlineButton inherits Rectangle {
         font-weight: 600;
         horizontal-alignment: center;
         vertical-alignment: center;
-        animate color { duration: 150ms; }
+        animate color { duration: Theme.dur-fast; }
+    }
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
     }
     touch := TouchArea {
         mouse-cursor: pointer;
@@ -46,12 +56,14 @@ export component PartyInvite inherits Window {
     in property <string> later-label;
     callback join();
     callback later();
+    property <bool> shown;
     title: root.heading;
     icon: @image-url("assets/logo.png");
     width: 460px;
     height: 200px;
     background: Theme.backdrop;
     default-font-family: Theme.sans;
+    init => { root.shown = true; }
 
     Halo {
         x: -46px;
@@ -64,9 +76,16 @@ export component PartyInvite inherits Window {
                 root.later();
                 return accept;
             }
+            if event.text == Key.Return {
+                root.join();
+                return accept;
+            }
             reject
         }
         VerticalLayout {
+            y: root.shown ? 0px : 6px;
+            opacity: root.shown ? 1 : 0;
+            animate opacity, y { duration: Theme.dur-slow; easing: ease-out; }
             padding: 22px;
             spacing: 12px;
             HorizontalLayout {
@@ -151,12 +170,14 @@ export component PartyDialog inherits Window {
     callback inline-action();
     callback submit(string);
     callback cancel();
+    property <bool> shown;
     title: root.heading;
     icon: @image-url("assets/logo.png");
     width: 520px;
     height: 280px;
     background: Theme.backdrop;
     default-font-family: Theme.sans;
+    init => { root.shown = true; }
 
     function confirm() {
         if root.code.is-empty {
@@ -180,6 +201,9 @@ export component PartyDialog inherits Window {
             reject
         }
         VerticalLayout {
+            y: root.shown ? 0px : 6px;
+            opacity: root.shown ? 1 : 0;
+            animate opacity, y { duration: Theme.dur-slow; easing: ease-out; }
             padding-left: 24px;
             padding-right: 24px;
             padding-top: 20px;
@@ -233,7 +257,7 @@ export component PartyDialog inherits Window {
                         font-size: Theme.text-md;
                         font-weight: 600;
                         opacity: root.copied ? 1 : 0;
-                        animate opacity { duration: 200ms; }
+                        animate opacity { duration: Theme.dur-base; }
                     }
                 }
                 field := Field {

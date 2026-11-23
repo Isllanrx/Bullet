@@ -4,6 +4,8 @@ pub(super) fn create(
     commands: UnboundedSender<OverlayCommand>,
 ) -> Result<views::OverlayWindow, String> {
     let view = views::OverlayWindow::new().map_err(|e| format!("overlay window: {e}"))?;
+    view.global::<views::Theme>()
+        .set_reduced_motion(crate::preferences::REDUCE_MOTION.is_enabled());
     runtime::repaint_on_expose(&view, |v| v.set_expose_flip(!v.get_expose_flip()));
     wire(&view);
     view.show().map_err(|e| format!("overlay window: {e}"))?;
@@ -54,6 +56,18 @@ pub(super) fn wire(view: &views::OverlayWindow) {
                 overlay.view.set_mods_tab(mods_tab);
                 overlay.render_list();
             }
+        });
+    });
+    view.on_skin_filter_changed(|filter| {
+        with_overlay(|overlay| {
+            overlay.skin_filter = u8::try_from(filter).unwrap_or(0);
+            overlay.render_rows();
+        });
+    });
+    view.on_mod_filter_changed(|index| {
+        with_overlay(|overlay| {
+            overlay.mod_filter = usize::try_from(index).unwrap_or(0);
+            overlay.render_mods();
         });
     });
     view.on_mod_clicked(|slot, id| {
@@ -140,4 +154,49 @@ pub(super) fn wire(view: &views::OverlayWindow) {
     });
     view.on_hide_requested(|| with_overlay(|overlay| overlay.hide()));
     view.on_minimize(|| with_overlay(Overlay::toggle_collapsed));
+}
+
+pub(super) fn filtered_skins<'a>(
+    catalog: &'a Catalog,
+    search: &str,
+    skin_filter: u8,
+    preset_entry: Option<u32>,
+) -> Vec<&'a bullet_core::overlay::CatalogSkin> {
+    let base = model::visible_skins(catalog, search);
+    match skin_filter {
+        1 => base.into_iter().filter(|s| !s.chromas.is_empty()).collect(),
+        2 => {
+            let preset_skin = preset_entry.and_then(|id| model::parent_skin(catalog, id));
+            base.into_iter()
+                .filter(|s| Some(s.id) == preset_skin)
+                .collect()
+        }
+        _ => base,
+    }
+}
+
+pub(super) fn filtered_mod_catalog(
+    available: &bullet_core::mods::ModCatalog,
+    mod_filter: usize,
+) -> bullet_core::mods::ModCatalog {
+    let categories = model::import_categories();
+    let Some(&want) = mod_filter.checked_sub(1).and_then(|i| categories.get(i)) else {
+        return available.clone();
+    };
+    let mut out = bullet_core::mods::ModCatalog::default();
+    match want {
+        bullet_core::mods::ModCategory::Skin => out.skin.clone_from(&available.skin),
+        bullet_core::mods::ModCategory::Map => out.map.clone_from(&available.map),
+        bullet_core::mods::ModCategory::Font => out.font.clone_from(&available.font),
+        bullet_core::mods::ModCategory::Announcer => out.announcer.clone_from(&available.announcer),
+        other => {
+            out.others = available
+                .others
+                .iter()
+                .filter(|e| e.category == other)
+                .cloned()
+                .collect();
+        }
+    }
+    out
 }

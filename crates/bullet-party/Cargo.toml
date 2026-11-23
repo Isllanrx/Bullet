@@ -13,6 +13,7 @@ bullet-core = { path = "../bullet-core" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tokio-tungstenite.workspace = true
+reqwest.workspace = true
 futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true

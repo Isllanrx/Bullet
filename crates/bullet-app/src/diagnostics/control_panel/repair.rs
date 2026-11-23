@@ -80,6 +80,21 @@ impl RepairState {
             guard.message = message;
         }
     }
+
+    pub fn set_feedback(&self, ok: bool, message: String) {
+        let mut guard = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !guard.skins_busy && !guard.client_busy {
+            guard.state = if ok {
+                REPAIR_STATE_OK
+            } else {
+                REPAIR_STATE_ERROR
+            };
+            guard.message = message;
+        }
+    }
 }
 
 #[derive(Debug, Default)]

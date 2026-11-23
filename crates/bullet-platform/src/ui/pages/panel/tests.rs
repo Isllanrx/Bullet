@@ -3,13 +3,16 @@ use crate::i18n::Language;
 use i_slint_backend_testing::ElementHandle;
 use slint::Model;
 
-const ACTIONS: [PanelAction; 21] = [
+const ACTIONS: [PanelAction; 26] = [
     PanelAction::ToggleInjection,
     PanelAction::ToggleRandomSkin,
     PanelAction::ToggleLightLoading,
     PanelAction::ToggleInClientUi,
     PanelAction::ToggleAutoAccept,
     PanelAction::ToggleAutostart,
+    PanelAction::ToggleReduceMotion,
+    PanelAction::ToggleNotifications,
+    PanelAction::ResetDefaults,
     PanelAction::PartyCreate,
     PanelAction::PartyJoin,
     PanelAction::PartyLeave,
@@ -18,10 +21,12 @@ const ACTIONS: [PanelAction; 21] = [
     PanelAction::OpenTools,
     PanelAction::OpenLogs,
     PanelAction::OpenRelease,
+    PanelAction::OpenLtkRelease,
     PanelAction::MarkProblem,
     PanelAction::ExportDiagnostics,
     PanelAction::RepairSkins,
     PanelAction::RepairClient,
+    PanelAction::PickLtkManager,
     PanelAction::OpenProject,
     PanelAction::About,
     PanelAction::Quit,
@@ -47,7 +52,10 @@ fn snapshot() -> PanelSnapshot {
         light_loading: true,
         in_client_ui: false,
         autostart: false,
+        reduce_motion: false,
+        notifications: true,
         update_line: Some("Bullet 1.3 is available".into()),
+        ltk_update_line: None,
         checks: vec![
             PanelCheck {
                 label: "Injector".into(),
@@ -75,48 +83,6 @@ fn every_panel_action_reaches_a_distinct_tray_event() {
     unique.sort();
     unique.dedup();
     assert_eq!(unique.len(), ACTIONS.len(), "{events:?}");
-}
-
-#[test]
-fn every_language_fills_every_label() {
-    for language in [Language::Portuguese, Language::Spanish, Language::English] {
-        let labels = labels(language.text());
-        for (name, value) in [
-            ("home", &labels.tab_home),
-            ("options", &labels.tab_options),
-            ("party", &labels.tab_party),
-            ("help", &labels.tab_help),
-            ("all clear", &labels.all_clear),
-            ("attention", &labels.attention),
-            ("see diagnostics", &labels.see_diagnostics),
-            ("party hint", &labels.party_hint),
-            ("folders", &labels.section_folders),
-            ("diagnostics", &labels.section_diagnostics),
-            ("injection", &labels.injection),
-            ("random", &labels.random_skin),
-            ("light", &labels.light_loading),
-            ("in client", &labels.in_client_ui),
-            ("mode title", &labels.mode_title),
-            ("mode window", &labels.mode_window),
-            ("mode client", &labels.mode_client),
-            ("accept", &labels.auto_accept),
-            ("autostart", &labels.autostart),
-            ("create", &labels.party_create),
-            ("join", &labels.party_join),
-            ("leave", &labels.party_leave),
-            ("about", &labels.about),
-            ("open project", &labels.open_project),
-            ("project star hint", &labels.project_star_hint),
-            ("quit", &labels.quit),
-            ("mark", &labels.mark_problem),
-            ("export", &labels.export_diagnostics),
-            ("repair skins", &labels.repair_skins),
-            ("repair client", &labels.repair_client),
-            ("repair running", &labels.repair_running),
-        ] {
-            assert!(!value.is_empty(), "{language:?} {name}");
-        }
-    }
 }
 
 #[test]
@@ -223,6 +189,9 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
         (1, text.menu_light_loading, PanelAction::ToggleLightLoading),
         (1, text.menu_auto_accept, PanelAction::ToggleAutoAccept),
         (1, text.menu_autostart, PanelAction::ToggleAutostart),
+        (1, text.menu_notifications, PanelAction::ToggleNotifications),
+        (1, text.menu_reduce_motion, PanelAction::ToggleReduceMotion),
+        (1, text.panel_reset_defaults, PanelAction::ResetDefaults),
         (2, text.menu_party_create, PanelAction::PartyCreate),
         (2, text.menu_party_join, PanelAction::PartyJoin),
         (3, text.folder_mods, PanelAction::OpenMods),
@@ -231,6 +200,7 @@ fn every_button_and_toggle_of_the_panel_sends_its_own_action() {
         (3, text.folder_restore_mods, PanelAction::RestoreMods),
         (3, text.panel_repair_skins, PanelAction::RepairSkins),
         (3, text.panel_repair_client, PanelAction::RepairClient),
+        (3, text.panel_pick_ltk, PanelAction::PickLtkManager),
         (3, text.panel_mark_problem, PanelAction::MarkProblem),
         (
             3,

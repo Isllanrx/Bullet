@@ -24,6 +24,12 @@ pub enum TrayEvent {
 
     ToggleAutoAccept,
 
+    ToggleReduceMotion,
+
+    ToggleNotifications,
+
+    ResetDefaults,
+
     ToggleInjection,
 
     ToggleRandomSkin,
@@ -42,6 +48,8 @@ pub enum TrayEvent {
 
     OpenRelease,
 
+    OpenLtkRelease,
+
     OpenProject,
 
     MarkProblem,
@@ -51,4 +59,6 @@ pub enum TrayEvent {
     RepairSkins,
 
     RepairClient,
+
+    PickLtkManager,
 }

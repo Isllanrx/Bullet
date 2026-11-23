@@ -12,10 +12,10 @@ component ModeOption inherits Rectangle {
     border-radius: 10px;
     border-width: root.focused ? 2px : 1px;
     border-color: root.focused ? Theme.gold-bright : root.selected ? Theme.gold : root.hot ? Theme.control-line : Theme.surface-line;
-    background: root.selected ? @linear-gradient(180deg, #2a2417 0%, #172233 100%) : root.hot ? #192436 : #0e1623;
+    background: touch.pressed ? #243045 : root.selected ? @linear-gradient(180deg, #2a2417 0%, #172233 100%) : root.hot ? #192436 : #0e1623;
     drop-shadow-blur: root.selected ? 10px : 0px;
     drop-shadow-color: Theme.gold.with-alpha(0.22);
-    animate border-color, background, drop-shadow-blur { duration: 160ms; }
+    animate border-color, background, drop-shadow-blur { duration: Theme.dur-base; }
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
@@ -111,7 +111,14 @@ export component ModeCard inherits Surface {
 export component RepairBanner inherits Rectangle {
     in property <int> state;
     in property <string> text;
+    in property <string> copy-label;
+    in property <string> copied-label;
+    in property <string> logs-label;
+    callback copy-error();
+    callback open-logs();
+    property <bool> copied-ok;
     property <float> phase: mod(animation-tick() / 1100ms, 1.0);
+    changed text => { root.copied-ok = false; }
     border-radius: 10px;
     border-width: 1px;
     border-color: root.state == 3 ? #7c3037 : root.state == 2 ? #1b5a55 : Theme.gold-dim;
@@ -157,17 +164,233 @@ export component RepairBanner inherits Rectangle {
                 horizontal-stretch: 1;
             }
         }
+        if root.state == 3 && root.copy-label != "": HorizontalLayout {
+            spacing: 6px;
+            alignment: end;
+            Rectangle {
+                height: 24px;
+                min-width: 72px;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: cp-touch.has-hover ? Theme.gold : #7c3037;
+                background: cp-touch.pressed ? #3b1e24 : #1b1014;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: root.copied-ok ? root.copied-label : root.copy-label;
+                        color: root.copied-ok ? Theme.cyan : Theme.danger-text;
+                        font-size: Theme.text-xs;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                }
+                cp-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.copied-ok = true; root.copy-error(); }
+                }
+                accessible-role: button;
+                accessible-label: root.copy-label;
+                accessible-action-default => { root.copied-ok = true; root.copy-error(); }
+            }
+            if root.logs-label != "": Rectangle {
+                height: 24px;
+                min-width: 54px;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: lg-touch.has-hover ? Theme.gold : Theme.surface-line;
+                background: lg-touch.pressed ? #223045 : #111926;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: root.logs-label;
+                        color: Theme.text;
+                        font-size: Theme.text-xs;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+                }
+                lg-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.open-logs(); }
+                }
+                accessible-role: button;
+                accessible-label: root.logs-label;
+                accessible-action-default => { root.open-logs(); }
+            }
+        }
         if root.state == 1: Rectangle {
             height: 4px;
             border-radius: 2px;
             background: #243043;
             clip: true;
             Rectangle {
-                width: parent.width * 0.36;
+                width: Theme.reduced-motion ? parent.width : parent.width * 0.36;
                 height: parent.height;
                 border-radius: 2px;
-                x: (parent.width + self.width) * root.phase - self.width;
+                x: Theme.reduced-motion ? 0px : (parent.width + self.width) * root.phase - self.width;
                 background: @linear-gradient(90deg, #8a6a30 0%, #e0c48a 50%, #18d4c4 100%);
+            }
+        }
+    }
+}
+
+export component LanguagePill inherits Rectangle {
+    in property <string> code;
+    in property <string> heading;
+    in property <bool> open;
+    callback toggle();
+    property <bool> hot: touch.has-hover;
+    property <bool> focused: keys.has-focus;
+    height: 30px;
+    min-width: 56px;
+    border-radius: 8px;
+    border-width: root.focused ? 2px : 1px;
+    border-color: root.focused ? Theme.gold-bright : root.open ? Theme.gold : root.hot ? Theme.control-line : Theme.surface-line;
+    background: root.open ? #272216 : root.hot ? #1b2638 : #101927;
+    animate border-color, background { duration: 150ms; }
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 9px;
+        spacing: 5px;
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Path {
+                width: 13px;
+                height: 13px;
+                viewbox-width: 16;
+                viewbox-height: 16;
+                stroke: root.open ? Theme.gold-bright : Theme.gold;
+                stroke-width: 1.4px;
+                fill: transparent;
+                commands: "M 8 1.5 A 6.5 6.5 0 1 1 7.99 1.5 Z M 1.5 8 L 14.5 8 M 8 1.5 C 5.5 4 5.5 12 8 14.5 M 8 1.5 C 10.5 4 10.5 12 8 14.5";
+            }
+        }
+        Text {
+            text: root.code;
+            color: root.open || root.hot ? Theme.gold-bright : Theme.text;
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            vertical-alignment: center;
+        }
+    }
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.toggle();
+                return accept;
+            }
+            reject
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggle(); }
+    }
+    accessible-role: button;
+    accessible-label: root.heading + " " + root.code;
+    accessible-action-default => { root.toggle(); }
+}
+
+component LangChip inherits Rectangle {
+    in property <string> code;
+    in property <bool> active;
+    callback picked(string);
+    property <bool> hot: touch.has-hover;
+    property <bool> focused: keys.has-focus;
+    horizontal-stretch: 1;
+    height: 28px;
+    border-radius: 7px;
+    border-width: root.focused ? 2px : 1px;
+    border-color: root.focused ? Theme.gold-bright : root.active ? Theme.gold : root.hot ? Theme.control-line : Theme.surface-line;
+    background: root.active ? @linear-gradient(180deg, #2d2517 0%, #1c283a 100%) : root.hot ? #1b273a : #0d1522;
+    animate border-color, background { duration: 120ms; }
+    Text {
+        text: root.code;
+        color: root.active ? Theme.gold-bright : root.hot ? Theme.text : Theme.muted;
+        font-size: Theme.text-xs;
+        font-weight: root.active ? 700 : 600;
+        letter-spacing: 0.7px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.picked(root.code);
+                return accept;
+            }
+            reject
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.picked(root.code); }
+    }
+    accessible-role: button;
+    accessible-label: root.code;
+    accessible-checkable: true;
+    accessible-checked: root.active;
+    accessible-action-default => { root.picked(root.code); }
+}
+
+export component LanguagePicker inherits Surface {
+    in property <string> heading;
+    in property <string> active-code;
+    callback selected(string);
+    border-radius: 12px;
+    border-color: Theme.gold-dim;
+    VerticalLayout {
+        padding: 12px;
+        spacing: 6px;
+        Text {
+            text: root.heading;
+            color: Theme.gold;
+            font-size: Theme.text-xs;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            for c in ["EN", "PT", "ES", "FR", "DE"]: LangChip {
+                code: c;
+                active: root.active-code == c;
+                picked(v) => { root.selected(v); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            for c in ["IT", "PL", "RU", "TR", "KO"]: LangChip {
+                code: c;
+                active: root.active-code == c;
+                picked(v) => { root.selected(v); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            for c in ["JA", "ZH", "TW", "VI", "TH"]: LangChip {
+                code: c;
+                active: root.active-code == c;
+                picked(v) => { root.selected(v); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            for c in ["ID", "AR", "NL", "SV", "CS"]: LangChip {
+                code: c;
+                active: root.active-code == c;
+                picked(v) => { root.selected(v); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            for c in ["HU", "RO", "EL", "UK", "HI"]: LangChip {
+                code: c;
+                active: root.active-code == c;
+                picked(v) => { root.selected(v); }
             }
         }
     }

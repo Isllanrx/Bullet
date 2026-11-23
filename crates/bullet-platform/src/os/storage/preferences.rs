@@ -36,6 +36,60 @@ pub static HOOK_LOADING_GAME: Preference = Preference::new(
     false,
 );
 
+pub static REDUCE_MOTION: Preference =
+    Preference::new("reduce_motion.json", "reduce UI animations", false);
+
+pub static NOTIFICATIONS: Preference =
+    Preference::new("notifications.json", "system notifications", true);
+
+#[cfg(windows)]
+#[must_use]
+pub fn system_prefers_reduced_motion() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+    };
+    let mut enabled: i32 = 1;
+    let ok = unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&mut enabled as *mut i32).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    };
+    ok.is_ok() && enabled == 0
+}
+
+#[cfg(not(windows))]
+#[must_use]
+pub fn system_prefers_reduced_motion() -> bool {
+    false
+}
+
+pub fn load_reduce_motion() -> bool {
+    let custom = crate::paths::state_dir()
+        .ok()
+        .map(|d| d.join(REDUCE_MOTION.file))
+        .is_some_and(|p| p.exists());
+    if custom {
+        return REDUCE_MOTION.load();
+    }
+    let preferred = system_prefers_reduced_motion();
+    REDUCE_MOTION.value.store(preferred, Ordering::Relaxed);
+    preferred
+}
+
+pub fn reset_defaults() -> Result<(), PlatformError> {
+    INJECTION.set_enabled(INJECTION.default)?;
+    RANDOM_SKIN.set_enabled(RANDOM_SKIN.default)?;
+    LIGHT_LOADING.set_enabled(LIGHT_LOADING.default)?;
+    IN_CLIENT_UI.set_enabled(IN_CLIENT_UI.default)?;
+    AUTO_ACCEPT.set_enabled(AUTO_ACCEPT.default)?;
+    REDUCE_MOTION.set_enabled(system_prefers_reduced_motion())?;
+    NOTIFICATIONS.set_enabled(NOTIFICATIONS.default)?;
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Stored {
     enabled: bool,

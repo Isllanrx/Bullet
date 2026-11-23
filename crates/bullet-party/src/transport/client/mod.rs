@@ -18,6 +18,8 @@ use crate::protocol::{
 };
 use crate::token::PartyToken;
 
+mod doh;
+
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 const PING_INTERVAL: Duration = Duration::from_secs(30);
@@ -153,12 +155,12 @@ impl PartyClient {
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_MESSAGE_BYTES))
             .max_frame_size(Some(MAX_MESSAGE_BYTES));
-        let connect = tokio_tungstenite::connect_async_with_config(url, Some(config), false);
+        let connect = doh::connect_with_doh_fallback(url, config);
         let connected = tokio::select! {
             () = cancel.cancelled() => return Ok(SessionEnd::Cancelled),
             connected = tokio::time::timeout(CONNECT_TIMEOUT, connect) => connected,
         };
-        let (stream, _) = connected
+        let stream = connected
             .map_err(|_| PartyError::Relay("connection timed out".into()))?
             .map_err(|e| match e {
                 tokio_tungstenite::tungstenite::Error::Http(response)

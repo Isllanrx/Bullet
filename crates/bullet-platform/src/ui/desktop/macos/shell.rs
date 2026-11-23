@@ -46,10 +46,16 @@ fn open(target: &OsStr, shown: &str) -> Result<(), PlatformError> {
 }
 
 pub fn message_box(title: &str, text: &str) {
+    if crate::notice::show_info(title, text).is_ok() {
+        return;
+    }
     show(title, text, "note");
 }
 
 pub fn message_box_warning(title: &str, text: &str) {
+    if crate::notice::show_warning(title, text).is_ok() {
+        return;
+    }
     show(title, text, "caution");
 }
 
@@ -70,6 +76,9 @@ fn show(title: &str, text: &str, icon: &str) {
 
 #[must_use]
 pub fn message_box_question(title: &str, text: &str) -> bool {
+    if let Ok(accepted) = crate::notice::ask_question(title, text) {
+        return accepted;
+    }
     match run_script(
         &["display dialog (item 1 of argv) with title (item 2 of argv) with icon note"],
         &[text, title],
@@ -105,8 +114,8 @@ pub fn read_hklm_string(_subkey: &str, _value_name: &str) -> Option<String> {
     None
 }
 
-pub fn dismiss_question(_title: &str) -> bool {
-    false
+pub fn dismiss_question(title: &str) -> bool {
+    crate::notice::dismiss_question(title)
 }
 
 pub(crate) fn notify(title: &str, body: &str) -> bool {
