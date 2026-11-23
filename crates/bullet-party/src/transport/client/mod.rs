@@ -18,6 +18,8 @@ use crate::protocol::{
 };
 use crate::token::PartyToken;
 
+mod doh;
+
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 const PING_INTERVAL: Duration = Duration::from_secs(30);
@@ -56,7 +58,7 @@ pub enum PartyExit {
 }
 
 pub struct PartyClient {
-    relay_url: String,
+    relay_urls: Vec<String>,
     token: PartyToken,
     member_id: u64,
     state_tx: StateSender,
@@ -73,7 +75,7 @@ impl PartyClient {
         state_rx: StateReceiver,
     ) -> Self {
         Self {
-            relay_url,
+            relay_urls: vec![relay_url],
             token,
             member_id,
             state_tx,
@@ -81,25 +83,44 @@ impl PartyClient {
         }
     }
 
+    #[must_use]
+    pub fn with_fallbacks(mut self, fallbacks: Vec<String>) -> Self {
+        for url in fallbacks {
+            if !url.is_empty() && !self.relay_urls.contains(&url) {
+                self.relay_urls.push(url);
+            }
+        }
+        self
+    }
+
     pub async fn run(self, cancel: CancellationToken) -> PartyExit {
         let cipher = RoomCipher::new(self.token.key());
-        let url = format!("{}/room?key={}", self.relay_url, room_id(self.token.key()));
+        let room_key = room_id(self.token.key());
         let mut backoff = BACKOFF_MIN;
         let mut announce_connection = true;
+        let mut relay_idx = 0usize;
+        let mut tried_in_cycle = 0usize;
 
         info!(
             member_id = self.member_id,
-            relay = %self.relay_url,
+            relay = %self.relay_urls[0],
+            fallbacks = self.relay_urls.len().saturating_sub(1),
             "Party: joining the room"
         );
 
         let exit = loop {
+            let active_relay = &self.relay_urls[relay_idx];
+            let url = format!("{active_relay}/room?key={room_key}");
             set_party_status(&self.state_tx, PartyStatus::Connecting);
             let started = tokio::time::Instant::now();
             let ended = self
                 .session(&url, &cipher, &cancel, &mut announce_connection)
                 .await;
-            backoff = retry_backoff(backoff, started.elapsed());
+            let lasted = started.elapsed();
+            backoff = retry_backoff(backoff, lasted);
+            if lasted >= STABLE_SESSION {
+                tried_in_cycle = 0;
+            }
             let reason = match ended {
                 Ok(SessionEnd::Cancelled) => break PartyExit::Left,
                 Err(PartyError::RoomFull) => {
@@ -113,6 +134,18 @@ impl PartyClient {
                 }
                 Err(e) => e.to_string(),
             };
+            set_party_peers(&self.state_tx, Vec::new());
+            tried_in_cycle += 1;
+            if self.relay_urls.len() > 1 && tried_in_cycle < self.relay_urls.len() {
+                relay_idx = (relay_idx + 1) % self.relay_urls.len();
+                warn!(reason = %reason, next_relay = %self.relay_urls[relay_idx], "Party: relay unreachable; failing over to backup relay");
+                announce_connection = true;
+                continue;
+            }
+            tried_in_cycle = 0;
+            if self.relay_urls.len() > 1 {
+                relay_idx = (relay_idx + 1) % self.relay_urls.len();
+            }
             let retry_in_ms = backoff.as_millis();
             if backoff == BACKOFF_MIN {
                 warn!(reason = %reason, retry_in_ms, "Party: lost the relay; reconnecting");
@@ -121,15 +154,10 @@ impl PartyClient {
                 debug!(reason = %reason, retry_in_ms, "Party: the relay is still unreachable");
             }
             set_party_status(&self.state_tx, PartyStatus::Error { reason });
-            set_party_peers(&self.state_tx, Vec::new());
 
-            let jitter = match u32::try_generate() {
-                Ok(random) => Duration::from_millis(u64::from(random % 500)),
-                Err(e) => {
-                    warn!(error = %e, "Party: no randomness for the reconnect jitter; retrying without it");
-                    Duration::ZERO
-                }
-            };
+            let jitter = u32::try_generate()
+                .map(|r| Duration::from_millis(u64::from(r % 500)))
+                .unwrap_or(Duration::ZERO);
             tokio::select! {
                 () = cancel.cancelled() => break PartyExit::Left,
                 () = tokio::time::sleep(backoff + jitter) => {}
@@ -153,27 +181,23 @@ impl PartyClient {
         let config = WebSocketConfig::default()
             .max_message_size(Some(MAX_MESSAGE_BYTES))
             .max_frame_size(Some(MAX_MESSAGE_BYTES));
-        let connect = tokio_tungstenite::connect_async_with_config(url, Some(config), false);
+        let connect = doh::connect_with_doh_fallback(url, config);
         let connected = tokio::select! {
             () = cancel.cancelled() => return Ok(SessionEnd::Cancelled),
             connected = tokio::time::timeout(CONNECT_TIMEOUT, connect) => connected,
         };
-        let (stream, _) = connected
+        let stream = connected
             .map_err(|_| PartyError::Relay("connection timed out".into()))?
             .map_err(|e| match e {
-                tokio_tungstenite::tungstenite::Error::Http(response)
-                    if response.status().as_u16() == 409 =>
-                {
+                tokio_tungstenite::tungstenite::Error::Http(r) if r.status().as_u16() == 409 => {
                     PartyError::RoomFull
                 }
                 other => PartyError::Relay(other.to_string()),
             })?;
         let (mut write, mut read) = stream.split();
-
-        let send = |message: &ClientMessage| -> Result<Message, PartyError> {
-            Ok(Message::Text(serde_json::to_string(message)?.into()))
+        let send = |m: &ClientMessage| -> Result<Message, PartyError> {
+            Ok(Message::Text(serde_json::to_string(m)?.into()))
         };
-
         deliver(
             &mut write,
             send(&ClientMessage::Join {

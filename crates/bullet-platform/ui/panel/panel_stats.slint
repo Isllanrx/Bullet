@@ -1,4 +1,4 @@
-import { Theme } from "../theme.slint";
+import { Theme, Glyph } from "../theme.slint";
 import { PanelSkinStatRow } from "panel_types.slint";
 
 export component StatsCard inherits Rectangle {
@@ -26,13 +26,24 @@ export component StatsCard inherits Rectangle {
 
         HorizontalLayout {
             alignment: space-between;
-            Text {
-                text: root.heading;
-                color: Theme.gold-bright;
-                font-size: Theme.text-xs;
-                font-weight: 700;
-                letter-spacing: 0.9px;
-                vertical-alignment: center;
+            HorizontalLayout {
+                spacing: 7px;
+                VerticalLayout {
+                    alignment: center;
+                    Glyph {
+                        size: 13px;
+                        tint: Theme.gold;
+                        icon: "M 4.5 2.5 L 11.5 2.5 L 11.5 6.8 A 3.5 3.5 0 0 1 4.5 6.8 Z M 4.5 4 L 2.2 4 L 2.2 6 A 2 2 0 0 0 4.5 7.5 M 11.5 4 L 13.8 4 L 13.8 6 A 2 2 0 0 1 11.5 7.5 M 8 10.3 L 8 13.5 M 5.2 13.5 L 10.8 13.5";
+                    }
+                }
+                Text {
+                    text: root.heading;
+                    color: Theme.gold-bright;
+                    font-size: Theme.text-xs;
+                    font-weight: 700;
+                    letter-spacing: 0.9px;
+                    vertical-alignment: center;
+                }
             }
             if root.total > 0: Text {
                 text: root.total + " " + root.games-suffix;

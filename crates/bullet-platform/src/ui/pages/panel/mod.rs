@@ -7,7 +7,9 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use tracing::{debug, warn};
 
 use super::runtime;
-use super::views::{ControlPanel, PanelAction, PanelCheckRow, PanelLabels, PanelSkinStatRow};
+use super::views::{
+    ControlPanel, PanelAction, PanelCheckRow, PanelLabels, PanelSkinStatRow, Theme,
+};
 use crate::tray::TrayEvent;
 
 const REFRESH: Duration = Duration::from_millis(700);
@@ -54,7 +56,10 @@ pub struct PanelSnapshot {
     pub light_loading: bool,
     pub in_client_ui: bool,
     pub autostart: bool,
+    pub reduce_motion: bool,
+    pub notifications: bool,
     pub update_line: Option<String>,
+    pub ltk_update_line: Option<String>,
     pub checks: Vec<PanelCheck>,
     pub stats: PanelStats,
     pub repair: PanelRepair,
@@ -87,6 +92,9 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
         PanelAction::ToggleInClientUi => TrayEvent::ToggleInClientUi,
         PanelAction::ToggleAutoAccept => TrayEvent::ToggleAutoAccept,
         PanelAction::ToggleAutostart => TrayEvent::ToggleAutostart,
+        PanelAction::ToggleReduceMotion => TrayEvent::ToggleReduceMotion,
+        PanelAction::ToggleNotifications => TrayEvent::ToggleNotifications,
+        PanelAction::ResetDefaults => TrayEvent::ResetDefaults,
         PanelAction::PartyCreate => TrayEvent::PartyCreate,
         PanelAction::PartyJoin => TrayEvent::PartyJoin,
         PanelAction::PartyLeave => TrayEvent::PartyLeave,
@@ -95,10 +103,12 @@ pub(crate) fn event_for(action: PanelAction) -> TrayEvent {
         PanelAction::OpenTools => TrayEvent::OpenTools,
         PanelAction::OpenLogs => TrayEvent::OpenLogs,
         PanelAction::OpenRelease => TrayEvent::OpenRelease,
+        PanelAction::OpenLtkRelease => TrayEvent::OpenLtkRelease,
         PanelAction::MarkProblem => TrayEvent::MarkProblem,
         PanelAction::ExportDiagnostics => TrayEvent::ExportDiagnostics,
         PanelAction::RepairSkins => TrayEvent::RepairSkins,
         PanelAction::RepairClient => TrayEvent::RepairClient,
+        PanelAction::PickLtkManager => TrayEvent::PickLtkManager,
         PanelAction::OpenProject => TrayEvent::OpenProject,
         PanelAction::About => TrayEvent::About,
         PanelAction::Quit => TrayEvent::Quit,
@@ -143,6 +153,7 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
         project_star_hint: text.panel_project_star_hint.into(),
         quit: text.menu_quit.into(),
         update_download: text.panel_update_download.into(),
+        ltk_update_download: text.ltk_update_download.into(),
         mark_problem: text.panel_mark_problem.into(),
         mark_problem_hint: text.panel_mark_problem_hint.into(),
         export_diagnostics: text.panel_export_diagnostics.into(),
@@ -154,6 +165,17 @@ pub(crate) fn labels(text: &crate::i18n::Text) -> PanelLabels {
         stats_games: text.panel_stats_games.into(),
         stats_wins_short: text.panel_stats_wins_short.into(),
         stats_losses_short: text.panel_stats_losses_short.into(),
+        language_label: text.panel_language_label.into(),
+        pick_ltk: text.panel_pick_ltk.into(),
+        reduce_motion: text.menu_reduce_motion.into(),
+        reduce_motion_hint: text.panel_reduce_motion_hint.into(),
+        notifications: text.menu_notifications.into(),
+        notifications_hint: text.panel_notifications_hint.into(),
+        section_match: text.panel_section_match.into(),
+        section_interface: text.panel_section_interface.into(),
+        reset_defaults: text.panel_reset_defaults.into(),
+        copy_error: text.panel_copy_error.into(),
+        copied: text.star_gate_copied.into(),
     }
 }
 
@@ -161,10 +183,13 @@ pub(crate) fn follow_language(
     window: &ControlPanel,
     shown: &std::cell::Cell<Option<crate::i18n::Language>>,
     active: crate::i18n::Language,
-) {
+) -> bool {
     if shown.replace(Some(active)) != Some(active) {
+        window.set_lang_code(active.code().into());
         window.set_labels(labels(active.text()));
+        return true;
     }
+    false
 }
 
 pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
@@ -177,7 +202,13 @@ pub(crate) fn render(window: &ControlPanel, state: &PanelSnapshot) {
     window.set_in_client_ui(state.in_client_ui);
     window.set_auto_accept(state.auto_accept);
     window.set_autostart(state.autostart);
+    window.set_reduce_motion(state.reduce_motion);
+    window.set_notifications(state.notifications);
+    window
+        .global::<Theme>()
+        .set_reduced_motion(state.reduce_motion);
     window.set_update_line(state.update_line.as_deref().unwrap_or_default().into());
+    window.set_ltk_update_line(state.ltk_update_line.as_deref().unwrap_or_default().into());
     let failing = state.checks.iter().filter(|check| !check.ok).count();
     window.set_attention(i32::try_from(failing).unwrap_or(i32::MAX));
     let checks: Vec<PanelCheckRow> = state
@@ -263,7 +294,9 @@ fn open(links: PanelLinks) {
         let last = last.clone();
         move || {
             let Some(window) = weak.upgrade() else { return };
-            follow_language(&window, &language, crate::i18n::active_language());
+            if follow_language(&window, &language, crate::i18n::active_language()) {
+                *last.borrow_mut() = None;
+            }
             let state = snapshot();
             if last.borrow().as_ref() != Some(&state) {
                 render(&window, &state);
@@ -272,6 +305,19 @@ fn open(links: PanelLinks) {
         }
     });
     refresh();
+
+    let after_lang = refresh.clone();
+    window.on_select_language(move |code| {
+        if let Some(lang) = crate::i18n::Language::from_code(code.as_str()) {
+            crate::i18n::set_user_language(lang);
+            after_lang();
+        }
+    });
+    window.on_copy_text(|text| {
+        if let Err(e) = crate::clipboard::set_text(text.as_str()) {
+            warn!(error = %e, "Could not copy panel diagnostic text");
+        }
+    });
 
     let events = links.events.clone();
     let after_action = refresh.clone();

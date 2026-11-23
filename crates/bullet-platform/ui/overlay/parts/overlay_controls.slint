@@ -1,28 +1,37 @@
-import { Theme } from "../../theme.slint";
+import { Theme, Glyph } from "../../theme.slint";
 import { ModLine } from "overlay_types.slint";
 
 export component Tab inherits Rectangle {
     in property <string> text;
+    in property <string> icon;
     in property <string> count;
     in property <bool> active;
     callback clicked();
     height: 30px;
     horizontal-stretch: 1;
     border-radius: 8px;
-    border-width: 1px;
-    border-color: root.active ? Theme.gold-dim : transparent;
-    background: root.active ? @linear-gradient(180deg, #2a3850 0%, #1c2839 100%) : touch.has-hover ? #ffffff08 : transparent;
-    animate background, border-color { duration: 200ms; easing: ease-out-quart; }
+    border-width: keys.has-focus ? 2px : 1px;
+    border-color: keys.has-focus ? Theme.gold-bright : root.active ? Theme.gold-dim : transparent;
+    background: touch.pressed ? #223045 : root.active ? @linear-gradient(180deg, #2a3850 0%, #1c2839 100%) : touch.has-hover ? #ffffff08 : transparent;
+    animate background, border-color { duration: Theme.dur-base; easing: ease-out-quart; }
     HorizontalLayout {
         alignment: center;
         spacing: 6px;
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            Glyph {
+                icon: root.icon;
+                size: 13px;
+                tint: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
+            }
+        }
         Text {
             text: root.text;
             color: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
             font-size: Theme.text-base;
             font-weight: root.active ? 600 : 400;
             vertical-alignment: center;
-            animate color { duration: 160ms; }
+            animate color { duration: Theme.dur-fast; }
         }
         if root.count != "": Rectangle {
             y: (parent.height - self.height) / 2;
@@ -42,6 +51,15 @@ export component Tab inherits Rectangle {
                     vertical-alignment: center;
                 }
             }
+        }
+    }
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
         }
     }
     touch := TouchArea {
@@ -67,9 +85,10 @@ export component ModEntry inherits Rectangle {
     callback clicked();
     min-height: 36px;
     border-radius: 8px;
-    border-width: 1px;
-    border-color: root.line.selected ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
-    background: root.line.selected ? Theme.card-fill-selected : Theme.card-fill;
+    border-width: mod-keys.has-focus ? 2px : 1px;
+    border-color: mod-keys.has-focus ? Theme.gold-bright : root.line.selected ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.control-line;
+    background: touch.pressed ? Theme.card-fill-selected : root.line.selected ? Theme.card-fill-selected : touch.has-hover ? Theme.card-fill-hover : Theme.card-fill;
+    animate border-color { duration: Theme.dur-fast; }
     Rectangle {
         x: 0;
         y: 8px;
@@ -111,6 +130,15 @@ export component ModEntry inherits Rectangle {
             horizontal-stretch: 1;
         }
     }
+    mod-keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
@@ -129,8 +157,10 @@ export component HeaderButton inherits Rectangle {
     callback clicked();
     width: 28px;
     border-radius: 8px;
-    background: touch.has-hover ? Theme.gold.with-alpha(0.18) : transparent;
-    animate background { duration: 120ms; }
+    border-width: hb-keys.has-focus ? 2px : 0px;
+    border-color: Theme.gold-bright;
+    background: touch.pressed ? Theme.gold.with-alpha(0.28) : touch.has-hover ? Theme.gold.with-alpha(0.18) : transparent;
+    animate background { duration: Theme.dur-fast; }
     Path {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -139,9 +169,17 @@ export component HeaderButton inherits Rectangle {
         viewbox-width: 11;
         viewbox-height: 11;
         stroke: touch.has-hover ? Theme.gold-bright : Theme.muted;
-        stroke-width: 1.4px;
+        stroke-width: 1.5px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
         fill: transparent;
         commands: root.icon;
+    }
+    hb-keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return { root.clicked(); return accept; }
+            reject
+        }
     }
     touch := TouchArea {
         mouse-cursor: pointer;
@@ -159,11 +197,11 @@ export component PinButton inherits Rectangle {
     callback clicked();
     width: 30px;
     border-radius: 8px;
-    border-width: 1px;
-    border-color: root.active ? Theme.gold : touch.has-hover && root.enabled ? Theme.gold-dim : Theme.control-line;
+    border-width: pb-keys.has-focus ? 2px : 1px;
+    border-color: pb-keys.has-focus ? Theme.gold-bright : root.active ? Theme.gold : touch.has-hover && root.enabled ? Theme.gold-dim : Theme.control-line;
     background: root.active ? Theme.gold.with-alpha(0.18) : #0a111c;
     opacity: root.enabled ? 1 : 0.45;
-    animate border-color { duration: 120ms; }
+    animate border-color { duration: Theme.dur-fast; }
     Path {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -172,13 +210,22 @@ export component PinButton inherits Rectangle {
         viewbox-width: 13;
         viewbox-height: 13;
         stroke: root.active ? Theme.gold-bright : Theme.muted;
-        stroke-width: 1.3px;
+        stroke-width: 1.35px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
         fill: root.active ? Theme.gold : transparent;
         commands: "M 4 1 L 9 1 L 8 5 L 10.5 7.5 L 2.5 7.5 L 5 5 Z M 6.5 7.5 L 6.5 12.5";
     }
+    pb-keys := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return { root.clicked(); return accept; }
+            reject
+        }
+    }
     touch := TouchArea {
         enabled: root.enabled;
-        mouse-cursor: pointer;
+        mouse-cursor: root.enabled ? pointer : default;
         clicked => { root.clicked(); }
     }
     accessible-role: button;
@@ -198,10 +245,10 @@ export component Dice inherits Rectangle {
     width: 38px;
     height: 38px;
     border-radius: 10px;
-    border-width: 1px;
-    border-color: touch.has-hover ? Theme.gold-dim : Theme.surface-line;
+    border-width: dice-keys.has-focus ? 2px : 1px;
+    border-color: dice-keys.has-focus ? Theme.gold-bright : touch.has-hover ? Theme.gold-dim : Theme.surface-line;
     background: touch.pressed ? Theme.card : #0a111c;
-    animate border-color { duration: 150ms; }
+    animate border-color { duration: Theme.dur-fast; }
     Path {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -222,11 +269,54 @@ export component Dice inherits Rectangle {
         border-radius: 1.5px;
         background: Theme.gold;
     }
+    dice-keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return { root.clicked(); return accept; }
+            reject
+        }
+    }
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
     accessible-role: button;
     accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+}
+
+export component FilterPill inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked();
+    height: 24px;
+    horizontal-stretch: 1;
+    border-radius: 6px;
+    border-width: fp-keys.has-focus ? 2px : 1px;
+    border-color: fp-keys.has-focus ? Theme.gold-bright : root.active ? Theme.gold : touch.has-hover ? Theme.gold-dim : Theme.surface-line;
+    background: touch.pressed ? #262115 : root.active ? #241e12 : touch.has-hover ? #151f2f : #0a111c;
+    animate border-color, background { duration: Theme.dur-fast; }
+    Text {
+        text: root.text;
+        color: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
+        font-size: Theme.text-xs;
+        font-weight: root.active ? 700 : 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    fp-keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == " " || event.text == Key.Return { root.clicked(); return accept; }
+            reject
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-checkable: true;
+    accessible-checked: root.active;
     accessible-action-default => { root.clicked(); }
 }

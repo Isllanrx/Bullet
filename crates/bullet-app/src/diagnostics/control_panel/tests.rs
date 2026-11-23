@@ -12,6 +12,8 @@ fn facts() -> Facts {
         light_loading: true,
         in_client_ui: false,
         autostart: false,
+        reduce_motion: false,
+        notifications: true,
         tools_present: true,
         manager: ManagerStatus::Ready {
             version: Some("1.33.0".into()),
@@ -20,6 +22,7 @@ fn facts() -> Facts {
         lcu_connected: true,
         elevated: false,
         update: None,
+        ltk_update: None,
         custom_mods: None,
         stats: bullet_platform::panel::PanelStats::default(),
         repair: bullet_platform::panel::PanelRepair::default(),
@@ -319,4 +322,25 @@ fn test_repair_feedback_formatting_covers_all_languages_and_outcomes() {
         assert!(!partial_ok);
         assert!(partial_msg.contains("overlay: busy") && !partial_msg.contains('{'));
     }
+}
+
+#[test]
+fn test_newer_ltk_manager_version_is_shown_on_home_and_diagnostics() {
+    let text = Language::Portuguese.text();
+    let snap = snapshot(
+        &Facts {
+            ltk_update: Some(("1.33.0".into(), "1.34".into())),
+            ..facts()
+        },
+        text,
+    );
+    let line = snap.ltk_update_line.expect("ltk update banner");
+    assert!(line.contains("1.34") && line.contains("1.33.0") && !line.contains('{'));
+    let row = snap
+        .checks
+        .into_iter()
+        .find(|c| c.label == text.check_manager)
+        .expect("manager row");
+    assert!(row.ok);
+    assert!(row.detail.contains("1.33.0") && row.detail.contains("1.34"));
 }

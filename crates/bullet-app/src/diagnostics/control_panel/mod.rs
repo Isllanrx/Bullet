@@ -33,12 +33,15 @@ pub struct Facts {
     pub light_loading: bool,
     pub in_client_ui: bool,
     pub autostart: bool,
+    pub reduce_motion: bool,
+    pub notifications: bool,
     pub tools_present: bool,
     pub manager: ManagerStatus,
     pub game_found: bool,
     pub lcu_connected: bool,
     pub elevated: bool,
     pub update: Option<String>,
+    pub ltk_update: Option<(String, String)>,
     pub custom_mods: Option<crate::mod_repair::ScanSummary>,
     pub stats: bullet_platform::panel::PanelStats,
     pub repair: bullet_platform::panel::PanelRepair,
@@ -95,11 +98,20 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
         light_loading: facts.light_loading,
         in_client_ui: facts.in_client_ui,
         autostart: facts.autostart,
+        reduce_motion: facts.reduce_motion,
+        notifications: facts.notifications,
         update_line: facts.update.as_deref().map(|latest| {
             fill(
                 &fill(text.panel_update_line, "version", latest),
                 "current",
                 bullet_platform::version::display_version(),
+            )
+        }),
+        ltk_update_line: facts.ltk_update.as_ref().map(|(installed, latest)| {
+            fill(
+                &fill(text.panel_ltk_update_line, "latest", latest),
+                "installed",
+                installed,
             )
         }),
         stats: facts.stats.clone(),
@@ -118,7 +130,18 @@ pub fn snapshot(facts: &Facts, text: &Text) -> PanelSnapshot {
             {
                 let (ok, detail) = match &facts.manager {
                     ManagerStatus::Ready { version: Some(v) } => {
-                        (true, format!("{} (v{v})", text.detail_ok))
+                        if let Some((installed, latest)) = &facts.ltk_update {
+                            (
+                                true,
+                                fill(
+                                    &fill(text.detail_manager_update, "installed", installed),
+                                    "latest",
+                                    latest,
+                                ),
+                            )
+                        } else {
+                            (true, format!("{} (v{v})", text.detail_ok))
+                        }
                     }
                     ManagerStatus::Ready { version: None } => (true, text.detail_ok.to_owned()),
                     ManagerStatus::Outdated { found, required } => (

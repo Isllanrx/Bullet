@@ -82,7 +82,7 @@ impl TrayController {
     }
 
     pub fn notify(&self, title: &str, body: &str) {
-        if !self.alive.load(Ordering::Relaxed) {
+        if !self.alive.load(Ordering::Relaxed) || !crate::preferences::NOTIFICATIONS.is_enabled() {
             return;
         }
         *self.balloon.lock().unwrap_or_else(|e| e.into_inner()) = Some(Balloon {

@@ -1,7 +1,7 @@
 import { Theme, ExposeLayer, Field, Hairline, StatusDot } from "../theme.slint";
 import { ComboBox } from "std-widgets.slint";
 import { ChromaGem, LobbyChoice, SkinRow, ModLine, OverlayLabels, SelectionOrigin } from "parts/overlay_types.slint";
-import { Tab, Track, HeaderButton, PinButton, Dice } from "parts/overlay_controls.slint";
+import { Tab, Track, HeaderButton, PinButton, Dice, FilterPill } from "parts/overlay_controls.slint";
 import { OverlayHeader } from "overlay_header.slint";
 import { SkinList } from "overlay_list.slint";
 import { ChromaPreview } from "overlay_preview.slint";
@@ -26,6 +26,9 @@ export component OverlayWindow inherits Window {
     in property <[ModLine]> mod-lines;
     in property <[string]> import-categories;
     in-out property <int> import-index;
+    in-out property <int> skin-filter: 0;
+    in property <[string]> mod-filters;
+    in-out property <int> mod-filter-index: 0;
     in property <string> empty-big;
     in property <string> empty-sub;
     in property <string> footer-right;
@@ -48,6 +51,8 @@ export component OverlayWindow inherits Window {
     callback choose(int);
     callback random();
     callback show-tab(bool);
+    callback skin-filter-changed(int);
+    callback mod-filter-changed(int);
     callback mod-clicked(string, string);
     callback import-mod(int);
     callback open-mods-folder();
@@ -74,6 +79,25 @@ export component OverlayWindow inherits Window {
     background: Theme.backdrop;
     default-font-family: Theme.sans;
     changed columns => { root.columns-changed(self.columns); }
+
+    FocusScope {
+        key-pressed(event) => {
+            if event.modifiers.control && (event.text == "f" || event.text == "F") {
+                search-field.take-focus();
+                return accept;
+            }
+            if event.modifiers.control && event.text == Key.Tab {
+                root.show-tab(!root.mods-tab);
+                return accept;
+            }
+            if event.text == Key.Escape && root.search != "" {
+                root.search = "";
+                root.search-edited("");
+                return accept;
+            }
+            reject
+        }
+    }
 
     VerticalLayout {
         header := OverlayHeader {
@@ -126,11 +150,13 @@ export component OverlayWindow inherits Window {
                     spacing: 2px;
                     Tab {
                         text: root.labels.tab-skins;
+                        icon: "M 8 1.8 L 9.6 6.2 L 14.2 7.8 L 9.6 9.4 L 8 14.2 L 6.4 9.4 L 1.8 7.8 L 6.4 6.2 Z";
                         active: !root.mods-tab;
                         clicked => { root.show-tab(false); }
                     }
                     Tab {
                         text: root.labels.tab-mods;
+                        icon: "M 8 2 L 14 5.2 L 8 8.4 L 2 5.2 Z M 2 8.2 L 8 11.4 L 14 8.2 M 2 11.2 L 8 14.4 L 14 11.2";
                         count: root.mods-count;
                         active: root.mods-tab;
                         clicked => { root.show-tab(true); }
@@ -165,6 +191,40 @@ export component OverlayWindow inherits Window {
                 label: root.labels.profile-delete;
                 icon: "M 1 2.5 L 10 2.5 M 4 2.5 L 4 1 L 7 1 L 7 2.5 M 2 2.5 L 2.8 10 L 8.2 10 L 9 2.5";
                 clicked => { root.profile-removed(); }
+            }
+        }
+        if !root.mods-tab: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 6px;
+            spacing: 5px;
+            FilterPill {
+                text: root.labels.filter-all;
+                active: root.skin-filter == 0;
+                clicked => { root.skin-filter = 0; root.skin-filter-changed(0); }
+            }
+            FilterPill {
+                text: root.labels.filter-chromas;
+                active: root.skin-filter == 1;
+                clicked => { root.skin-filter = 1; root.skin-filter-changed(1); }
+            }
+            FilterPill {
+                text: root.labels.filter-preset;
+                active: root.skin-filter == 2;
+                clicked => { root.skin-filter = 2; root.skin-filter-changed(2); }
+            }
+        }
+        if root.mods-tab && root.mod-filters.length > 0: HorizontalLayout {
+            vertical-stretch: 0;
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-bottom: 6px;
+            ComboBox {
+                model: root.mod-filters;
+                current-index <=> root.mod-filter-index;
+                horizontal-stretch: 1;
+                selected => { root.mod-filter-changed(self.current-index); }
             }
         }
         if root.lobby-champions.length > 1: HorizontalLayout {

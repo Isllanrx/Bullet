@@ -12,7 +12,7 @@ fn press(window: &StarGateWindow, label: &str) {
 #[test]
 fn every_dictionary_fills_the_window_without_empty_labels() {
     i_slint_backend_testing::init_no_event_loop();
-    for language in [Language::Portuguese, Language::Spanish, Language::English] {
+    for language in Language::ALL {
         let window = StarGateWindow::new().expect("star gate window");
         fill(&window, language.text());
         for label in [
@@ -24,6 +24,7 @@ fn every_dictionary_fills_the_window_without_empty_labels() {
             window.get_quit_label(),
             window.get_code_hint(),
             window.get_copy_code_label(),
+            window.get_copied_label(),
         ] {
             assert!(!label.is_empty(), "{language:?}");
         }

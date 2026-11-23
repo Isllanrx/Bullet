@@ -52,6 +52,8 @@ struct Overlay {
     catalog: Catalog,
     language: Language,
     search: String,
+    skin_filter: u8,
+    mod_filter: usize,
     mods_tab: bool,
     mods: ModsPanel,
     selected: Option<u32>,

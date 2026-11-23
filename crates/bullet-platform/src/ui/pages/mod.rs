@@ -1,3 +1,4 @@
+pub mod notice;
 pub mod overlay_window;
 pub mod panel;
 pub mod party_dialog;

@@ -13,7 +13,10 @@ fn empty_snapshot(repair: PanelRepair) -> PanelSnapshot {
         light_loading: false,
         in_client_ui: false,
         autostart: false,
+        reduce_motion: false,
+        notifications: true,
         update_line: None,
+        ltk_update_line: None,
         checks: Vec::new(),
         stats: PanelStats::default(),
         repair,
@@ -77,4 +80,81 @@ fn repair_buttons_show_loading_state_disable_clicks_and_render_result_banner() {
         .expect("client repair button re-enabled")
         .invoke_accessible_default_action();
     assert_eq!(*fired.borrow(), vec![PanelAction::RepairClient]);
+
+    render(
+        &window,
+        &PanelSnapshot {
+            ltk_update_line: Some("LTK Manager 1.34 disponível".into()),
+            ..empty_snapshot(PanelRepair::default())
+        },
+    );
+    window.set_tab(0);
+    ElementHandle::find_by_accessible_label(&window, text.ltk_update_download)
+        .next()
+        .expect("ltk update action button")
+        .invoke_accessible_default_action();
+    assert_eq!(fired.borrow().last(), Some(&PanelAction::OpenLtkRelease));
+
+    let picked_lang = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
+    let sink_lang = picked_lang.clone();
+    window.on_select_language(move |code| *sink_lang.borrow_mut() = code.into());
+    window.set_lang_code("PT".into());
+    let pill_label = format!("{} PT", text.panel_language_label);
+    ElementHandle::find_by_accessible_label(&window, &pill_label)
+        .next()
+        .expect("language pill button")
+        .invoke_accessible_default_action();
+    assert!(window.get_lang_open());
+    ElementHandle::find_by_accessible_label(&window, "JA")
+        .next()
+        .expect("JA language chip")
+        .invoke_accessible_default_action();
+    assert_eq!(picked_lang.borrow().as_str(), "JA");
+    assert!(!window.get_lang_open());
+}
+
+#[test]
+fn every_language_fills_every_label() {
+    for language in Language::ALL {
+        let labels = labels(language.text());
+        for (name, value) in [
+            ("home", &labels.tab_home),
+            ("options", &labels.tab_options),
+            ("party", &labels.tab_party),
+            ("help", &labels.tab_help),
+            ("all clear", &labels.all_clear),
+            ("attention", &labels.attention),
+            ("see diagnostics", &labels.see_diagnostics),
+            ("party hint", &labels.party_hint),
+            ("folders", &labels.section_folders),
+            ("diagnostics", &labels.section_diagnostics),
+            ("injection", &labels.injection),
+            ("random", &labels.random_skin),
+            ("light", &labels.light_loading),
+            ("in client", &labels.in_client_ui),
+            ("mode title", &labels.mode_title),
+            ("mode window", &labels.mode_window),
+            ("mode client", &labels.mode_client),
+            ("accept", &labels.auto_accept),
+            ("autostart", &labels.autostart),
+            ("create", &labels.party_create),
+            ("join", &labels.party_join),
+            ("leave", &labels.party_leave),
+            ("about", &labels.about),
+            ("open project", &labels.open_project),
+            ("project star hint", &labels.project_star_hint),
+            ("quit", &labels.quit),
+            ("mark", &labels.mark_problem),
+            ("export", &labels.export_diagnostics),
+            ("repair skins", &labels.repair_skins),
+            ("repair client", &labels.repair_client),
+            ("repair running", &labels.repair_running),
+            ("language label", &labels.language_label),
+            ("pick ltk", &labels.pick_ltk),
+            ("reduce motion", &labels.reduce_motion),
+            ("reset defaults", &labels.reset_defaults),
+        ] {
+            assert!(!value.is_empty(), "{language:?} {name}");
+        }
+    }
 }

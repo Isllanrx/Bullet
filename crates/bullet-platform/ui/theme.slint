@@ -36,6 +36,10 @@ export global Theme {
     out property <length> text-base: 13px;
     out property <length> text-lg: 15px;
     out property <length> text-xl: 22px;
+    in-out property <bool> reduced-motion: false;
+    out property <duration> dur-fast: root.reduced-motion ? 0ms : 120ms;
+    out property <duration> dur-base: root.reduced-motion ? 0ms : 170ms;
+    out property <duration> dur-slow: root.reduced-motion ? 0ms : 240ms;
 }
 
 export component ExposeLayer inherits Rectangle {
@@ -104,8 +108,26 @@ export component StatusDot inherits Rectangle {
     drop-shadow-color: Theme.cyan;
 }
 
+export component Glyph inherits Path {
+    in property <string> icon;
+    in property <length> size: 14px;
+    in property <brush> tint: Theme.gold;
+    in property <length> thickness: 1.5px;
+    width: root.size;
+    height: root.size;
+    viewbox-width: 16;
+    viewbox-height: 16;
+    stroke: root.tint;
+    stroke-width: root.thickness;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+    fill: transparent;
+    commands: root.icon;
+}
+
 export component GoldButton inherits Rectangle {
     in property <string> text;
+    in property <string> icon;
     in property <bool> enabled: true;
     in property <bool> primary;
     in property <bool> danger;
@@ -114,7 +136,8 @@ export component GoldButton inherits Rectangle {
     callback clicked();
     property <bool> hot: touch.has-hover && root.enabled;
     property <bool> focused: keys.has-focus && root.enabled;
-    min-width: root.hug ? label.preferred-width + 28px : 0px;
+    property <color> fg: !root.enabled ? Theme.muted : root.primary ? #0a1428 : root.danger ? #f2b8b2 : Theme.gold-bright;
+    min-width: root.hug ? content.preferred-width + 26px : 0px;
     min-height: 32px;
     vertical-stretch: 0;
     horizontal-stretch: 1;
@@ -125,20 +148,33 @@ export component GoldButton inherits Rectangle {
     drop-shadow-blur: root.primary ? (root.hot ? 12px : 6px) : 0px;
     drop-shadow-color: Theme.gold.with-alpha(root.hot ? 0.45 : 0.25);
     opacity: root.enabled ? 1 : 0.45;
-    animate border-color, drop-shadow-blur { duration: 150ms; }
-    label := Text {
-        x: 12px;
+    animate border-color, drop-shadow-blur { duration: Theme.dur-base; }
+    content := HorizontalLayout {
+        x: 10px;
         y: touch.pressed && root.enabled ? 1px : 0px;
-        width: parent.width - 24px;
+        width: parent.width - 20px;
         height: parent.height;
-        text: root.text;
-        color: root.primary ? #0a1428 : root.danger ? #f2b8b2 : Theme.gold-bright;
-        font-family: Theme.sans;
-        font-size: root.font-size;
-        font-weight: root.primary ? 700 : 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        overflow: elide;
+        alignment: center;
+        spacing: 7px;
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            Glyph {
+                icon: root.icon;
+                size: 13px;
+                tint: root.fg;
+                thickness: 1.55px;
+            }
+        }
+        Text {
+            text: root.text;
+            color: root.fg;
+            font-family: Theme.sans;
+            font-size: root.font-size;
+            font-weight: root.primary ? 700 : 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
     }
     keys := FocusScope {
         enabled: root.enabled;
@@ -152,7 +188,7 @@ export component GoldButton inherits Rectangle {
     }
     touch := TouchArea {
         enabled: root.enabled;
-        mouse-cursor: pointer;
+        mouse-cursor: root.enabled ? pointer : default;
         clicked => { root.clicked(); }
     }
     accessible-role: button;
@@ -173,7 +209,7 @@ export component Switch inherits Rectangle {
     border-radius: self.height / 2;
     border-width: 0;
     background: root.checked ? Theme.gold-dim : #2a3446;
-    animate background { duration: 150ms; }
+    animate background { duration: Theme.dur-base; }
     Rectangle {
         y: 3px;
         x: root.checked ? root.width - self.width - 3px : 3px;
@@ -181,7 +217,7 @@ export component Switch inherits Rectangle {
         height: self.width;
         border-radius: self.width / 2;
         background: root.checked ? Theme.gold-bright : Theme.muted;
-        animate x { duration: 200ms; easing: ease-out-back; }
+        animate x { duration: Theme.dur-base; easing: ease-out-back; }
     }
 }
 
@@ -200,7 +236,9 @@ export component CheckGlyph inherits Path {
     viewbox-width: 10;
     viewbox-height: 10;
     stroke: Theme.gold;
-    stroke-width: 1.6px;
+    stroke-width: 1.65px;
+    stroke-line-cap: round;
+    stroke-line-join: round;
     fill: transparent;
     commands: "M 1.5 5.2 L 4 7.6 L 8.5 2.4";
 }
@@ -211,7 +249,9 @@ export component SearchGlyph inherits Path {
     viewbox-width: 13;
     viewbox-height: 13;
     stroke: Theme.muted-dim;
-    stroke-width: 1.4px;
+    stroke-width: 1.45px;
+    stroke-line-cap: round;
+    stroke-line-join: round;
     fill: transparent;
     commands: "M 5.5 1 A 4.5 4.5 0 1 1 5.49 1 Z M 8.8 8.8 L 12 12";
 }
@@ -237,7 +277,7 @@ export component Field inherits Rectangle {
     background: root.monospace ? Theme.input : #0a111c;
     drop-shadow-blur: input.has-focus ? 10px : 0px;
     drop-shadow-color: Theme.gold.with-alpha(0.25);
-    animate border-color, drop-shadow-blur { duration: 200ms; }
+    animate border-color, drop-shadow-blur { duration: Theme.dur-base; }
     if root.search-icon: SearchGlyph {
         x: 11px;
         y: (parent.height - self.height) / 2;

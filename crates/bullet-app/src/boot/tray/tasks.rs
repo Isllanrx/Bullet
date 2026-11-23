@@ -1,6 +1,49 @@
 use tracing::{debug, info, warn};
 
-use crate::boot::panel::tray_status;
+pub fn tray_status(
+    state: &bullet_core::state::AppState,
+    tools_missing: bool,
+    text: &'static bullet_platform::i18n::Text,
+) -> &'static str {
+    use bullet_core::phase::GamePhase;
+    use bullet_core::state::InjectionStatus;
+
+    if tools_missing {
+        return text.status_tools_missing;
+    }
+    if !state.lcu_connected {
+        return text.status_waiting_league;
+    }
+    match state.phase {
+        GamePhase::Lobby => text.status_lobby,
+        GamePhase::Matchmaking | GamePhase::CheckedIntoTournament => text.status_matchmaking,
+        GamePhase::ReadyCheck => text.status_ready_check,
+        GamePhase::ChampSelect => text.status_champ_select,
+        GamePhase::Finalization => text.status_finalization,
+
+        GamePhase::GameStart | GamePhase::InProgress => match state.injection {
+            InjectionStatus::Pending => text.status_injecting,
+            InjectionStatus::Confirmed => text.status_in_game_confirmed,
+            InjectionStatus::Unconfirmed => text.status_in_game_unconfirmed,
+            InjectionStatus::PatcherExited { code }
+                if bullet_inject::pipeline::closed_by_another_program(code) =>
+            {
+                text.status_in_game_patcher_killed
+            }
+            InjectionStatus::Failed { .. } | InjectionStatus::PatcherExited { .. } => {
+                text.status_in_game_failed
+            }
+            InjectionStatus::Idle => text.status_in_game,
+        },
+        GamePhase::Reconnect => text.status_reconnecting,
+        GamePhase::None
+        | GamePhase::WaitingForStats
+        | GamePhase::PreEndOfGame
+        | GamePhase::EndOfGame
+        | GamePhase::FailedToLaunch
+        | GamePhase::TerminatedInError => text.status_connected,
+    }
+}
 
 pub fn spawn_custom_mods_notice(
     supervisor: &mut bullet_core::supervisor::Supervisor,
@@ -51,6 +94,28 @@ pub fn spawn_update_check(
     };
     supervisor.spawn("update-check", move |child_token| {
         bullet_app::update_check::run(check, state_rx_update, child_token)
+    });
+}
+
+pub fn spawn_ltk_update_check(
+    supervisor: &mut bullet_core::supervisor::Supervisor,
+    offer: crate::boot::update::UpdateOffer,
+    ltk_notice: &bullet_app::ltk_update::LtkUpdateNotice,
+) {
+    let state_rx_ltk = offer.state_rx.clone();
+    let check = bullet_app::ltk_update::LtkUpdateCheck {
+        state_dir: offer.state_dir.clone(),
+        notice: ltk_notice.clone(),
+        notify: Box::new(move |installed, latest| {
+            Box::pin(crate::boot::update::offer_ltk(
+                offer.clone(),
+                installed,
+                latest,
+            ))
+        }),
+    };
+    supervisor.spawn("ltk-update-check", move |child_token| {
+        bullet_app::ltk_update::run(check, state_rx_ltk, child_token)
     });
 }
 

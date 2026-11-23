@@ -1,4 +1,4 @@
-import { Theme, ExposeLayer, GoldButton, Diamond, Wordmark, Halo, Surface } from "theme.slint";
+import { Theme, ExposeLayer, GoldButton, Diamond, Wordmark, Halo, Surface, Glyph } from "theme.slint";
 
 export component WelcomeWindow inherits Window {
     in property <bool> expose-flip;
@@ -34,7 +34,7 @@ export component WelcomeWindow inherits Window {
     content := VerticalLayout {
         y: root.shown ? 0px : 8px;
         opacity: root.shown ? 1 : 0;
-        animate opacity, y { duration: 250ms; easing: ease-out; }
+        animate opacity, y { duration: Theme.dur-slow; easing: ease-out; }
         padding-left: 28px;
         padding-right: 28px;
         padding-top: 22px;
@@ -150,6 +150,168 @@ export component WelcomeWindow inherits Window {
                 font-size: Theme.text-base;
                 text: root.project-label;
                 clicked => { root.open-project(); }
+            }
+        }
+    }
+
+    ExposeLayer {
+        flip: root.expose-flip;
+    }
+}
+
+export component NoticeDialog inherits Window {
+    in property <bool> expose-flip;
+    in property <string> version;
+    in property <int> kind;
+    in property <string> badge;
+    in property <string> heading;
+    in property <string> body;
+    in property <string> confirm-label;
+    in property <string> cancel-label;
+    callback confirm();
+    callback cancel();
+    property <bool> shown;
+    title: root.heading != "" ? root.heading : "Bullet";
+    icon: @image-url("assets/logo.png");
+    preferred-width: 470px;
+    preferred-height: 310px;
+    min-width: 380px;
+    min-height: 240px;
+    background: Theme.backdrop;
+    default-font-family: Theme.sans;
+    forward-focus: keys;
+    init => { root.shown = true; }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return {
+                root.confirm();
+                return accept;
+            }
+            if event.text == Key.Escape {
+                if root.cancel-label != "" {
+                    root.cancel();
+                } else {
+                    root.confirm();
+                }
+                return accept;
+            }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        y: root.shown ? 0px : 8px;
+        opacity: root.shown ? 1 : 0;
+        animate opacity, y { duration: Theme.dur-slow; easing: ease-out; }
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 20px;
+        padding-bottom: 22px;
+        spacing: 14px;
+        Rectangle {
+            height: 60px;
+            Halo {
+                x: -64px;
+                y: -60px;
+                size: 180px;
+            }
+            HorizontalLayout {
+                spacing: 14px;
+                Image {
+                    source: @image-url("assets/logo-40.png");
+                    width: 42px;
+                    height: 42px;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 4px;
+                    Wordmark {
+                        version: root.version;
+                        size: 11px;
+                    }
+                    Text {
+                        text: root.heading;
+                        color: Theme.gold-bright;
+                        font-family: Theme.serif;
+                        font-size: 17px;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+        Surface {
+            vertical-stretch: 1;
+            border-color: root.kind == 1 ? #6b2b32 : root.kind == 2 ? Theme.gold-dim : Theme.surface-line;
+            VerticalLayout {
+                padding-top: 14px;
+                padding-bottom: 14px;
+                padding-left: 18px;
+                padding-right: 18px;
+                spacing: 10px;
+                alignment: start;
+                if root.badge != "": HorizontalLayout {
+                    alignment: start;
+                    Rectangle {
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: root.kind == 1 ? Theme.danger.with-alpha(0.45) : root.kind == 2 ? Theme.gold.with-alpha(0.4) : Theme.cyan.with-alpha(0.3);
+                        background: root.kind == 1 ? Theme.danger.with-alpha(0.12) : root.kind == 2 ? Theme.gold.with-alpha(0.1) : Theme.cyan.with-alpha(0.08);
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 10px;
+                            padding-top: 3px;
+                            padding-bottom: 3px;
+                            spacing: 6px;
+                            VerticalLayout {
+                                alignment: center;
+                                Glyph {
+                                    size: 12px;
+                                    tint: root.kind == 1 ? Theme.danger : root.kind == 2 ? Theme.gold : Theme.cyan;
+                                    icon: root.kind == 1 ? "M 8 2.2 L 14.2 13.2 L 1.8 13.2 Z M 8 6.4 L 8 9.6 M 8 11.4 L 8 11.8" : root.kind == 2 ? "M 8 1.8 L 9.6 6.2 L 14.2 7.8 L 9.6 9.4 L 8 14.2 L 6.4 9.4 L 1.8 7.8 L 6.4 6.2 Z" : "M 8 2 A 6 6 0 1 1 7.99 2 Z M 8 7 L 8 11.2 M 8 4.8 L 8 5.2";
+                                }
+                            }
+                            Text {
+                                text: root.badge;
+                                color: root.kind == 1 ? Theme.danger-text : root.kind == 2 ? Theme.gold-bright : Theme.cyan;
+                                font-size: Theme.text-xs;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+                Text {
+                    text: root.body;
+                    color: Theme.text;
+                    font-size: Theme.text-base;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 10px;
+            if root.cancel-label != "": GoldButton {
+                hug: true;
+                min-width: 112px;
+                min-height: 36px;
+                horizontal-stretch: 0;
+                font-size: Theme.text-md;
+                text: root.cancel-label;
+                clicked => { root.cancel(); }
+            }
+            GoldButton {
+                hug: true;
+                min-width: 128px;
+                min-height: 36px;
+                horizontal-stretch: 0;
+                primary: true;
+                font-size: Theme.text-md;
+                text: root.confirm-label;
+                clicked => { root.confirm(); }
             }
         }
     }

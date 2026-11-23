@@ -157,7 +157,10 @@ impl OverlaySession {
                 }));
                 info!("Party: joined lobby sharing from in-client button");
             }
-            OverlayCommand::OpenModsFolder => self.open_mods_folder(),
+            OverlayCommand::OpenModsFolder => {
+                self.global_mods_loaded = false;
+                self.open_mods_folder();
+            }
             OverlayCommand::OpenPanel => {
                 if let Some(links) = self.panel_links.clone() {
                     bullet_platform::panel::show_panel(links);
@@ -272,7 +275,9 @@ impl OverlaySession {
         if !self.global_mods_loaded {
             let roots = self.mods.roots.clone();
             let scanned = tokio::task::spawn_blocking(move || {
-                bullet_core::mods::scan_catalog(&roots, None, &|_| true)
+                let mut cat = bullet_core::mods::scan_catalog(&roots, None, &|_| true);
+                cat.skin = bullet_core::mods::scan_all_skin_mods(&roots);
+                cat
             })
             .await
             .unwrap_or_default();

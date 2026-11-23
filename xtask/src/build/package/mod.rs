@@ -178,9 +178,15 @@ pub(crate) fn run_package() {
         );
     }
 
+    let fallback_list = bullet_party::config::FALLBACK_RELAY_URLS
+        .iter()
+        .map(|u| format!("    \"{u}\""))
+        .collect::<Vec<_>>()
+        .join(",\n");
     let default_party_json = format!(
-        "{{\n  \"relay_url\": \"{}\"\n}}\n",
-        bullet_party::config::DEFAULT_RELAY_URL
+        "{{\n  \"relay_url\": \"{}\",\n  \"fallback_relay_urls\": [\n{}\n  ]\n}}\n",
+        bullet_party::config::DEFAULT_RELAY_URL,
+        fallback_list
     );
     std::fs::write(dist_dir.join("party.json"), default_party_json)
         .expect("write default party.json");

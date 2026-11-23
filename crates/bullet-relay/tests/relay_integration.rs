@@ -113,8 +113,12 @@ async fn test_relay_e2e_two_clients() {
 }
 
 #[tokio::test]
-async fn test_a_sixth_member_is_refused_with_409_and_the_client_gives_up() {
-    assert_eq!(bullet_relay::MAX_MEMBERS, 5, "one League team per room");
+async fn test_an_eleventh_member_is_refused_with_409_and_the_client_gives_up() {
+    assert_eq!(
+        bullet_relay::MAX_MEMBERS,
+        10,
+        "full 5v5 custom lobby per room"
+    );
 
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -149,8 +153,8 @@ async fn test_a_sixth_member_is_refused_with_409_and_the_client_gives_up() {
         Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
             assert_eq!(response.status().as_u16(), 409, "a full room answers 409");
         }
-        Err(e) => panic!("the sixth member must get 409, got: {e}"),
-        Ok(_) => panic!("the sixth member must be refused"),
+        Err(e) => panic!("the eleventh member must get 409, got: {e}"),
+        Ok(_) => panic!("the eleventh member must be refused"),
     }
 
     let (tx, rx) = new_state_channel();

@@ -12,8 +12,8 @@ pub use os::{
 #[cfg(target_os = "macos")]
 pub use ui::run_interface_on_main_thread;
 pub use ui::{
-    clipboard, dialog, hotkey, i18n, overlay_window, panel, party_dialog, shell, star_gate, tray,
-    welcome,
+    clipboard, dialog, hotkey, i18n, notice, overlay_window, panel, party_dialog, shell, star_gate,
+    tray, welcome,
 };
 
 pub mod error;

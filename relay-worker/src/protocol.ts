@@ -4,7 +4,7 @@ export interface SealedBlob {
   c: string;
 }
 
-export const MAX_MEMBERS = 5;
+export const MAX_MEMBERS = 10;
 export const MAX_MESSAGE_BYTES = 8 * 1024;
 export const MAX_NONCE_CHARS = 64;
 export const MAX_CIPHERTEXT_CHARS = 4096;

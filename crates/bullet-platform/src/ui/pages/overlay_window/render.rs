@@ -12,6 +12,8 @@ impl Overlay {
             catalog: Catalog::default(),
             language: Language::for_locale(None),
             search: String::new(),
+            skin_filter: 0,
+            mod_filter: 0,
             mods_tab: false,
             mods: ModsPanel::default(),
             selected: None,
@@ -86,7 +88,10 @@ impl Overlay {
     }
 
     pub(super) fn set_catalog(&mut self, catalog: Catalog) {
-        self.language = Language::for_locale(catalog.locale.as_deref());
+        self.language = crate::i18n::effective_language(catalog.locale.as_deref());
+        self.view
+            .global::<views::Theme>()
+            .set_reduced_motion(crate::preferences::REDUCE_MOTION.is_enabled());
         let mut tiles = HashMap::new();
         let mut undecodable = 0usize;
         let mut first_undecodable = None;
@@ -153,13 +158,21 @@ impl Overlay {
             connected: text.overlay_connected.into(),
             import_mod: text.overlay_import_mod.into(),
             open_folder: text.overlay_open_folder.into(),
+            filter_all: text.overlay_filter_all.into(),
+            filter_chromas: text.overlay_filter_chromas.into(),
+            filter_preset: text.overlay_filter_preset.into(),
         });
         let categories: Vec<SharedString> = model::import_categories()
             .into_iter()
             .map(|category| model::category_label(category, text).into())
             .collect();
         self.view
-            .set_import_categories(ModelRc::new(VecModel::from(categories)));
+            .set_import_categories(ModelRc::new(VecModel::from(categories.clone())));
+        let mut mod_filters = Vec::with_capacity(categories.len() + 1);
+        mod_filters.push(SharedString::from(text.overlay_filter_all));
+        mod_filters.extend(categories);
+        self.view
+            .set_mod_filters(ModelRc::new(VecModel::from(mod_filters)));
     }
 
     pub(super) fn render_all(&mut self) {
@@ -214,10 +227,15 @@ impl Overlay {
     }
 
     pub(super) fn render_rows(&self) {
-        let cards: Vec<SkinCard> = model::visible_skins(&self.catalog, &self.search)
-            .into_iter()
-            .map(|skin| self.card(skin))
-            .collect();
+        let cards: Vec<SkinCard> = view::filtered_skins(
+            &self.catalog,
+            &self.search,
+            self.skin_filter,
+            self.presets.preset_entry,
+        )
+        .into_iter()
+        .map(|skin| self.card(skin))
+        .collect();
         let rows: Vec<SkinRow> = model::chunk(&cards, self.columns)
             .into_iter()
             .map(|cards| SkinRow {
@@ -256,12 +274,8 @@ impl Overlay {
 
     pub(super) fn render_mods(&self) {
         let text = self.text();
-        let lines = model::mod_lines(
-            &self.mods.available,
-            &self.mods.selection,
-            &self.search,
-            text,
-        );
+        let filtered = view::filtered_mod_catalog(&self.mods.available, self.mod_filter);
+        let lines = model::mod_lines(&filtered, &self.mods.selection, &self.search, text);
         self.view.set_mod_lines(ModelRc::new(VecModel::from(lines)));
         let count = model::selected_count(&self.mods.selection);
         self.view.set_mods_count(if count == 0 {

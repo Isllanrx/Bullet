@@ -40,6 +40,7 @@ async fn run() -> Result<()> {
     let state_dir_path = state_dir_resolved
         .as_ref()
         .map_or_else(|_| std::env::temp_dir().join("Bullet_state"), Clone::clone);
+    bullet_platform::i18n::init_language_store(&state_dir_path);
 
     let mut lock_failure = None;
     let instance_guard = match bullet_platform::single_instance::SingleInstanceGuard::acquire(
@@ -191,6 +192,10 @@ async fn run() -> Result<()> {
         enabled = in_client_ui,
         "In-client skin selection setting loaded"
     );
+    let reduce_motion = bullet_platform::preferences::load_reduce_motion();
+    info!(enabled = reduce_motion, "Reduced motion setting loaded");
+    let notifications = bullet_platform::preferences::NOTIFICATIONS.load();
+    info!(enabled = notifications, "Notifications setting loaded");
 
     let update_notice = bullet_app::update_check::UpdateNotice::default();
     let live_game = bullet_app::live_game::LiveGame::default();
@@ -228,6 +233,7 @@ async fn run() -> Result<()> {
             }));
         }
         let repair_state = bullet_app::control_panel::RepairState::default();
+        let ltk_update_notice = bullet_app::ltk_update::LtkUpdateNotice::default();
         let links = boot::panel::panel_links_for(
             &tray_controller,
             state_rx.clone(),
@@ -236,6 +242,7 @@ async fn run() -> Result<()> {
             elevated,
             boot::panel::ReleaseNotices {
                 bullet: update_notice.clone(),
+                ltk: ltk_update_notice.clone(),
                 custom_mods: custom_mods_notice.clone(),
                 repair: repair_state.clone(),
             },
@@ -287,17 +294,15 @@ async fn run() -> Result<()> {
                 .ok()
                 .as_deref(),
         ) {
-            boot::tasks::spawn_update_check(
-                &mut supervisor,
-                boot::update::UpdateOffer {
-                    tray: tray_controller.clone(),
-                    state_dir: state_dir_path.clone(),
-                    state_rx: state_rx.clone(),
-                    pending: pending_update.clone(),
-                    shutdown: shutdown_token.clone(),
-                },
-                &update_notice,
-            );
+            let update_offer = boot::update::UpdateOffer {
+                tray: tray_controller.clone(),
+                state_dir: state_dir_path.clone(),
+                state_rx: state_rx.clone(),
+                pending: pending_update.clone(),
+                shutdown: shutdown_token.clone(),
+            };
+            boot::tasks::spawn_update_check(&mut supervisor, update_offer.clone(), &update_notice);
+            boot::tasks::spawn_ltk_update_check(&mut supervisor, update_offer, &ltk_update_notice);
         } else {
             info!("Update check turned off (BULLET_UPDATE_CHECK)");
         }

@@ -3,6 +3,7 @@ use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use bullet_app::ltk_update;
 use bullet_app::self_update::{self, Offer, PendingUpdate, StagedSetup};
 use bullet_app::update_check;
 use bullet_core::phase::GamePhase;
@@ -102,9 +103,70 @@ async fn ask(ctx: &UpdateOffer, version: &str) -> Option<bool> {
     let text = i18n::text();
     let title = i18n::fill(text.update_offer_title, "version", version);
     let body = i18n::fill(text.update_offer_body, "version", version);
+    ask_dialog(
+        ctx,
+        title,
+        body,
+        text.panel_update_download.to_owned(),
+        text.notice_btn_no.to_owned(),
+    )
+    .await
+}
+
+pub async fn offer_ltk(ctx: UpdateOffer, installed: String, latest: String) {
+    let text = i18n::text();
+    let title = i18n::fill(text.ltk_update_title, "latest", &latest);
+    let body = i18n::fill(
+        &i18n::fill(text.ltk_update_body, "latest", &latest),
+        "installed",
+        &installed,
+    );
+    match ask_dialog(
+        &ctx,
+        title,
+        body,
+        text.ltk_update_download.to_owned(),
+        text.notice_btn_no.to_owned(),
+    )
+    .await
+    {
+        Some(true) => {
+            info!(
+                installed,
+                latest, "The user chose to download the newer LTK Manager"
+            );
+            ltk_update::remember_notified(&ctx.state_dir, &latest);
+            if let Err(e) = bullet_platform::shell::open_web_page(ltk_update::LTK_RELEASES_PAGE) {
+                warn!(error = %e, "Could not open the LTK Manager download page");
+            }
+        }
+        Some(false) => {
+            info!(
+                installed,
+                latest, "The user declined the LTK Manager update notice"
+            );
+            ltk_update::remember_notified(&ctx.state_dir, &latest);
+        }
+        None => {
+            info!(
+                latest,
+                "The LTK Manager update dialog closed unanswered; it will be offered later"
+            );
+        }
+    }
+}
+
+async fn ask_dialog(
+    ctx: &UpdateOffer,
+    title: String,
+    body: String,
+    confirm: String,
+    cancel: String,
+) -> Option<bool> {
     let dialog_title = title.clone();
     let mut question = tokio::task::spawn_blocking(move || {
-        bullet_platform::shell::message_box_question(&title, &body)
+        bullet_platform::notice::ask_action(&title, &body, &confirm, &cancel)
+            .unwrap_or_else(|_| bullet_platform::shell::message_box_question(&title, &body))
     });
     let mut state_rx = ctx.state_rx.clone();
     loop {
