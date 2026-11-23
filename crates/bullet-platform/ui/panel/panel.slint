@@ -111,22 +111,22 @@ export component ControlPanel inherits Window {
                     padding: 4px; spacing: 2px;
                     home := PanelTab {
                         text: root.labels.tab-home;
-                        icon: "M 2 7.5 L 8 2.5 L 14 7.5 M 4 6.5 L 4 13.5 L 12 13.5 L 12 6.5";
+                        icon: "M 2.5 7.5 L 8 2.5 L 13.5 7.5 M 4 6.5 L 4 13.5 L 12 13.5 L 12 6.5 M 6.8 13.5 L 6.8 9.8 L 9.2 9.8 L 9.2 13.5";
                         active: root.tab == 0; clicked => { root.tab = 0; }
                     }
                     skins := PanelTab {
                         text: root.labels.tab-options;
-                        icon: "M 8 2 L 14 5.5 L 8 9 L 2 5.5 Z M 2 9 L 8 12.5 L 14 9";
+                        icon: "M 2 4.5 L 14 4.5 M 2 8 L 14 8 M 2 11.5 L 14 11.5 M 5.5 3 L 5.5 6 M 10.5 6.5 L 10.5 9.5 M 6.5 10 L 6.5 13";
                         active: root.tab == 1; clicked => { root.tab = 1; }
                     }
                     party := PanelTab {
                         text: root.labels.tab-party;
-                        icon: "M 6 7 A 2.5 2.5 0 1 1 5.99 7 Z M 11.5 7.5 A 2 2 0 1 1 11.49 7.5 Z M 2 13.5 C 2 11 3.8 9.8 6 9.8 C 8.2 9.8 10 11 10 13.5 M 10 10.5 C 12 10.5 14 11.4 14 13.5";
+                        icon: "M 5.8 7.2 A 2.3 2.3 0 1 1 5.79 7.2 Z M 11.2 7.6 A 1.9 1.9 0 1 1 11.19 7.6 Z M 1.8 13.5 C 1.8 11 3.6 9.8 5.8 9.8 C 8 9.8 9.8 11 9.8 13.5 M 10 10.4 C 12 10.4 14 11.4 14 13.5";
                         active: root.tab == 2; clicked => { root.tab = 2; }
                     }
                     support := PanelTab {
                         text: root.labels.tab-help;
-                        icon: "M 8 2 L 13.5 4.2 L 13.5 8.5 C 13.5 11.4 11.1 13.2 8 14.2 C 4.9 13.2 2.5 11.4 2.5 8.5 L 2.5 4.2 Z";
+                        icon: "M 8 2 L 13.5 4.2 L 13.5 8.4 C 13.5 11.4 11 13.2 8 14.2 C 5 13.2 2.5 11.4 2.5 8.4 L 2.5 4.2 Z M 6.2 8.2 L 7.5 9.5 L 10.2 6.8";
                         active: root.tab == 3; badge: root.attention; clicked => { root.tab = 3; }
                     }
                 }
@@ -176,6 +176,7 @@ export component ControlPanel inherits Window {
                         spacing: 12px;
                         Section {
                             heading: root.labels.section-match;
+                            icon: "M 8 1.8 L 9.6 6.2 L 14.2 7.8 L 9.6 9.4 L 8 14.2 L 6.4 9.4 L 1.8 7.8 L 6.4 6.2 Z";
                             Toggle {
                                 divider: false; label: root.labels.random-skin; hint: root.labels.random-skin-hint;
                                 checked: root.random-skin; toggled => { root.action(PanelAction.toggle-random-skin); }
@@ -195,6 +196,7 @@ export component ControlPanel inherits Window {
                         }
                         Section {
                             heading: root.labels.section-interface;
+                            icon: "M 2 3 L 14 3 L 14 13 L 2 13 Z M 2 6.2 L 14 6.2 M 6.2 6.2 L 6.2 13";
                             Toggle {
                                 divider: false; label: root.labels.notifications; hint: root.labels.notifications-hint;
                                 checked: root.notifications; toggled => { root.action(PanelAction.toggle-notifications); }
@@ -212,10 +214,13 @@ export component ControlPanel inherits Window {
                         }
                         GoldButton {
                             text: root.labels.reset-defaults;
+                            icon: "M 3 8 A 5 5 0 1 1 4.8 11.8 M 3 4.2 L 3 8 L 6.8 8";
                             clicked => { root.action(PanelAction.reset-defaults); }
                         }
                     }
                     if root.tab == 2: Section {
+                        heading: root.labels.tab-party;
+                        icon: "M 5.8 7.2 A 2.3 2.3 0 1 1 5.79 7.2 Z M 11.2 7.6 A 1.9 1.9 0 1 1 11.19 7.6 Z M 1.8 13.5 C 1.8 11 3.6 9.8 5.8 9.8 C 8 9.8 9.8 11 9.8 13.5 M 10 10.4 C 12 10.4 14 11.4 14 13.5";
                         HorizontalLayout {
                             spacing: 10px; alignment: start;
                             VerticalLayout { alignment: center; StatusDot { online: root.in-room; } }
@@ -231,15 +236,16 @@ export component ControlPanel inherits Window {
                         }
                         if !root.in-room: HorizontalLayout {
                             spacing: 8px;
-                            GoldButton { text: root.labels.party-create; primary: true; clicked => { root.action(PanelAction.party-create); } }
-                            GoldButton { text: root.labels.party-join; clicked => { root.action(PanelAction.party-join); } }
+                            GoldButton { text: root.labels.party-create; icon: "M 8 3 L 8 13 M 3 8 L 13 8"; primary: true; clicked => { root.action(PanelAction.party-create); } }
+                            GoldButton { text: root.labels.party-join; icon: "M 6 3 L 13 3 L 13 13 L 6 13 M 2 8 L 10 8 M 7.5 5.5 L 10 8 L 7.5 10.5"; clicked => { root.action(PanelAction.party-join); } }
                         }
-                        if root.in-room: GoldButton { text: root.labels.party-leave; danger: true; clicked => { root.action(PanelAction.party-leave); } }
+                        if root.in-room: GoldButton { text: root.labels.party-leave; icon: "M 9 3 L 3 3 L 3 13 L 9 13 M 14 8 L 6 8 M 11.5 5.5 L 14 8 L 11.5 10.5"; danger: true; clicked => { root.action(PanelAction.party-leave); } }
                     }
                     if root.tab == 3: VerticalLayout {
                         spacing: 12px;
                         Section {
                             heading: root.labels.section-diagnostics;
+                            icon: "M 8 2 L 13.5 4.2 L 13.5 8.4 C 13.5 11.4 11 13.2 8 14.2 C 5 13.2 2.5 11.4 2.5 8.4 L 2.5 4.2 Z M 6.2 8.2 L 7.5 9.5 L 10.2 6.8";
                             VerticalLayout { spacing: 8px; for check in root.checks: CheckRow { check: check; } }
                             Rectangle { height: 1px; background: Theme.surface-line; }
                             Text { text: root.labels.mark-problem-hint; color: Theme.muted; font-size: Theme.text-sm; wrap: word-wrap; }
@@ -247,14 +253,16 @@ export component ControlPanel inherits Window {
                                 spacing: 8px;
                                 GoldButton {
                                     text: root.repair-skins-busy ? root.labels.repair-running : root.labels.repair-skins;
+                                    icon: "M 3 8 A 5 5 0 1 1 4.8 11.8 M 3 4.2 L 3 8 L 6.8 8";
                                     enabled: !root.repair-skins-busy; clicked => { root.action(PanelAction.repair-skins); }
                                 }
                                 GoldButton {
                                     text: root.repair-client-busy ? root.labels.repair-running : root.labels.repair-client;
+                                    icon: "M 12.8 4.6 A 3.4 3.4 0 0 1 8.5 8.9 L 4 13.4 L 2.6 12 L 7.1 7.5 A 3.4 3.4 0 0 1 11.4 3.2 L 9.5 5.1 L 10.9 6.5 Z";
                                     enabled: !root.repair-client-busy; clicked => { root.action(PanelAction.repair-client); }
                                 }
                             }
-                            GoldButton { text: root.labels.pick-ltk; clicked => { root.action(PanelAction.pick-ltk-manager); } }
+                            GoldButton { text: root.labels.pick-ltk; icon: "M 2 4.2 L 6.4 4.2 L 8 5.8 L 14 5.8 L 14 13 L 2 13 Z"; clicked => { root.action(PanelAction.pick-ltk-manager); } }
                             if root.repair-message != "": RepairBanner {
                                 state: root.repair-state; text: root.repair-message;
                                 copy-label: root.labels.copy-error; copied-label: root.labels.copied; logs-label: root.labels.open-logs;
@@ -263,21 +271,22 @@ export component ControlPanel inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 8px;
-                                GoldButton { text: root.labels.mark-problem; clicked => { root.action(PanelAction.mark-problem); } }
-                                GoldButton { text: root.labels.export-diagnostics; primary: true; clicked => { root.action(PanelAction.export-diagnostics); } }
+                                GoldButton { text: root.labels.mark-problem; icon: "M 8 2.2 L 14.2 13.2 L 1.8 13.2 Z M 8 6.4 L 8 9.6 M 8 11.4 L 8 11.8"; clicked => { root.action(PanelAction.mark-problem); } }
+                                GoldButton { text: root.labels.export-diagnostics; icon: "M 8 11 L 8 2.5 M 4.8 5.8 L 8 2.5 L 11.2 5.8 M 3 13.5 L 13 13.5"; primary: true; clicked => { root.action(PanelAction.export-diagnostics); } }
                             }
                         }
                         Section {
                             heading: root.labels.section-folders;
+                            icon: "M 2 4.2 L 6.4 4.2 L 8 5.8 L 14 5.8 L 14 13 L 2 13 Z";
                             HorizontalLayout {
                                 spacing: 8px;
-                                GoldButton { text: root.labels.open-mods; clicked => { root.action(PanelAction.open-mods); } }
-                                GoldButton { text: root.labels.open-logs; clicked => { root.action(PanelAction.open-logs); } }
+                                GoldButton { text: root.labels.open-mods; icon: "M 8 2 L 14 5.2 L 8 8.4 L 2 5.2 Z M 2 8.2 L 8 11.4 L 14 8.2"; clicked => { root.action(PanelAction.open-mods); } }
+                                GoldButton { text: root.labels.open-logs; icon: "M 4 2 L 10 2 L 13 5 L 13 14 L 4 14 Z M 6 8 L 11 8 M 6 11 L 10 11"; clicked => { root.action(PanelAction.open-logs); } }
                             }
                             HorizontalLayout {
                                 spacing: 8px;
-                                GoldButton { text: root.labels.open-tools; clicked => { root.action(PanelAction.open-tools); } }
-                                GoldButton { text: root.labels.restore-mods; clicked => { root.action(PanelAction.restore-mods); } }
+                                GoldButton { text: root.labels.open-tools; icon: "M 8 2 L 13.5 5 L 13.5 11 L 8 14 L 2.5 11 L 2.5 5 Z M 2.5 5 L 8 8 L 13.5 5 M 8 8 L 8 14"; clicked => { root.action(PanelAction.open-tools); } }
+                                GoldButton { text: root.labels.restore-mods; icon: "M 3 8 A 5 5 0 1 1 4.8 11.8 M 3 4.2 L 3 8 L 6.8 8"; clicked => { root.action(PanelAction.restore-mods); } }
                             }
                         }
                     }
@@ -291,10 +300,10 @@ export component ControlPanel inherits Window {
         Rectangle { vertical-stretch: 0; height: 1px; background: Theme.surface-line; }
         HorizontalLayout {
             vertical-stretch: 0; padding-top: 12px; padding-bottom: 14px; padding-left: 20px; padding-right: 20px; spacing: 8px;
-            GoldButton { text: root.labels.about; hug: true; horizontal-stretch: 0; clicked => { root.action(PanelAction.about); } }
-            GoldButton { text: root.labels.open-project; hug: true; horizontal-stretch: 0; clicked => { root.action(PanelAction.open-project); } }
+            GoldButton { text: root.labels.about; icon: "M 8 2 A 6 6 0 1 1 7.99 2 Z M 8 7 L 8 11.2 M 8 4.8 L 8 5.2"; hug: true; horizontal-stretch: 0; clicked => { root.action(PanelAction.about); } }
+            GoldButton { text: root.labels.open-project; icon: "M 8 2 L 9.8 5.8 L 14 6.4 L 11 9.3 L 11.7 13.5 L 8 11.5 L 4.3 13.5 L 5 9.3 L 2 6.4 L 6.2 5.8 Z"; hug: true; horizontal-stretch: 0; clicked => { root.action(PanelAction.open-project); } }
             Rectangle { horizontal-stretch: 1; }
-            GoldButton { text: root.labels.quit; danger: true; hug: true; horizontal-stretch: 0; clicked => { root.action(PanelAction.quit); } }
+            GoldButton { text: root.labels.quit; icon: "M 8 2 L 8 7.5 M 4.8 4.2 A 5.2 5.2 0 1 0 11.2 4.2"; danger: true; hug: true; horizontal-stretch: 0; clicked => { root.action(PanelAction.quit); } }
         }
     }
 

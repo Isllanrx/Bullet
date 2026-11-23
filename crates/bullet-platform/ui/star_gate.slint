@@ -152,12 +152,14 @@ export component StarGateWindow inherits Window {
                 primary: true;
                 enabled: !root.busy;
                 font-size: Theme.text-base;
+                icon: "M 8 2 L 9.8 5.8 L 14 6.4 L 11 9.3 L 11.7 13.5 L 8 11.5 L 4.3 13.5 L 5 9.3 L 2 6.4 L 6.2 5.8 Z";
                 text: root.sign-in-label;
                 clicked => { root.sign-in(); }
             }
             GoldButton {
                 min-height: 40px;
                 font-size: Theme.text-base;
+                icon: "M 9 2.5 L 13.5 2.5 L 13.5 7 M 13.5 2.5 L 7 9 M 12 9.5 L 12 13.5 L 2.5 13.5 L 2.5 4 L 6.5 4";
                 text: root.open-repo-label;
                 clicked => { root.open-repo(); }
             }
@@ -167,12 +169,14 @@ export component StarGateWindow inherits Window {
             GoldButton {
                 min-height: 36px;
                 enabled: root.can-recheck && !root.busy;
+                icon: "M 3 8 A 5 5 0 1 1 4.8 11.8 M 3 4.2 L 3 8 L 6.8 8";
                 text: root.recheck-label;
                 clicked => { root.recheck(); }
             }
             GoldButton {
                 min-height: 36px;
                 danger: true;
+                icon: "M 8 2 L 8 7.5 M 4.8 4.2 A 5.2 5.2 0 1 0 11.2 4.2";
                 text: root.quit-label;
                 clicked => { root.quit(); }
             }

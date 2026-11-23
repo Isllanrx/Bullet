@@ -166,6 +166,34 @@ fn scan_skin_mods(
 }
 
 #[must_use]
+pub fn scan_all_skin_mods(roots: &[ModRoot]) -> Vec<ModEntry> {
+    let mut found = Vec::new();
+    for root in roots {
+        let skins_dir = root.path.join(ModCategory::Skin.folder());
+        found.extend(list_dir(&skins_dir, root, ModCategory::Skin, "skins"));
+        if let Ok(entries) = std::fs::read_dir(&skins_dir) {
+            let mut folders: Vec<u32> = entries
+                .flatten()
+                .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+                .collect();
+            folders.sort_unstable();
+            folders.dedup();
+            for folder in folders {
+                let dir = skins_dir.join(folder.to_string());
+                found.extend(list_dir(
+                    &dir,
+                    root,
+                    ModCategory::Skin,
+                    &format!("skins/{folder}"),
+                ));
+            }
+        }
+    }
+    found.sort_by_key(|entry| entry.name.to_lowercase());
+    found
+}
+
+#[must_use]
 pub fn scan_catalog(
     roots: &[ModRoot],
     champion_id: Option<ChampionId>,

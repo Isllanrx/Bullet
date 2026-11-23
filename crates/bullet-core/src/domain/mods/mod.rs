@@ -132,7 +132,7 @@ impl ModCatalog {
 
 mod scan;
 
-pub use scan::{is_valid_mod_dir, scan_catalog};
+pub use scan::{is_valid_mod_dir, scan_all_skin_mods, scan_catalog};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]

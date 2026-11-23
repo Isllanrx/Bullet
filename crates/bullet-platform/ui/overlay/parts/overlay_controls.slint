@@ -1,8 +1,9 @@
-import { Theme } from "../../theme.slint";
+import { Theme, Glyph } from "../../theme.slint";
 import { ModLine } from "overlay_types.slint";
 
 export component Tab inherits Rectangle {
     in property <string> text;
+    in property <string> icon;
     in property <string> count;
     in property <bool> active;
     callback clicked();
@@ -16,6 +17,14 @@ export component Tab inherits Rectangle {
     HorizontalLayout {
         alignment: center;
         spacing: 6px;
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            Glyph {
+                icon: root.icon;
+                size: 13px;
+                tint: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
+            }
+        }
         Text {
             text: root.text;
             color: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
@@ -160,7 +169,9 @@ export component HeaderButton inherits Rectangle {
         viewbox-width: 11;
         viewbox-height: 11;
         stroke: touch.has-hover ? Theme.gold-bright : Theme.muted;
-        stroke-width: 1.4px;
+        stroke-width: 1.5px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
         fill: transparent;
         commands: root.icon;
     }
@@ -199,7 +210,9 @@ export component PinButton inherits Rectangle {
         viewbox-width: 13;
         viewbox-height: 13;
         stroke: root.active ? Theme.gold-bright : Theme.muted;
-        stroke-width: 1.3px;
+        stroke-width: 1.35px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
         fill: root.active ? Theme.gold : transparent;
         commands: "M 4 1 L 9 1 L 8 5 L 10.5 7.5 L 2.5 7.5 L 5 5 Z M 6.5 7.5 L 6.5 12.5";
     }

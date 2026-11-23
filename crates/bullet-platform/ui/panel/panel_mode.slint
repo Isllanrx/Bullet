@@ -1,4 +1,4 @@
-import { Theme, Surface, CheckGlyph } from "../theme.slint";
+import { Theme, Surface, CheckGlyph, Glyph } from "../theme.slint";
 
 component ModeOption inherits Rectangle {
     in property <string> label;
@@ -29,7 +29,9 @@ component ModeOption inherits Rectangle {
                 viewbox-width: 16;
                 viewbox-height: 16;
                 stroke: root.selected ? Theme.gold-bright : root.hot ? Theme.text : Theme.muted;
-                stroke-width: 1.5px;
+                stroke-width: 1.55px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
                 fill: transparent;
                 commands: root.icon;
                 animate stroke { duration: 150ms; }
@@ -149,10 +151,13 @@ export component RepairBanner inherits Rectangle {
             if root.state != 2: VerticalLayout {
                 alignment: center;
                 Rectangle {
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 4px;
-                    background: root.state == 3 ? Theme.danger : Theme.gold;
+                    width: 18px; height: 18px; border-radius: 9px;
+                    background: root.state == 3 ? Theme.danger.with-alpha(0.2) : Theme.gold.with-alpha(0.18);
+                    Glyph {
+                        x: 3.5px; y: 3.5px; size: 11px;
+                        tint: root.state == 3 ? Theme.danger : Theme.gold;
+                        icon: root.state == 3 ? "M 8 2.2 L 14.2 13.2 L 1.8 13.2 Z M 8 6.4 L 8 9.6 M 8 11.4 L 8 11.8" : "M 3 8 A 5 5 0 1 1 4.8 11.8 M 3 4.2 L 3 8 L 6.8 8";
+                    }
                 }
             }
             Text {
@@ -258,13 +263,9 @@ export component LanguagePill inherits Rectangle {
         VerticalLayout {
             alignment: center;
             Path {
-                width: 13px;
-                height: 13px;
-                viewbox-width: 16;
-                viewbox-height: 16;
+                width: 13px; height: 13px; viewbox-width: 16; viewbox-height: 16;
                 stroke: root.open ? Theme.gold-bright : Theme.gold;
-                stroke-width: 1.4px;
-                fill: transparent;
+                stroke-width: 1.45px; stroke-line-cap: round; stroke-line-join: round; fill: transparent;
                 commands: "M 8 1.5 A 6.5 6.5 0 1 1 7.99 1.5 Z M 1.5 8 L 14.5 8 M 8 1.5 C 5.5 4 5.5 12 8 14.5 M 8 1.5 C 10.5 4 10.5 12 8 14.5";
             }
         }

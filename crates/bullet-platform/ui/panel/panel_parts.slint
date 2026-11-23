@@ -1,8 +1,9 @@
-import { Theme, GoldButton, Switch, Surface, CheckGlyph } from "../theme.slint";
+import { Theme, GoldButton, Switch, Surface, CheckGlyph, Glyph } from "../theme.slint";
 import { PanelCheckRow } from "panel_types.slint";
 
 export component Section inherits Surface {
     in property <string> heading;
+    in property <string> icon;
     border-radius: 14px;
     VerticalLayout {
         padding-top: 14px;
@@ -10,12 +11,26 @@ export component Section inherits Surface {
         padding-left: 16px;
         padding-right: 16px;
         spacing: 10px;
-        if root.heading != "": Text {
-            text: root.heading;
-            color: Theme.gold;
-            font-size: Theme.text-sm;
-            font-weight: 700;
-            letter-spacing: 0.6px;
+        if root.heading != "": HorizontalLayout {
+            spacing: 7px;
+            alignment: start;
+            if root.icon != "": VerticalLayout {
+                alignment: center;
+                Glyph {
+                    icon: root.icon;
+                    size: 13px;
+                    tint: Theme.gold;
+                    thickness: 1.55px;
+                }
+            }
+            Text {
+                text: root.heading;
+                color: Theme.gold;
+                font-size: Theme.text-sm;
+                font-weight: 700;
+                letter-spacing: 0.6px;
+                vertical-alignment: center;
+            }
         }
         @children
     }
@@ -42,12 +57,14 @@ export component PanelTab inherits Rectangle {
         if root.icon != "": VerticalLayout {
             alignment: center;
             Path {
-                width: 13px;
-                height: 13px;
+                width: 14px;
+                height: 14px;
                 viewbox-width: 16;
                 viewbox-height: 16;
                 stroke: root.active ? Theme.gold-bright : touch.has-hover ? Theme.text : Theme.muted;
-                stroke-width: 1.5px;
+                stroke-width: 1.55px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
                 fill: transparent;
                 commands: root.icon;
                 animate stroke { duration: Theme.dur-fast; }
@@ -111,14 +128,20 @@ export component CheckRow inherits Rectangle {
         spacing: 10px;
         VerticalLayout {
             alignment: start;
-            padding-top: 4px;
+            padding-top: 2px;
             Rectangle {
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
-                background: root.check.ok ? Theme.cyan : Theme.danger;
-                drop-shadow-blur: 4px;
-                drop-shadow-color: root.check.ok ? Theme.cyan.with-alpha(0.55) : Theme.danger.with-alpha(0.55);
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                background: root.check.ok ? Theme.cyan.with-alpha(0.16) : Theme.danger.with-alpha(0.2);
+                Glyph {
+                    x: 3.5px;
+                    y: 3.5px;
+                    size: 11px;
+                    tint: root.check.ok ? Theme.cyan : Theme.danger;
+                    thickness: 1.7px;
+                    icon: root.check.ok ? "M 2.5 8.5 L 6.2 12 L 13.5 4" : "M 8 3.5 L 8 9 M 8 12 L 8 12.6";
+                }
             }
         }
         VerticalLayout {
@@ -191,17 +214,11 @@ export component Toggle inherits Rectangle {
     }
     keys := FocusScope {
         key-pressed(event) => {
-            if event.text == " " || event.text == Key.Return {
-                root.toggled();
-                return accept;
-            }
+            if event.text == " " || event.text == Key.Return { root.toggled(); return accept; }
             reject
         }
     }
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.toggled(); }
-    }
+    touch := TouchArea { mouse-cursor: pointer; clicked => { root.toggled(); } }
     accessible-role: switch;
     accessible-label: root.label;
     accessible-description: root.hint;
@@ -224,59 +241,35 @@ export component PowerCard inherits Rectangle {
     drop-shadow-color: Theme.gold.with-alpha(0.16);
     animate border-color, drop-shadow-blur { duration: Theme.dur-base; }
     Rectangle {
-        x: 0;
-        y: 16px;
-        width: 3.5px;
-        height: parent.height - 32px;
-        border-radius: 2px;
+        x: 0; y: 16px; width: 3.5px; height: parent.height - 32px; border-radius: 2px;
         background: root.checked ? Theme.gold : Theme.control-line;
         animate background { duration: Theme.dur-base; }
     }
     HorizontalLayout {
-        padding-top: 18px;
-        padding-bottom: 18px;
-        padding-left: 20px;
-        padding-right: 18px;
-        spacing: 16px;
+        padding-top: 18px; padding-bottom: 18px; padding-left: 18px; padding-right: 18px; spacing: 14px;
         VerticalLayout {
             alignment: center;
-            spacing: 4px;
-            Text {
-                text: root.label;
-                color: Theme.gold-bright;
-                font-family: Theme.serif;
-                font-size: 17px;
-                font-weight: 700;
-                wrap: word-wrap;
-            }
-            Text {
-                text: root.hint;
-                color: Theme.muted;
-                font-size: Theme.text-sm;
-                wrap: word-wrap;
+            Rectangle {
+                width: 34px; height: 34px; border-radius: 10px; border-width: 1px;
+                border-color: root.checked ? Theme.gold-dim : Theme.surface-line;
+                background: root.checked ? Theme.gold.with-alpha(0.14) : #0d1522;
+                Glyph { x: 9px; y: 9px; size: 16px; tint: root.checked ? Theme.gold-bright : Theme.muted; icon: "M 9 1.8 L 3.2 8.8 L 7.8 8.8 L 7 14.2 L 12.8 7.2 L 8.2 7.2 Z"; }
             }
         }
         VerticalLayout {
-            alignment: center;
-            Switch {
-                large: true;
-                checked: root.checked;
-            }
+            alignment: center; spacing: 4px;
+            Text { text: root.label; color: Theme.gold-bright; font-family: Theme.serif; font-size: 17px; font-weight: 700; wrap: word-wrap; }
+            Text { text: root.hint; color: Theme.muted; font-size: Theme.text-sm; wrap: word-wrap; }
         }
+        VerticalLayout { alignment: center; Switch { large: true; checked: root.checked; } }
     }
     keys := FocusScope {
         key-pressed(event) => {
-            if event.text == " " || event.text == Key.Return {
-                root.toggled();
-                return accept;
-            }
+            if event.text == " " || event.text == Key.Return { root.toggled(); return accept; }
             reject
         }
     }
-    TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.toggled(); }
-    }
+    TouchArea { mouse-cursor: pointer; clicked => { root.toggled(); } }
     accessible-role: switch;
     accessible-label: root.label;
     accessible-description: root.hint;
@@ -287,37 +280,17 @@ export component PowerCard inherits Rectangle {
 
 export component AllClearBanner inherits Rectangle {
     in property <string> text;
-    border-radius: 12px;
-    border-width: 1px;
-    border-color: #194545;
-    background: #0d1e24;
+    border-radius: 12px; border-width: 1px; border-color: #194545; background: #0d1e24;
     HorizontalLayout {
-        padding-top: 11px;
-        padding-bottom: 11px;
-        padding-left: 14px;
-        padding-right: 14px;
-        spacing: 10px;
+        padding-top: 11px; padding-bottom: 11px; padding-left: 14px; padding-right: 14px; spacing: 10px;
         VerticalLayout {
             alignment: center;
             Rectangle {
-                width: 20px;
-                height: 20px;
-                border-radius: 10px;
-                background: Theme.cyan.with-alpha(0.18);
-                CheckGlyph {
-                    x: 5px;
-                    y: 5px;
-                    stroke: Theme.cyan;
-                }
+                width: 20px; height: 20px; border-radius: 10px; background: Theme.cyan.with-alpha(0.18);
+                CheckGlyph { x: 5px; y: 5px; stroke: Theme.cyan; }
             }
         }
-        Text {
-            text: root.text;
-            color: Theme.text;
-            font-size: Theme.text-base;
-            wrap: word-wrap;
-            vertical-alignment: center;
-        }
+        Text { text: root.text; color: Theme.text; font-size: Theme.text-base; wrap: word-wrap; vertical-alignment: center; }
     }
 }
 
@@ -326,41 +299,24 @@ export component Notice inherits Rectangle {
     in property <string> action;
     in property <bool> warning;
     callback activated();
-    border-radius: 12px;
-    border-width: 1px;
+    border-radius: 12px; border-width: 1px;
     border-color: root.warning ? #7c3037 : Theme.gold-dim;
     background: root.warning ? #241419 : #1c1910;
-    Rectangle {
-        x: 0;
-        y: 10px;
-        width: 3px;
-        height: parent.height - 20px;
-        border-radius: 1.5px;
-        background: root.warning ? Theme.danger : Theme.gold;
-    }
+    Rectangle { x: 0; y: 10px; width: 3px; height: parent.height - 20px; border-radius: 1.5px; background: root.warning ? Theme.danger : Theme.gold; }
     HorizontalLayout {
-        padding-top: 12px;
-        padding-bottom: 12px;
-        padding-left: 16px;
-        padding-right: 14px;
-        spacing: 12px;
-        Text {
-            text: root.line;
-            color: Theme.gold-bright;
-            font-size: Theme.text-base;
-            wrap: word-wrap;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
+        padding-top: 12px; padding-bottom: 12px; padding-left: 14px; padding-right: 14px; spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 24px; height: 24px; border-radius: 8px;
+                background: root.warning ? Theme.danger.with-alpha(0.18) : Theme.gold.with-alpha(0.16);
+                Glyph { x: 5px; y: 5px; size: 14px; tint: root.warning ? Theme.danger : Theme.gold; icon: root.warning ? "M 8 2.2 L 14.2 13.2 L 1.8 13.2 Z M 8 6.4 L 8 9.6 M 8 11.4 L 8 11.8" : "M 8 2.5 L 8 11 M 4.8 7.8 L 8 11 L 11.2 7.8 M 3 13.5 L 13 13.5"; }
+            }
         }
+        Text { text: root.line; color: Theme.gold-bright; font-size: Theme.text-base; wrap: word-wrap; vertical-alignment: center; horizontal-stretch: 1; }
         if root.action != "": VerticalLayout {
             alignment: center;
-            GoldButton {
-                text: root.action;
-                primary: !root.warning;
-                hug: true;
-                horizontal-stretch: 0;
-                clicked => { root.activated(); }
-            }
+            GoldButton { text: root.action; primary: !root.warning; hug: true; horizontal-stretch: 0; clicked => { root.activated(); } }
         }
     }
 }
